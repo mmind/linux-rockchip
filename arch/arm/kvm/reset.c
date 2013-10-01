@@ -31,7 +31,7 @@
 #include <kvm/arm_arch_timer.h>
 
 /******************************************************************************
- * Cortex-A15 and Cortex-A7 Reset Values
+ * Cortex-A15, A12, A17 and A7 Reset Values
  */
 
 static struct kvm_regs cortexa_regs_reset = {
@@ -56,6 +56,7 @@ int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 
 	switch (vcpu->arch.target) {
 	case KVM_ARM_TARGET_CORTEX_A7:
+	case KVM_ARM_TARGET_CORTEX_A12_A17:
 	case KVM_ARM_TARGET_CORTEX_A15:
 		reset_regs = &cortexa_regs_reset;
 		vcpu->arch.midr = read_cpuid_id();

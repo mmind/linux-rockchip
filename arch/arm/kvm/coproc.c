@@ -124,7 +124,7 @@ static void reset_mpidr(struct kvm_vcpu *vcpu, const struct coproc_reg *r)
 				     (vcpu->vcpu_id & 3));
 }
 
-/* TRM entries A7:4.3.31 A15:4.3.28 - RO WI */
+/* TRM entries A7:4.3.31 A15/A12/A17:4.3.28 - RO WI */
 static bool access_actlr(struct kvm_vcpu *vcpu,
 			 const struct coproc_params *p,
 			 const struct coproc_reg *r)
@@ -136,7 +136,7 @@ static bool access_actlr(struct kvm_vcpu *vcpu,
 	return true;
 }
 
-/* TRM entries A7:4.3.56, A15:4.3.60 - R/O. */
+/* TRM entries A7:4.3.56, A15:4.3.60. Not present in A12 - R/O. */
 static bool access_cbar(struct kvm_vcpu *vcpu,
 			const struct coproc_params *p,
 			const struct coproc_reg *r)
@@ -146,7 +146,7 @@ static bool access_cbar(struct kvm_vcpu *vcpu,
 	return read_zero(vcpu, p);
 }
 
-/* TRM entries A7:4.3.49, A15:4.3.48 - R/O WI */
+/* TRM entries A7:4.3.49, A12/A17: 3.3.47, A15:4.3.48 - R/O WI */
 static bool access_l2ctlr(struct kvm_vcpu *vcpu,
 			  const struct coproc_params *p,
 			  const struct coproc_reg *r)
