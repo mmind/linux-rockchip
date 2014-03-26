@@ -185,6 +185,8 @@ nodes to be present and contain the properties described below.
 			    "qcom,gcc-msm8660"
 			    "qcom,kpss-acc-v1"
 			    "qcom,kpss-acc-v2"
+			    "rockchip,rk3066-smp" - cpu-core handling of Socs
+					from Rockchip starting with rk3066
 
 	- cpu-release-addr
 		Usage: required for systems that have an "enable-method"
