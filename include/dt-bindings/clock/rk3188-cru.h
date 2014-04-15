@@ -28,6 +28,8 @@
 #define SCLK_MAC	6
 
 /* gated clock used by peripherals */
+#define CORE_PERI	CLK_GATE(0, 0)
+
 #define SCLK_MMC0	CLK_GATE(2, 11)
 #define SCLK_MMC1	CLK_GATE(2, 13)
 #define SCLK_MMC2	CLK_GATE(2, 14)
