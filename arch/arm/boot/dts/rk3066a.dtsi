@@ -40,12 +40,6 @@
 	};
 
 	soc {
-	sram: sram@10080000 {
-			compatible = "rockchip,rk3066-sram", "mmio-sram";
-			reg = <0x10080000 0x10000>;
-			mmio-sram-reserved = <0x0 0x50>;
-		};
-
 		timer@20038000 {
 			compatible = "snps,dw-apb-timer-osc";
 			reg = <0x20038000 0x100>;
