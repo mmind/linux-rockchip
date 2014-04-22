@@ -24,7 +24,47 @@
 
 	cpus {
 		cpu@0 {
-			arm-supply = <&vdd_arm>;
+			cpu0-supply = <&vdd_arm>;
+		};
+	};
+
+	regulators {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		vcc_sd0: fixed-regulator@0 {
+			compatible = "regulator-fixed";
+			reg = <0>;
+
+			regulator-name = "sdmmc-supply";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			gpio = <&gpio3 1 GPIO_ACTIVE_LOW>;
+			startup-delay-us = <100000>;
+			vin-supply = <&vcc_io>;
+		};
+
+		vcc_otg: fixed-regulator@1 {
+			compatible = "regulator-fixed";
+			reg = <1>;
+
+			regulator-name = "otg-vbus";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			gpio = <&gpio2 31 GPIO_ACTIVE_LOW>;
+			startup-delay-us = <100000>;
+		};
+
+		vcc_usb: fixed-regulator@2 {
+			compatible = "regulator-fixed";
+			reg = <2>;
+
+			regulator-name = "usb-vbus";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			gpio = <&gpio0 3 GPIO_ACTIVE_LOW>;
+			startup-delay-us = <100000>;
 		};
 	};
 
@@ -45,16 +85,6 @@
 
 		uart3: serial@20068000 {
 			status = "okay";
-		};
-
-		vcc_sd0: fixed-regulator {
-			compatible = "regulator-fixed";
-			regulator-name = "sdmmc-supply";
-			regulator-min-microvolt = <3300000>;
-			regulator-max-microvolt = <3300000>;
-			gpio = <&gpio3 1 GPIO_ACTIVE_LOW>;
-			startup-delay-us = <100000>;
-			vin-supply = <&vcc_io>;
 		};
 
 		gpio-keys {
@@ -120,8 +150,11 @@
 				reg = <0x5a>;
 				status = "okay";
 
+				pinctrl-names = "default";
+				pinctrl-0 = <&act8846_dvs0_ctl>;
+
 				regulators {
-					reg_vcc_ddr: DCDC_REG1 { /* vccdr */
+					vcc_ddr: DCDC_REG1 { /* vccdr */
 						regulator-name = "VCC_DDR";
 						regulator-min-microvolt = <1200000>;
 						regulator-max-microvolt = <1200000>;
@@ -216,9 +249,24 @@
 		};
 
 		pinctrl@20008000 {
+			pcfg_output_low: pcfg_output_low {
+				output-low;
+			};
+
 			hym8563 {
 				hym8563_int: hym8563-int {
 					rockchip,pins = <RK_GPIO0 0 RK_FUNC_GPIO &pcfg_pull_up>;
+				};
+			};
+
+			act8846 {
+				/*
+				 * set the dvs0_ctl pin low, this makes the
+				 * act8846 only use the vset1 values in
+				 * regulators supporting switching.
+				 */
+				act8846_dvs0_ctl: act8846-dvs0-ctl {
+					rockchip,pins = <RK_GPIO3 27 RK_FUNC_GPIO &pcfg_output_low>;
 				};
 			};
 
