@@ -699,7 +699,6 @@ static int arc_emac_probe(struct platform_device *pdev)
 
 		clock_frequency = clk_get_rate(priv->clk);
 	}
-printk("%s: found clock frequency of %lu\n", __func__, clock_frequency);
 
 	id = arc_reg_get(priv, R_ID);
 
@@ -735,8 +734,6 @@ printk("%s: found clock frequency of %lu\n", __func__, clock_frequency);
 
 	arc_emac_set_address_internal(ndev);
 	dev_info(&pdev->dev, "MAC address is now %pM\n", ndev->dev_addr);
-
-	arc_emac_set_address_internal(ndev);
 
 	/* Do 1 allocation instead of 2 separate ones for Rx and Tx BD rings */
 	priv->rxbd = dmam_alloc_coherent(&pdev->dev, RX_RING_SZ + TX_RING_SZ,
