@@ -733,6 +733,7 @@ printk("%s: found clock frequency of %lu\n", __func__, clock_frequency);
 	else
 		eth_hw_addr_random(ndev);
 
+	arc_emac_set_address_internal(ndev);
 	dev_info(&pdev->dev, "MAC address is now %pM\n", ndev->dev_addr);
 
 	arc_emac_set_address_internal(ndev);
