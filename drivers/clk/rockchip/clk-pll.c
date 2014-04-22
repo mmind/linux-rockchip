@@ -199,7 +199,7 @@ static int rockchip_rk3066_pll_set_rate(struct clk_hw *hw, unsigned long drate,
 		 __func__, rate->rate, rate->nr, rate->no, rate->nf);
 
 	/* put pll in slow mode and enter reset afterwards */
-	writel_relaxed(HIWORD_UPDATE(RK3066_PLL_MODE_SLOW, RK3066_PLL_MODE_MASK,
+	writel(HIWORD_UPDATE(RK3066_PLL_MODE_SLOW, RK3066_PLL_MODE_MASK,
 					pll->mode_shift), pll->reg_mode);
 	writel(HIWORD_UPDATE(RK3066_PLLCON3_RESET, RK3066_PLLCON3_RESET, 0),
 					pll->reg_base + RK3066_PLLCON(3));
@@ -212,11 +212,10 @@ static int rockchip_rk3066_pll_set_rate(struct clk_hw *hw, unsigned long drate,
 	       pll->reg_base + RK3066_PLLCON(0));
 
 	writel_relaxed(HIWORD_UPDATE(rate->nf - 1, RK3066_PLLCON1_NF_MASK,
-					RK3066_PLLCON1_NF_SHIFT),
+						   RK3066_PLLCON1_NF_SHIFT),
 		       pll->reg_base + RK3066_PLLCON(1));
-	writel_relaxed(HIWORD_UPDATE((rate->nf >> 1),
-					RK3066_PLLCON2_BWADJ_MASK,
-					RK3066_PLLCON2_BWADJ_SHIFT),
+	writel_relaxed(HIWORD_UPDATE(rate->bwadj,RK3066_PLLCON2_BWADJ_MASK,
+						 RK3066_PLLCON2_BWADJ_SHIFT),
 		       pll->reg_base + RK3066_PLLCON(2));
 
 	/* leave reset and wait the reset_delay */
