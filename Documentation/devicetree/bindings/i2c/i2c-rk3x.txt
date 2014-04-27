@@ -1,0 +1,34 @@
+* Rockchip RK3xxx I2C controller
+
+This driver interfaces with the native I2C controller present in Rockchip
+RK3xxx SoCs.
+
+Required properties :
+
+ - reg : Offset and length of the register set for the device
+ - compatible : should be "rockchip,rk3x-i2c"
+ - interrupts : interrupt number
+ - clocks : parent clock
+ - rockchip,grf : the phandle of the syscon node for the general register
+		  file (GRF)
+ - rockchip,bus-index : index of the bus in the GRF
+
+Optional properties :
+
+ - clock-frequency : SCL frequency to use (in Hz). If omitted, 100kHz is used.
+
+Example:
+
+i2c0: i2c@2002d000 {
+	compatible = "rockchip,rk3x-i2c";
+	reg = <0x2002d000 0x1000>;
+	interrupts = <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	rockchip,grf = <&grf>;
+	rockchip,bus-index = <0>;
+
+	clock-names = "i2c";
+	clocks = <&cru PCLK_I2C0>;
+};
