@@ -295,7 +295,7 @@ static struct rockchip_gate_clock rk3188_gate_clks[] __initdata = {
 	GATE(0, "gate_div_mac", "div_mac", RK2928_CLKGATE_CON(2), 5, 0, GFLAGS),
 	GATE(0, "gate_div_hsadc", "div_hsadc", RK2928_CLKGATE_CON(2), 6, 0, GFLAGS),
 	GATE(0, "gate_frac_hsadc", "frac_hsadc", RK2928_CLKGATE_CON(2), 7, 0, GFLAGS),
-	GATE(0, "gate_div_saradc", "div_saradc", RK2928_CLKGATE_CON(2), 8, 0, GFLAGS),
+	GATE(SCLK_SARADC, "gate_div_saradc", "div_saradc", RK2928_CLKGATE_CON(2), 8, 0, GFLAGS),
 	GATE(0, "gate_div_spi0", "div_spi0", RK2928_CLKGATE_CON(2), 9, 0, GFLAGS),
 	GATE(0, "gate_div_spi1", "div_spi1", RK2928_CLKGATE_CON(2), 10, 0, GFLAGS),
 	GATE(SCLK_MMC0, "gate_div_mmc0", "div_mmc0", RK2928_CLKGATE_CON(2), 11, 0, GFLAGS),
