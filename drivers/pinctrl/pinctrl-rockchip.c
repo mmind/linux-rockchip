@@ -1463,10 +1463,12 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank,
 	 */
 	if (of_device_is_compatible(bank->of_node,
 				    "rockchip,rk3188-gpio-bank0")) {
+		struct device_node *node;
 
 		bank->bank_type = RK3188_BANK0;
 
-		if (!info->regmap_pmu) {
+		node = of_parse_phandle(bank->of_node->parent, "rockchip,pmu", 0);
+		if (!node) {
 			if (of_address_to_resource(bank->of_node, 1, &res)) {
 				dev_err(info->dev, "cannot find IO resource for bank\n");
 				return -ENOENT;
@@ -1483,7 +1485,6 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank,
 						    base,
 						    &rockchip_regmap_config);
 		}
-
 	} else {
 		bank->bank_type = COMMON_BANK;
 	}
@@ -1561,13 +1562,14 @@ static int rockchip_pinctrl_probe(struct platform_device *pdev)
 	if (!info)
 		return -ENOMEM;
 
+	info->dev = dev;
+
 	ctrl = rockchip_pinctrl_get_soc_data(info, pdev);
 	if (!ctrl) {
 		dev_err(dev, "driver data not available\n");
 		return -EINVAL;
 	}
 	info->ctrl = ctrl;
-	info->dev = dev;
 
 	node = of_parse_phandle(np, "rockchip,grf", 0);
 	if (node) {
