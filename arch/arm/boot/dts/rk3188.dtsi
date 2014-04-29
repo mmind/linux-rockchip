@@ -245,30 +245,18 @@
 							<  48000 0 0> */
 		};
 
-		/*
-		 * GRF_SOC_CON0
-		 * GRF_SOC_CON1
-		 * GRF_SOC_CON2
-		 * GRF_SOC_STATUS0
-		 */
-		grf: grf-soc-con@200080a0 {
-			compatible = "rockchip,rk3066-soc-con", "syscon";
-			reg = <0x200080a0 0x10>;
-		};
-
 		pinctrl@20008000 {
 			compatible = "rockchip,rk3188-pinctrl";
-			reg = <0x20008000 0xa0>,
-			      <0x20008164 0x1a0>;
-			reg-names = "base", "pull";
+			rockchip,grf = <&grf>;
+			rockchip,pmu = <&pmu>;
+
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
 
 			gpio0: gpio0@0x2000a000 {
 				compatible = "rockchip,rk3188-gpio-bank0";
-				reg = <0x2000a000 0x100>,
-				      <0x20004064 0x8>;
+				reg = <0x2000a000 0x100>;
 				interrupts = <GIC_SPI 54 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&cru PCLK_GPIO0>;
 
@@ -462,6 +450,25 @@
 							<RK_GPIO3 20 RK_FUNC_1 &pcfg_pull_none>;
 				};
 			};
+		};
+
+		saradc: saradc@2006c000 {
+			compatible = "rockchip,saradc";
+			reg = <0x2006c000 0x100>;
+			interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
+			#io-channel-cells = <1>;
+//			io-channel-ranges;
+
+			clock-frequency = <1000000>;
+			clocks = <&cru SCLK_SARADC>, <&cru PCLK_SARADC>;
+			clock-names = "saradc", "pclk_saradc";
+//			status = "disabled";
+			status = "okay";
+		};
+
+		iio_hwmon@1 {
+			compatible = "iio-hwmon";
+			io-channels = <&saradc 0>, <&saradc 1>, <&saradc 2>;
 		};
 	};
 };
