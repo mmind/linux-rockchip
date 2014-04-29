@@ -1466,18 +1466,23 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank,
 
 		bank->bank_type = RK3188_BANK0;
 
-		if (of_address_to_resource(bank->of_node, 1, &res)) {
-			dev_err(info->dev, "cannot find IO resource for bank\n");
-			return -ENOENT;
-		}
+		if (!info->regmap_pmu) {
+			if (of_address_to_resource(bank->of_node, 1, &res)) {
+				dev_err(info->dev, "cannot find IO resource for bank\n");
+				return -ENOENT;
+			}
 
-		base = devm_ioremap_resource(info->dev, &res);
-		if (IS_ERR(base))
-			return PTR_ERR(base);
-		rockchip_regmap_config.max_register = resource_size(&res) - 4;
-		rockchip_regmap_config.name = "rockchip,rk3188-gpio-bank0-pull";
-		bank->regmap_pull = devm_regmap_init_mmio(info->dev, base,
-						  &rockchip_regmap_config);
+			base = devm_ioremap_resource(info->dev, &res);
+			if (IS_ERR(base))
+				return PTR_ERR(base);
+			rockchip_regmap_config.max_register =
+						    resource_size(&res) - 4;
+			rockchip_regmap_config.name =
+					    "rockchip,rk3188-gpio-bank0-pull";
+			bank->regmap_pull = devm_regmap_init_mmio(info->dev,
+						    base,
+						    &rockchip_regmap_config);
+		}
 
 	} else {
 		bank->bank_type = COMMON_BANK;
