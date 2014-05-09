@@ -511,7 +511,8 @@ static void rk3188_calc_pull_reg_and_bit(struct rockchip_pin_bank *bank,
 
 	/* The first 12 pins of the first bank are located elsewhere */
 	if (bank->bank_type == RK3188_BANK0 && pin_num < 12) {
-		*regmap = info->regmap_pmu ? info->regmap_pmu : bank->regmap_pull;
+		*regmap = info->regmap_pmu ? info->regmap_pmu
+					   : bank->regmap_pull;
 		*reg = info->regmap_pmu ? RK3188_PULL_PMU_OFFSET : 0;
 		*reg += ((pin_num / RK3188_PULL_PINS_PER_REG) * 4);
 		*bit = pin_num % RK3188_PULL_PINS_PER_REG;
@@ -1560,7 +1561,8 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank,
 
 		bank->bank_type = RK3188_BANK0;
 
-		node = of_parse_phandle(bank->of_node->parent, "rockchip,pmu", 0);
+		node = of_parse_phandle(bank->of_node->parent,
+					"rockchip,pmu", 0);
 		if (!node) {
 			if (of_address_to_resource(bank->of_node, 1, &res)) {
 				dev_err(info->dev, "cannot find IO resource for bank\n");
@@ -1717,7 +1719,7 @@ static int rockchip_pinctrl_probe(struct platform_device *pdev)
 		info->reg_size = resource_size(res);
 
 		/* Honor the old binding, with pull registers as 2nd resource */
-		if (ctrl->type == RK3188 &&  info->reg_size < 0x200) {
+		if (ctrl->type == RK3188 && info->reg_size < 0x200) {
 			res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 			base = devm_ioremap_resource(&pdev->dev, res);
 			if (IS_ERR(base))
