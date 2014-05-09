@@ -52,15 +52,6 @@ enum rockchip_pll_type {
 	.bwadj = (_nf >> 1),			\
 }
 
-#define RK3188_PLL_RATE(_rate, _nr, _nf, _no)	\
-{						\
-	.rate	= _rate##U,			\
-	.nr = _nr,				\
-	.nf = _nf,				\
-	.no = _no,				\
-	.bwadj = 0,				\
-}
-
 struct rockchip_pll_rate_table {
 	unsigned long rate;
 	unsigned int nr;
@@ -92,7 +83,7 @@ struct rockchip_pll_clock {
 	int			mode_shift;
 	int			lock_shift;
 	enum rockchip_pll_type	type;
-	const struct rockchip_pll_rate_table *rate_table;
+	struct rockchip_pll_rate_table *rate_table;
 };
 
 #define PLL(_type, _id, _name, _pname, _flags, _con, _mode, _mshift,	\
