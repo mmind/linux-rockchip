@@ -771,7 +771,6 @@ static int arc_emac_probe(struct platform_device *pdev)
 
 	err = register_netdev(ndev);
 	if (err) {
-		netif_napi_del(&priv->napi);
 		dev_err(&pdev->dev, "failed to register network device\n");
 		goto out_netif_api;
 	}
@@ -785,10 +784,10 @@ out_netif_api:
 out_mdio:
 	arc_mdio_remove(priv);
 out_clken:
-	if (IS_ERR(priv->clk))
+	if (!IS_ERR(priv->clk))
 		clk_disable_unprepare(priv->clk);
 out_clkget:
-	if (IS_ERR(priv->clk))
+	if (!IS_ERR(priv->clk))
 		clk_put(priv->clk);
 out_netdev:
 	free_netdev(ndev);
