@@ -537,38 +537,6 @@ static void rk3188_calc_pull_reg_and_bit(struct rockchip_pin_bank *bank,
 	}
 }
 
-//FIXME: what is the real first pull registers
-//FIXME: GPIO0A_PULL would be at 0x130 of the GRF, if it weren't in the pmu
-//GPIO0A_PULL - GPIO0C_PULL are in the pmu instead
-#define RK3288_PULL_OFFSET		0x140
-static void rk3288_calc_pull_reg_and_bit(struct rockchip_pin_bank *bank,
-				    int pin_num, struct regmap **regmap,
-				    int *reg, u8 *bit)
-{
-	struct rockchip_pinctrl *info = bank->drvdata;
-
-	/* The first 24 pins of the first bank are located elsewhere */
-	if (bank->bank_num == 0 && pin_num < 24) {
-		*regmap = info->regmap_pmu;
-		*reg = RK3188_PULL_PMU_OFFSET;
-
-		*reg += ((pin_num / RK3188_PULL_PINS_PER_REG) * 4);
-		*bit = pin_num % RK3188_PULL_PINS_PER_REG;
-		*bit *= RK3188_PULL_BITS_PER_PIN;
-	} else {
-		*regmap = info->regmap_base;
-		*reg = RK3288_PULL_OFFSET;
-
-		/* correct the offset, as it is the 4th pull register */
-		*reg -= 0x10;
-		*reg += bank->bank_num * RK3188_PULL_BANK_STRIDE;
-		*reg += ((pin_num / RK3188_PULL_PINS_PER_REG) * 4);
-
-		*bit = (pin_num % RK3188_PULL_PINS_PER_REG);
-		*bit *= RK3188_PULL_BITS_PER_PIN;
-	}
-}
-
 static int rockchip_get_pull(struct rockchip_pin_bank *bank, int pin_num)
 {
 	struct rockchip_pinctrl *info = bank->drvdata;
@@ -1822,52 +1790,6 @@ static struct rockchip_pin_ctrl rk3188_pin_ctrl = {
 		.pull_calc_reg		= rk3188_calc_pull_reg_and_bit,
 };
 
-static struct rockchip_pin_bank rk3288_pin_banks[] = {
-	PIN_BANK_IOMUX_FLAGS(0, 32, "gpio0", IOMUX_SOURCE_PMU,
-					     IOMUX_SOURCE_PMU,
-					     IOMUX_SOURCE_PMU,
-					     IOMUX_SOURCE_PMU | IOMUX_GPIO_ONLY
-			    ),
-	PIN_BANK_IOMUX_FLAGS(1, 32, "gpio1", IOMUX_GPIO_ONLY,
-					     IOMUX_GPIO_ONLY,
-					     IOMUX_GPIO_ONLY,
-					     0
-			    ),
-	PIN_BANK_IOMUX_FLAGS(2, 32, "gpio2", 0, 0, 0, IOMUX_GPIO_ONLY),
-	PIN_BANK_IOMUX_FLAGS(3, 32, "gpio3", 0, 0, 0, IOMUX_WIDTH_4BIT),
-	PIN_BANK_IOMUX_FLAGS(4, 32, "gpio4", IOMUX_WIDTH_4BIT,
-					     IOMUX_WIDTH_4BIT,
-					     0,
-					     0
-			    ),
-	PIN_BANK_IOMUX_FLAGS(5, 32, "gpio5", IOMUX_GPIO_ONLY,
-					     0,
-					     0,
-					     IOMUX_GPIO_ONLY
-			    ),
-	PIN_BANK_IOMUX_FLAGS(6, 32, "gpio6", 0, 0, 0, IOMUX_GPIO_ONLY),
-	PIN_BANK_IOMUX_FLAGS(7, 32, "gpio7", 0,
-					     0,
-					     IOMUX_WIDTH_4BIT,
-					     IOMUX_GPIO_ONLY
-			    ),
-	PIN_BANK_IOMUX_FLAGS(8, 32, "gpio8", 0,
-					     0,
-					     IOMUX_GPIO_ONLY,
-					     IOMUX_GPIO_ONLY
-			    ),
-};
-
-static struct rockchip_pin_ctrl rk3288_pin_ctrl = {
-		.pin_banks		= rk3288_pin_banks,
-		.nr_banks		= ARRAY_SIZE(rk3288_pin_banks),
-		.label			= "RK3288-GPIO",
-		.type			= RK3188,
-		.grf_mux_offset		= 0x0,
-		.pmu_mux_offset		= 0x84,
-		.pull_calc_reg		= rk3288_calc_pull_reg_and_bit,
-};
-
 static const struct of_device_id rockchip_pinctrl_dt_match[] = {
 	{ .compatible = "rockchip,rk2928-pinctrl",
 		.data = (void *)&rk2928_pin_ctrl },
@@ -1877,8 +1799,6 @@ static const struct of_device_id rockchip_pinctrl_dt_match[] = {
 		.data = (void *)&rk3066b_pin_ctrl },
 	{ .compatible = "rockchip,rk3188-pinctrl",
 		.data = (void *)&rk3188_pin_ctrl },
-	{ .compatible = "rockchip,rk3288-pinctrl",
-		.data = (void *)&rk3288_pin_ctrl },
 	{},
 };
 MODULE_DEVICE_TABLE(of, rockchip_pinctrl_dt_match);
