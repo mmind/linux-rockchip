@@ -75,9 +75,6 @@ enum {
 #define REG_INT_NAKRCV    (1 << 6) /* NACK received */
 #define REG_INT_ALL       0x7f
 
-/* Registers in the GRF (General Register File) */
-#define GRF_SOC_CON1      4
-
 /* Constants */
 #define WAIT_TIMEOUT      200 /* ms */
 
@@ -89,9 +86,17 @@ enum rk3x_i2c_state {
 	STATE_STOP
 };
 
+/**
+ * @grf_offset: offset inside the grf regmap for setting the i2c type
+ */
+struct rk3x_i2c_soc_data {
+	int grf_offset;
+};
+
 struct rk3x_i2c {
 	struct i2c_adapter adap;
 	struct device *dev;
+	struct rk3x_i2c_soc_data *soc_data;
 
 	/* Hardware resources */
 	void __iomem *regs;
@@ -137,7 +142,7 @@ static inline int rk3x_i2c_set_grf_enable(struct rk3x_i2c *i2c, bool on)
 	if (on)
 		con |= BIT(11 + i2c->bus_index);
 
-	return regmap_write(i2c->grf, GRF_SOC_CON1, con);
+	return regmap_write(i2c->grf, i2c->soc_data->grf_offset, con);
 }
 
 /* Reset all interrupt pending bits */
@@ -587,9 +592,12 @@ static const struct i2c_algorithm rk3x_i2c_algorithm = {
 	.functionality		= rk3x_i2c_func,
 };
 
+static const struct of_device_id rk3x_i2c_match[];
+
 static int rk3x_i2c_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
+	const struct of_device_id *match;
 	struct rk3x_i2c *i2c;
 	struct resource *mem;
 	int ret = 0;
@@ -600,17 +608,11 @@ static int rk3x_i2c_probe(struct platform_device *pdev)
 	}
 
 	i2c = devm_kzalloc(&pdev->dev, sizeof(struct rk3x_i2c), GFP_KERNEL);
-	if (!i2c) {
-		dev_err(&pdev->dev, "Could not alloc driver memory\n");
+	if (!i2c)
 		return -ENOMEM;
-	}
 
-	if (of_property_read_u32(pdev->dev.of_node, "rockchip,bus-index",
-				 &i2c->bus_index)) {
-		dev_err(&pdev->dev,
-			"rk3x-i2c requires 'rockchip,bus-index' property\n");
-		return -EINVAL;
-	}
+	match = of_match_node(rk3x_i2c_match, np);
+	i2c->soc_data = (struct rk3x_i2c_soc_data *)match->data;
 
 	if (of_property_read_u32(pdev->dev.of_node, "clock-frequency",
 				 &i2c->scl_frequency)) {
@@ -634,55 +636,65 @@ static int rk3x_i2c_probe(struct platform_device *pdev)
 	i2c->clk = devm_clk_get(&pdev->dev, 0);
 	if (IS_ERR(i2c->clk)) {
 		dev_err(&pdev->dev, "cannot get clock\n");
-		return -ENOENT;
+		return PTR_ERR(i2c->clk);
 	}
-
-	clk_prepare_enable(i2c->clk);
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	i2c->regs = devm_ioremap_resource(&pdev->dev, mem);
-	if (IS_ERR(i2c->regs)) {
-		ret = PTR_ERR(i2c->regs);
-		goto err_clk;
-	}
+	if (IS_ERR(i2c->regs))
+		return PTR_ERR(i2c->regs);
 
-	/* Enable the I2C bus in the SOC general register file */
-	i2c->grf = syscon_regmap_lookup_by_phandle(np, "rockchip,grf");
-	if (IS_ERR(i2c->grf)) {
-		dev_err(&pdev->dev,
-			"rk3x-i2c requires a 'rockchip,grf' property\n");
-		ret = PTR_ERR(i2c->grf);
-		goto err_clk;
-	}
+	if (i2c->soc_data->grf_offset >= 0) {
+		ret = of_property_read_u32(pdev->dev.of_node,
+				    "rockchip,bus-index", &i2c->bus_index);
+		if (ret < 0) {
+			dev_err(&pdev->dev,
+				"rk3x-i2c requires 'rockchip,bus-index' property\n");
+			return ret;
+		}
 
-	ret = rk3x_i2c_set_grf_enable(i2c, true);
-	if (ret != 0) {
-		dev_err(&pdev->dev, "could not enable I2C adapter in GRF: %d\n",
-			ret);
-		ret = -EIO;
-		goto err_clk;
+		/* Enable the I2C bus in the SOC general register file */
+		i2c->grf = syscon_regmap_lookup_by_phandle(np, "rockchip,grf");
+		if (IS_ERR(i2c->grf)) {
+			dev_err(&pdev->dev,
+				"rk3x-i2c requires a 'rockchip,grf' property\n");
+			return PTR_ERR(i2c->grf);
+		}
+
+		ret = rk3x_i2c_set_grf_enable(i2c, true);
+		if (ret < 0) {
+			dev_err(&pdev->dev, "could not enable I2C adapter in GRF: %d\n",
+				ret);
+			return ret;
+		}
 	}
 
 	/* IRQ setup */
-	i2c->irq = ret = platform_get_irq(pdev, 0);
-	if (ret <= 0) {
+	i2c->irq = platform_get_irq(pdev, 0);
+	if (i2c->irq < 0) {
 		dev_err(&pdev->dev, "cannot find rk3x IRQ\n");
-		ret = -EINVAL;
-		goto err_grf;
+		return i2c->irq;
 	}
 
 	ret = devm_request_irq(&pdev->dev, i2c->irq, rk3x_i2c_irq,
 			       0, dev_name(&pdev->dev), i2c);
-	if (ret != 0) {
+	if (ret < 0) {
 		dev_err(&pdev->dev, "cannot request IRQ\n");
-		goto err_grf;
+		return ret;
 	}
 
 	platform_set_drvdata(pdev, i2c);
 
-	if (i2c_add_adapter(&i2c->adap) != 0) {
-		pr_err("rk3x-i2c: Could not register adapter\n");
-		goto err_grf;
+	ret = clk_prepare_enable(i2c->clk);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Could not enable clock\n");
+		return ret;
+	}
+
+	ret = i2c_add_adapter(&i2c->adap);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Could not register adapter\n");
+		goto err_clk;
 	}
 
 	dev_info(&pdev->dev, "Initialized RK3xxx I2C bus at 0x%08x\n",
@@ -691,8 +703,6 @@ static int rk3x_i2c_probe(struct platform_device *pdev)
 	clk_disable(i2c->clk);
 	return 0;
 
-err_grf:
-	rk3x_i2c_set_grf_enable(i2c, false);
 err_clk:
 	clk_disable_unprepare(i2c->clk);
 	return ret;
@@ -702,16 +712,22 @@ static int rk3x_i2c_remove(struct platform_device *pdev)
 {
 	struct rk3x_i2c *i2c = platform_get_drvdata(pdev);
 
-	rk3x_i2c_set_grf_enable(i2c, false);
-
-	clk_unprepare(i2c->clk);
 	i2c_del_adapter(&i2c->adap);
+	clk_unprepare(i2c->clk);
 
 	return 0;
 }
 
+static struct rk3x_i2c_soc_data soc_data[3] = {
+	{ .grf_offset = 0x154 },
+	{ .grf_offset = 0x0a4 },
+	{ .grf_offset = -1 },
+};
+
 static const struct of_device_id rk3x_i2c_match[] = {
-	{ .compatible = "rockchip,rk3x-i2c" },
+	{ .compatible = "rockchip,rk3066-i2c", .data = (void *)&soc_data[0] },
+	{ .compatible = "rockchip,rk3188-i2c", .data = (void *)&soc_data[1] },
+	{ .compatible = "rockchip,rk3288-i2c", .data = (void *)&soc_data[2] },
 };
 
 static struct platform_driver rk3x_i2c_driver = {
