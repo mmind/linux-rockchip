@@ -138,6 +138,9 @@
 
 				pinctrl-names = "default";
 				pinctrl-0 = <&hym8563_int>;
+
+				#clock-cells = <0>;
+				clock-output-names = "xin32k";
 			};
 
 			pmic: act8846@5a {
