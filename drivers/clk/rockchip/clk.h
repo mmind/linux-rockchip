@@ -76,7 +76,8 @@ struct rockchip_pll_rate_table {
 struct rockchip_pll_clock {
 	unsigned int		id;
 	const char		*name;
-	const char		*parent_name;
+	const char		**parent_names;
+	u8			num_parents;
 	unsigned long		flags;
 	int			con_offset;
 	int			mode_offset;
@@ -86,13 +87,14 @@ struct rockchip_pll_clock {
 	struct rockchip_pll_rate_table *rate_table;
 };
 
-#define PLL(_type, _id, _name, _pname, _flags, _con, _mode, _mshift,	\
+#define PLL(_type, _id, _name, _pnames, _flags, _con, _mode, _mshift,	\
 		_lshift, _rtable)					\
 	{								\
 		.id		= _id,					\
 		.type		= _type,				\
 		.name		= _name,				\
-		.parent_name	= _pname,				\
+		.parent_names	= _pnames,				\
+		.num_parents	= ARRAY_SIZE(_pnames),			\
 		.flags		= CLK_GET_RATE_NOCACHE | _flags,	\
 		.con_offset	= _con,					\
 		.mode_offset	= _mode,				\
@@ -101,14 +103,17 @@ struct rockchip_pll_clock {
 		.rate_table	= _rtable,				\
 	}
 
-struct clk *rockchip_clk_register_pll(struct rockchip_pll_clock *pll_clk,
-				void __iomem *base, void __iomem *reg_lock,
-				spinlock_t *lock);
+struct clk *rockchip_clk_register_pll(enum rockchip_pll_type pll_type,
+		const char *name, const char **parent_names, u8 num_parents,
+		void __iomem *base, int con_offset, void __iomem *reg_lock,
+		int lock_shift, int reg_mode, int mode_shift,
+		struct rockchip_pll_rate_table *rate_table,
+		spinlock_t *lock);
 
 struct clk *rockchip_clk_register_cpuclk(const char *name,
-			const char **parent_names, unsigned int num_parents,
-			void __iomem *reg_base, struct device_node *np,
-			spinlock_t *lock);
+		const char **parent_names, unsigned int num_parents,
+		void __iomem *reg_base, struct device_node *np,
+		spinlock_t *lock);
 
 #define PNAME(x) static const char *x[] __initconst
 

@@ -62,8 +62,11 @@ void __init rockchip_clk_register_plls(struct rockchip_pll_clock *list,
 	int idx;
 
 	for (idx = 0; idx < nr_pll; idx++, list++) {
-		clk = rockchip_clk_register_pll(list, reg_base, reg_lock,
-						&clk_lock);
+		clk = rockchip_clk_register_pll(list->type, list->name,
+				list->parent_names, list->num_parents,
+				reg_base, list->con_offset, reg_lock,
+				list->lock_shift, list->mode_offset,
+				list->mode_shift, list->rate_table, &clk_lock);
 		if (IS_ERR(clk)) {
 			pr_err("%s: failed to register clock %s\n", __func__,
 				list->name);
