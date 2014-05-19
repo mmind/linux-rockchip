@@ -168,6 +168,10 @@ static struct rockchip_composite_clock rk3188_composite_clks[] __initdata = {
 			RK2928_CLKSEL_CON(26), 8, 1, MFLAGS, 0, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
 			RK2928_CLKGATE_CON(0), 2, GFLAGS),
 
+	COMPOSITE_NOMUX(SCLK_SARADC, "sclk_saradc", "xin24m", 0,
+			RK2928_CLKSEL_CON(24), 8, 8, DFLAGS,
+			RK2928_CLKGATE_CON(2), 8, GFLAGS),
+
 };
 
 static struct rockchip_mux_clock rk3188_mux_clks[] __initdata = {
@@ -188,10 +192,7 @@ static struct rockchip_mux_clock rk3188_mux_clks[] __initdata = {
 
 	MUX(0, "mux_hsicphy", mux_hsicphy_p, RK2928_CLKSEL_CON(30), 0, 2, 0, MFLAGS),
 
-//	MUX(0, "mux_mac", mux_mac_p, RK2928_CLKSEL_CON(21), 0, 2, 0, MFLAGS),
 	MUX(SCLK_MAC, "mux_sclk_mac", mux_sclk_mac_p, RK2928_CLKSEL_CON(21), 4, 1, 0, MFLAGS),
-
-//	MUX(0, "mux_ddr", mux_ddr_p, RK2928_CLKSEL_CON(26), 8, 1, 0, MFLAGS),
 
 	MUX(0, "mux_dclk_lcdc0", mux_pll_src_cpll_gpll_p, RK2928_CLKSEL_CON(27), 0, 1, 0, MFLAGS),
 	MUX(0, "mux_dclk_lcdc1", mux_pll_src_cpll_gpll_p, RK2928_CLKSEL_CON(28), 0, 1, 0, MFLAGS),
@@ -226,8 +227,6 @@ static struct rockchip_div_clock rk3188_div_clks[] __initdata = {
 	DIV(0, "div_core_peri", "armclk", RK2928_CLKSEL_CON(0), 6, 2, 0, DFLAGS | CLK_DIVIDER_READ_ONLY, div_core_peri_t),
 	DIV(0, "div_aclk_core", "armclk", RK2928_CLKSEL_CON(1), 3, 3, 0, DFLAGS | CLK_DIVIDER_READ_ONLY, div_aclk_core_t),
 
-//	DIV(0, "div_aclk_cpu", "mux_aclk_cpu", RK2928_CLKSEL_CON(0), 0, 5, 0, DFLAGS, NULL), //
-
 	DIV(0, "div_hclk_cpu", "gate_aclk_cpu", RK2928_CLKSEL_CON(1), 8, 2, 0, DFLAGS | CLK_DIVIDER_POWER_OF_TWO, NULL),
 	DIV(0, "div_pclk_cpu", "gate_aclk_cpu", RK2928_CLKSEL_CON(1), 12, 2, 0, DFLAGS | CLK_DIVIDER_POWER_OF_TWO, NULL),
 	DIV(0, "div_hclk_ahb2apb", "gate_hclk_ahb2apb", RK2928_CLKSEL_CON(1), 14, 2, 0, DFLAGS | CLK_DIVIDER_POWER_OF_TWO, NULL),
@@ -235,7 +234,6 @@ static struct rockchip_div_clock rk3188_div_clks[] __initdata = {
 	DIV(0, "div_i2s", "mux_i2s_pll", RK2928_CLKSEL_CON(3), 0, 5, 0, DFLAGS, NULL),
 	DIV(0, "div_spdif", "mux_i2s_pll", RK2928_CLKSEL_CON(5), 0, 5, 0, DFLAGS, NULL),
 
-//	DIV(0, "div_aclk_peri", "mux_aclk_peri", RK2928_CLKSEL_CON(10), 0, 5, 0, DFLAGS, NULL), //
 	DIV(0, "div_hclk_peri", "gate_aclk_peri", RK2928_CLKSEL_CON(10), 8, 2, 0, DFLAGS | CLK_DIVIDER_POWER_OF_TWO, NULL),
 	DIV(0, "div_pclk_peri", "gate_aclk_peri", RK2928_CLKSEL_CON(10), 12, 2, 0, DFLAGS | CLK_DIVIDER_POWER_OF_TWO, NULL),
 
@@ -248,16 +246,10 @@ static struct rockchip_div_clock rk3188_div_clks[] __initdata = {
 	DIV(0, "div_mmc1", "gate_hclk_peri", RK2928_CLKSEL_CON(12), 0, 6, 0, DFLAGS, NULL),
 	DIV(0, "div_mmc2", "gate_hclk_peri", RK2928_CLKSEL_CON(12), 8, 6, 0, DFLAGS, NULL),
 
-//	DIV(0, "div_mac", "mux_mac", RK2928_CLKSEL_CON(21), 8, 5, CLK_SET_RATE_PARENT, DFLAGS, NULL),
-
 	DIV(0, "div_hsicphy", "mux_hsicphy", RK2928_CLKGATE_CON(11), 8, 6, 0, DFLAGS, NULL),
-
-	DIV(0, "div_saradc", "xin24m", RK2928_CLKSEL_CON(24), 8, 8, 0, DFLAGS, NULL),
 
 	DIV(0, "div_spi0", "gate_pclk_peri", RK2928_CLKSEL_CON(25), 0, 7, 0, DFLAGS, NULL),
 	DIV(0, "div_spi1", "gate_pclk_peri", RK2928_CLKSEL_CON(25), 8, 7, 0, DFLAGS, NULL),
-
-//	DIV(0, "div_ddr", "mux_ddr", RK2928_CLKSEL_CON(26), 0, 2, 0, DFLAGS | CLK_DIVIDER_POWER_OF_TWO, NULL),
 
 	DIV(0, "div_dclk_lcdc0", "mux_dclk_lcdc0", RK2928_CLKSEL_CON(27), 8, 8, 0, DFLAGS, NULL),
 	DIV(0, "div_dclk_lcdc1", "mux_dclk_lcdc1", RK2928_CLKSEL_CON(28), 8, 8, 0, DFLAGS, NULL),
@@ -273,8 +265,6 @@ static struct rockchip_gate_clock rk3188_gate_clks[] __initdata = {
 	/* CLKGATE_CON_0 */
 	GATE(CORE_PERI, "gate_core_peri", "div_core_peri", RK2928_CLKGATE_CON(0), 0, 0, GFLAGS),
 	GATE(0, "gate_gpll_cpu", "gpll", RK2928_CLKGATE_CON(0), 1, 0, GFLAGS),
-//	GATE(0, "gate_ddr", "div_ddr", RK2928_CLKGATE_CON(0), 2, 0, GFLAGS),
-//	GATE(0, "gate_aclk_cpu", "div_aclk_cpu", RK2928_CLKGATE_CON(0), 3, 0, GFLAGS), //
 	GATE(0, "gate_hclk_cpu", "div_hclk_cpu", RK2928_CLKGATE_CON(0), 4, 0, GFLAGS),
 	GATE(0, "gate_pclk_cpu", "div_pclk_cpu", RK2928_CLKGATE_CON(0), 5, 0, GFLAGS),
 	GATE(0, "gate_atclk_cpu", "gate_pclk_cpu", RK2928_CLKGATE_CON(0), 6, 0, GFLAGS),
@@ -308,14 +298,11 @@ static struct rockchip_gate_clock rk3188_gate_clks[] __initdata = {
 
 	/* CLKGATE_CON_2 */
 	GATE(0, "gate_peri_src", "gate_aclk_peri", RK2928_CLKGATE_CON(2), 0, 0, GFLAGS),
-//	GATE(0, "gate_aclk_peri", "div_aclk_peri", RK2928_CLKGATE_CON(2), 1, 0, GFLAGS), //
 	GATE(0, "gate_hclk_peri", "div_hclk_peri", RK2928_CLKGATE_CON(2), 2, 0, GFLAGS),
 	GATE(0, "gate_pclk_peri", "div_pclk_peri", RK2928_CLKGATE_CON(2), 3, 0, GFLAGS),
 	GATE(0, "gate_smc", "gate_hclk_peri", RK2928_CLKGATE_CON(2), 4, 0, GFLAGS),
-//	GATE(0, "gate_div_mac", "div_mac", RK2928_CLKGATE_CON(2), 5, 0, GFLAGS),
 	GATE(0, "gate_div_hsadc", "div_hsadc", RK2928_CLKGATE_CON(2), 6, 0, GFLAGS),
 	GATE(0, "gate_frac_hsadc", "frac_hsadc", RK2928_CLKGATE_CON(2), 7, 0, GFLAGS),
-	GATE(SCLK_SARADC, "gate_div_saradc", "div_saradc", RK2928_CLKGATE_CON(2), 8, 0, GFLAGS),
 	GATE(0, "gate_div_spi0", "div_spi0", RK2928_CLKGATE_CON(2), 9, 0, GFLAGS),
 	GATE(0, "gate_div_spi1", "div_spi1", RK2928_CLKGATE_CON(2), 10, 0, GFLAGS),
 	GATE(SCLK_MMC0, "gate_div_mmc0", "div_mmc0", RK2928_CLKGATE_CON(2), 11, 0, GFLAGS),

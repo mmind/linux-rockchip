@@ -161,6 +161,22 @@ struct rockchip_composite_clock {
 		.gate_flags	= gf,				\
 	}
 
+#define COMPOSITE_NOMUX(_id, cname, pname, f, mo, ds, dw, df, go, gs, gf)\
+	{							\
+		.id		= _id,				\
+		.name		= cname,			\
+		.parent_names	= (const char *[]){ pname },	\
+		.num_parents	= 1,				\
+		.flags		= f,				\
+		.muxdiv_offset	= mo,				\
+		.div_shift	= ds,				\
+		.div_width	= dw,				\
+		.div_flags	= df,				\
+		.gate_offset	= go,				\
+		.gate_shift	= gs,				\
+		.gate_flags	= gf,				\
+	}
+
 /**
  * struct rockchip_mux_clock: information about mux clock
  * @id: platform specific id of the clock.

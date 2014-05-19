@@ -19,10 +19,9 @@ struct clk *rockchip_clk_register_composite(const char *name,
 		spinlock_t *lock)
 {
 	struct clk *clk;
-	struct clk_mux *mux;
+	struct clk_mux *mux = NULL;
 	struct clk_gate *gate;
 	struct clk_divider *div;
-	struct clk_ops *mux_ops;
 
 	if (num_parents > 1) {
 		mux = kzalloc(sizeof(*mux), GFP_KERNEL);
@@ -34,12 +33,6 @@ struct clk *rockchip_clk_register_composite(const char *name,
 		mux->mask = BIT(mux_width) - 1;
 		mux->flags = mux_flags;
 		mux->lock = lock;
-
-//		mux_ops = kmemdup(&clk_mux_ops, sizeof(*mux_ops), GFP_KERNEL);
-//		if (!mux_ops)
-//			return ERR_PTR(-ENOMEM);
-
-//		mux_ops->determine_rate = NULL;
 	}
 
 	gate = kzalloc(sizeof(*gate), GFP_KERNEL);
