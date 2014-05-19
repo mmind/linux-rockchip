@@ -115,7 +115,51 @@ struct clk *rockchip_clk_register_cpuclk(const char *name,
 		void __iomem *reg_base, struct device_node *np,
 		spinlock_t *lock);
 
+struct clk *rockchip_clk_register_composite(const char *name,
+		const char **parent_names, u8 num_parents, void __iomem *base,
+		int muxdiv_offset, u8 mux_shift, u8 mux_width, u8 mux_flags,
+		u8 div_shift, u8 div_width, u8 div_flags, int gate_offset,
+		u8 gate_shift, u8 gate_flags, unsigned long flags,
+		spinlock_t *lock);
+
 #define PNAME(x) static const char *x[] __initconst
+
+struct rockchip_composite_clock {
+	unsigned int		id;
+	const char		*name;
+	const char		**parent_names;
+	u8			num_parents;
+	unsigned long		flags;
+	int			muxdiv_offset;
+	u8			mux_shift;
+	u8			mux_width;
+	u8			mux_flags;
+	u8			div_shift;
+	u8			div_width;
+	u8			div_flags;
+	u8			gate_offset;
+	u8			gate_shift;
+	u8			gate_flags;
+};
+
+#define COMPOSITE(_id, cname, pnames, f, mo, ms, mw, mf, ds, dw, df, go, gs, gf)\
+	{							\
+		.id		= _id,				\
+		.name		= cname,			\
+		.parent_names	= pnames,			\
+		.num_parents	= ARRAY_SIZE(pnames),		\
+		.flags		= f,				\
+		.muxdiv_offset	= mo,				\
+		.mux_shift	= ms,				\
+		.mux_width	= mw,				\
+		.mux_flags	= mf,				\
+		.div_shift	= ds,				\
+		.div_width	= dw,				\
+		.div_flags	= df,				\
+		.gate_offset	= go,				\
+		.gate_shift	= gs,				\
+		.gate_flags	= gf,				\
+	}
 
 /**
  * struct rockchip_mux_clock: information about mux clock
@@ -226,6 +270,8 @@ void rockchip_clk_init(struct device_node *np, void __iomem *base,
 
 void rockchip_clk_add_lookup(struct clk *clk, unsigned int id);
 
+void rockchip_clk_register_composites(struct rockchip_composite_clock *clk_list,
+			       unsigned int nr_clk);
 void rockchip_clk_register_mux(struct rockchip_mux_clock *clk_list,
 			       unsigned int nr_clk);
 void rockchip_clk_register_div(struct rockchip_div_clock *clk_list,

@@ -95,6 +95,36 @@ void __init rockchip_clk_register_armclk(unsigned int lookup_id,
 	rockchip_clk_add_lookup(clk, lookup_id);
 }
 
+void __init rockchip_clk_register_composites(
+				      struct rockchip_composite_clock *list,
+				      unsigned int nr_clk)
+{
+	struct clk *clk;
+	unsigned int idx;
+	unsigned long flags;
+
+	for (idx = 0; idx < nr_clk; idx++, list++) {
+		flags = list->flags;
+
+		/* keep all gates untouched for now */
+		flags |= CLK_IGNORE_UNUSED;
+
+		clk = rockchip_clk_register_composite(list->name,
+			list->parent_names, list->num_parents, reg_base,
+			list->muxdiv_offset, list->mux_shift, list->mux_width,
+			list->mux_flags, list->div_shift, list->div_width,
+			list->div_flags, list->gate_offset, list->gate_shift,
+			list->gate_flags, flags, &clk_lock);
+		if (IS_ERR(clk)) {
+			pr_err("%s: failed to register clock %s\n", __func__,
+				list->name);
+			continue;
+		}
+
+		rockchip_clk_add_lookup(clk, list->id);
+	}
+}
+
 void __init rockchip_clk_register_mux(struct rockchip_mux_clock *list,
 				      unsigned int nr_clk)
 {
