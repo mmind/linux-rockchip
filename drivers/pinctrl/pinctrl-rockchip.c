@@ -1620,7 +1620,7 @@ static struct rockchip_pin_ctrl *rockchip_pinctrl_get_soc_data(
 							pmu_offs : grf_offs;
 			}
 
-			dev_info(d->dev, "bank %d, iomux %d has offset 0x%x\n",
+			dev_dbg(d->dev, "bank %d, iomux %d has offset 0x%x\n",
 				 i, j, iom->offset);
 
 			/*
