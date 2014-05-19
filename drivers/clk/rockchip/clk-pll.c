@@ -302,7 +302,10 @@ struct clk *rockchip_clk_register_pll(enum rockchip_pll_type pll_type,
 		return ERR_PTR(-ENOMEM);
 
 	init.name = pll_name;
-	init.flags = 0;
+
+	/* keep all plls untouched for now */
+	init.flags = CLK_IGNORE_UNUSED;
+
 	init.parent_names = &parent_names[0];
 	init.num_parents = 1;
 

@@ -115,16 +115,9 @@ struct clk *rockchip_clk_register_cpuclk(const char *name,
 		void __iomem *reg_base, struct device_node *np,
 		spinlock_t *lock);
 
-struct clk *rockchip_clk_register_composite(const char *name,
-		const char **parent_names, u8 num_parents, void __iomem *base,
-		int muxdiv_offset, u8 mux_shift, u8 mux_width, u8 mux_flags,
-		u8 div_shift, u8 div_width, u8 div_flags, int gate_offset,
-		u8 gate_shift, u8 gate_flags, unsigned long flags,
-		spinlock_t *lock);
-
 #define PNAME(x) static const char *x[] __initconst
 
-struct rockchip_composite_clock {
+struct rockchip_clk_branch {
 	unsigned int		id;
 	const char		*name;
 	const char		**parent_names;
@@ -137,7 +130,8 @@ struct rockchip_composite_clock {
 	u8			div_shift;
 	u8			div_width;
 	u8			div_flags;
-	u8			gate_offset;
+	struct clk_div_table	*div_table;
+	int			gate_offset;
 	u8			gate_shift;
 	u8			gate_flags;
 };
@@ -177,78 +171,67 @@ struct rockchip_composite_clock {
 		.gate_flags	= gf,				\
 	}
 
-/**
- * struct rockchip_mux_clock: information about mux clock
- * @id: platform specific id of the clock.
- * @name: name of this mux clock.
- * @parent_names: array of pointer to parent clock names.
- * @num_parents: number of parents listed in @parent_names.
- * @flags: optional flags for basic clock.
- * @offset: offset of the register for configuring the mux.
- * @shift: starting bit location of the mux control bit-field in @reg.
- * @width: width of the mux control bit-field in @reg.
- * @mux_flags: flags for mux-type clock.
- */
-struct rockchip_mux_clock {
-	unsigned int		id;
-	const char		*name;
-	const char		**parent_names;
-	u8			num_parents;
-	unsigned long		flags;
-	unsigned long		offset;
-	u8			shift;
-	u8			width;
-	u8			mux_flags;
-};
+#define COMPOSITE_NOMUX_DIVTBL(_id, cname, pname, f, mo, ds, dw, df, dt,\
+			       go, gs, gf)\
+	{							\
+		.id		= _id,				\
+		.name		= cname,			\
+		.parent_names	= (const char *[]){ pname },	\
+		.num_parents	= 1,				\
+		.flags		= f,				\
+		.muxdiv_offset	= mo,				\
+		.div_shift	= ds,				\
+		.div_width	= dw,				\
+		.div_flags	= df,				\
+		.div_table	= dt,				\
+		.gate_offset	= go,				\
+		.gate_shift	= gs,				\
+		.gate_flags	= gf,				\
+	}
 
-#define MUX(_id, cname, pnames, o, s, w, f, mf)			\
+#define COMPOSITE_NODIV(_id, cname, pnames, f, mo, ms, mw, mf, go, gs, gf)\
 	{							\
 		.id		= _id,				\
 		.name		= cname,			\
 		.parent_names	= pnames,			\
 		.num_parents	= ARRAY_SIZE(pnames),		\
 		.flags		= f,				\
-		.offset		= o,				\
-		.shift		= s,				\
-		.width		= w,				\
+		.muxdiv_offset	= mo,				\
+		.mux_shift	= ms,				\
+		.mux_width	= mw,				\
 		.mux_flags	= mf,				\
+		.gate_offset	= go,				\
+		.gate_shift	= gs,				\
+		.gate_flags	= gf,				\
 	}
 
-/**
- * struct rockchip_div_clock: information about div clock
- * @id: platform specific id of the clock.
- * @name: name of this div clock.
- * @parent_name: name of the parent clock.
- * @flags: optional flags for basic clock.
- * @offset: offset of the register for configuring the div.
- * @shift: starting bit location of the div control bit-field in @reg.
- * @div_flags: flags for div-type clock.
- */
-struct rockchip_div_clock {
-	unsigned int		id;
-	const char		*name;
-	const char		*parent_name;
-	unsigned long		flags;
-	unsigned long		offset;
-	u8			shift;
-	u8			width;
-	u8			div_flags;
-	struct clk_div_table	*table;
-};
-
-#define DIV(_id, cname, pname, o, s, w, f, df, t)		\
+#define MUX(_id, cname, pnames, f, o, s, w, mf)			\
 	{							\
 		.id		= _id,				\
 		.name		= cname,			\
-		.parent_name	= pname,			\
+		.parent_names	= pnames,			\
+		.num_parents	= ARRAY_SIZE(pnames),		\
 		.flags		= f,				\
-		.offset		= o,				\
-		.shift		= s,				\
-		.width		= w,				\
-		.div_flags	= df,				\
-		.table		= t,				\
+		.muxdiv_offset	= o,				\
+		.mux_shift	= s,				\
+		.mux_width	= w,				\
+		.mux_flags	= mf,				\
+		.gate_offset	= -1,				\
 	}
 
+#define DIV(_id, cname, pname, f, o, s, w, df)			\
+	{							\
+		.id		= _id,				\
+		.name		= cname,			\
+		.parent_names	= (const char *[]){ pname },	\
+		.num_parents	= 1,				\
+		.flags		= f,				\
+		.muxdiv_offset	= o,				\
+		.div_shift	= s,				\
+		.div_width	= w,				\
+		.div_flags	= df,				\
+		.gate_offset	= -1,				\
+	}
 
 /**
  * struct rockchip_gate_clock: information about gate clock
@@ -286,13 +269,9 @@ void rockchip_clk_init(struct device_node *np, void __iomem *base,
 
 void rockchip_clk_add_lookup(struct clk *clk, unsigned int id);
 
-void rockchip_clk_register_composites(struct rockchip_composite_clock *clk_list,
+void rockchip_clk_register_branches(struct rockchip_clk_branch *clk_list,
 			       unsigned int nr_clk);
-void rockchip_clk_register_mux(struct rockchip_mux_clock *clk_list,
-			       unsigned int nr_clk);
-void rockchip_clk_register_div(struct rockchip_div_clock *clk_list,
-			       unsigned int nr_clk);
-void rockchip_clk_register_gate(struct rockchip_gate_clock *clk_list,
+void rockchip_clk_register_gates(struct rockchip_gate_clock *clk_list,
 				unsigned int nr_clk);
 void rockchip_clk_register_plls(struct rockchip_pll_clock *pll_list,
 				unsigned int nr_pll, void __iomem *reg_lock);
