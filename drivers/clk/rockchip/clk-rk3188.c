@@ -491,7 +491,7 @@ struct rockchip_clk_init_table rk3188_clk_init_tbl[] __initdata = {
 
 	{ "sclk_mmc0", NULL,  75000000, 0 },
 
-	{ "mac_src", NULL,  50000000, 0 },
+	{ "mac", NULL,  50000000, 0 },
 
 	/* FIXME: is this needed? */
 	{ "mac_lbtest", NULL, 0, 1 },
