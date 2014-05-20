@@ -134,22 +134,25 @@ PNAME(mux_pll_src_cpll_gpll_p)	= { "cpll", "gpll" };
 PNAME(mux_armclk_p)		= { "apll", "gpll_armclk" };
 PNAME(mux_aclk_cpu_p)		= { "apll", "gpll" };
 
-PNAME(mux_sclk_i2s_p)		= { "gate_div_i2s", "gate_frac_i2s", "xin12m" };
-PNAME(mux_sclk_spdif_p)		= { "gate_div_spdif", "gate_frac_spdif", "xin12m" };
+PNAME(mux_sclk_cif_p)		= { "cif_pll", "xin24m" };
+PNAME(mux_sclk_i2s_p)		= { "i2s_pll", "i2s_frac", "xin12m" };
+PNAME(mux_sclk_spdif_p)		= { "spdif_pll", "spdif_frac", "xin12m" };
+PNAME(mux_sclk_uart0_p)		= { "uart0_pll", "uart0_frac", "xin24m" };
+PNAME(mux_sclk_uart1_p)		= { "uart1_pll", "uart1_frac", "xin24m" };
+PNAME(mux_sclk_uart2_p)		= { "uart2_pll", "uart2_frac", "xin24m" };
+PNAME(mux_sclk_uart3_p)		= { "uart3_pll", "uart3_frac", "xin24m" };
 
-PNAME(mux_sclk_uart0_p)		= { "gate_div_uart0", "gate_frac_uart0", "xin24m" };
-PNAME(mux_sclk_uart1_p)		= { "gate_div_uart1", "gate_frac_uart1", "xin24m" };
-PNAME(mux_sclk_uart2_p)		= { "gate_div_uart2", "gate_frac_uart2", "xin24m" };
-PNAME(mux_sclk_uart3_p)		= { "gate_div_uart3", "gate_frac_uart3", "xin24m" };
-
-PNAME(mux_sclk_hsadc_p)		= { "hsadc_src", "hsadc_frac", "ext_hsadc" };
+PNAME(mux_sclk_hsadc_p)		= { "hsadc_pll", "hsadc_frac", "ext_hsadc" };
 
 PNAME(mux_mac_p)		= { "gpll", "dpll" };
 PNAME(mux_sclk_mac_p)		= { "mac", "rmii_clkin" };
 
-PNAME(mux_hsicphy_p)		= { "otgphy0", "otgphy1", "gpll", "cpll" };
+PNAME(mux_hsicphy_p)		= { "sclk_otgphy0", "sclk_otgphy1", "gpll", "cpll" };
 
 PNAME(mux_ddr_p)		= { "dpll", "gpll_ddr" };
+
+//FIXME hclk_vcodec
+PNAME(mux_testclk_p)		= { "pclk_cpu", "hclk_peri", "dclk_lcdc0_src", "sclk_uart0", "sclk_ddr", "hclk_vcodec" };
 
 #define MFLAGS CLK_MUX_HIWORD_MASK
 #define DFLAGS CLK_DIVIDER_HIWORD_MASK
@@ -174,6 +177,11 @@ static struct clk_div_table div_aclk_core_t[] = {
 };
 
 static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
+	/*
+	 * Clock-Architecture Diagram 2
+	 */
+
+	GATE(0, "gpll_armclk", "gpll", 0, RK2928_CLKGATE_CON(0), 1, GFLAGS),
 	/* these two are set by the cpuclk and should not be changed */
 	COMPOSITE_NOMUX_DIVTBL(CORE_PERI, "core_peri", "armclk", 0,
 			RK2928_CLKSEL_CON(0), 6, 2, DFLAGS | CLK_DIVIDER_READ_ONLY,
@@ -182,45 +190,133 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 			RK2928_CLKSEL_CON(1), 3, 3, DFLAGS | CLK_DIVIDER_READ_ONLY,
 			div_aclk_core_t, RK2928_CLKGATE_CON(0), 7, GFLAGS),
 
-	COMPOSITE(0, "aclk_cpu", mux_aclk_cpu_p, CLK_SET_RATE_NO_REPARENT,
-			RK2928_CLKSEL_CON(0), 5, 1, MFLAGS, 0, 5, DFLAGS,
-			RK2928_CLKGATE_CON(0), 3, GFLAGS),
-	COMPOSITE_NOMUX(0, "hclk_cpu", "aclk_cpu", 0,
-			RK2928_CLKSEL_CON(1), 8, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
-			RK2928_CLKGATE_CON(0), 4, GFLAGS),
-	COMPOSITE_NOMUX(0, "pclk_cpu", "aclk_cpu", 0,
-			RK2928_CLKSEL_CON(1), 12, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
-			RK2928_CLKGATE_CON(0), 5, GFLAGS),
-	COMPOSITE_NOMUX(0, "hclk_ahb2apb", "hclk_cpu", 0,
-			RK2928_CLKSEL_CON(1), 14, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
-			RK2928_CLKGATE_CON(4), 9, GFLAGS),
+	COMPOSITE(0, "aclk_vepu_src", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(32), 7, 1, MFLAGS, 0, 5, DFLAGS,
+			RK2928_CLKGATE_CON(3), 9, GFLAGS),
+	GATE(0, "hclk_vepu", "aclk_vepu_src", 0, RK2928_CLKGATE_CON(3), 10, GFLAGS),
+	COMPOSITE(0, "aclk_vdpu_src", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(32), 15, 1, MFLAGS, 8, 5, DFLAGS,
+			RK2928_CLKGATE_CON(3), 11, GFLAGS),
+	GATE(0, "hclk_vdpu", "aclk_vdpu_src", 0, RK2928_CLKGATE_CON(3), 12, GFLAGS),
 
-	COMPOSITE(0, "aclk_peri", mux_pll_src_cpll_gpll_p, CLK_SET_RATE_NO_REPARENT,
-			RK2928_CLKSEL_CON(10), 15, 1, MFLAGS, 0, 5, DFLAGS,
-			RK2928_CLKGATE_CON(2), 1, GFLAGS),
-	COMPOSITE_NOMUX(0, "hclk_peri", "aclk_peri", 0,
-			RK2928_CLKSEL_CON(10), 8, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
-			RK2928_CLKGATE_CON(2), 2, GFLAGS),
-	COMPOSITE_NOMUX(0, "pclk_peri", "aclk_peri", 0,
-			RK2928_CLKSEL_CON(10), 12, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
-			RK2928_CLKGATE_CON(2), 3, GFLAGS),
-
-	COMPOSITE(0, "ddr", mux_ddr_p, 0,
+	GATE(0, "gpll_ddr", "gpll", 0, RK2928_CLKGATE_CON(1), 7, GFLAGS),
+	COMPOSITE(0, "sclk_ddr", mux_ddr_p, 0,
 			RK2928_CLKSEL_CON(26), 8, 1, MFLAGS, 0, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
 			RK2928_CLKGATE_CON(0), 2, GFLAGS),
 
+	/* do not source aclk_cpu_pre from the apll, to keep complexity down */
+	COMPOSITE_NOGATE(0, "aclk_cpu_pre", mux_aclk_cpu_p, CLK_SET_RATE_NO_REPARENT,
+			RK2928_CLKSEL_CON(0), 5, 1, MFLAGS, 0, 5, DFLAGS),
+	GATE(0, "aclk_cpu", "aclk_cpu_pre", 0, RK2928_CLKGATE_CON(0), 3, GFLAGS),
+
+	DIV(0, "pclk_cpu_pre", "aclk_cpu_pre", 0, RK2928_CLKGATE_CON(1), 12, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO),
+	GATE(0, "atclk_cpu", "pclk_cpu_pre", 0, RK2928_CLKGATE_CON(0), 6, GFLAGS),
+	GATE(0, "pclk_cpu", "pclk_cpu_pre", 0, RK2928_CLKGATE_CON(0), 5, GFLAGS),
+	DIV(0, "hclk_cpu_pre", "aclk_cpu_pre", 0, RK2928_CLKGATE_CON(1), 8, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO),
+	COMPOSITE_NOMUX(0, "hclk_ahb2apb", "hclk_cpu_pre", 0,
+			RK2928_CLKSEL_CON(1), 14, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
+			RK2928_CLKGATE_CON(4), 9, GFLAGS),
+	GATE(0, "hclk_cpu", "hclk_cpu_pre", 0, RK2928_CLKGATE_CON(0), 4, GFLAGS),
+
+	COMPOSITE(0, "aclk_gpu_src", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(34), 7, 1, MFLAGS, 0, 5, DFLAGS,
+			RK2928_CLKGATE_CON(3), 15, GFLAGS),
+	GATE(0, "aclk_gpu", "aclk_gpu_src", 0, RK2928_CLKGATE_CON(9), 7, GFLAGS),
+
+	COMPOSITE(0, "aclk_lcdc0_pre", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(31), 7, 1, MFLAGS, 0, 5, DFLAGS,
+			RK2928_CLKGATE_CON(3), 0, GFLAGS),
+	COMPOSITE(0, "aclk_lcdc1_pre", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(31), 15, 1, MFLAGS, 8, 5, DFLAGS,
+			RK2928_CLKGATE_CON(1), 4, GFLAGS),
+
+	COMPOSITE(0, "aclk_peri_pre", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(10), 15, 1, MFLAGS, 0, 5, DFLAGS,
+			RK2928_CLKGATE_CON(2), 0, GFLAGS),
+	GATE(0, "aclk_peri", "aclk_peri_pre", 0, RK2928_CLKGATE_CON(2), 1, GFLAGS),
+	COMPOSITE_NOMUX(0, "hclk_peri", "aclk_peri_pre", 0,
+			RK2928_CLKSEL_CON(10), 8, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
+			RK2928_CLKGATE_CON(2), 2, GFLAGS),
+	COMPOSITE_NOMUX(0, "pclk_peri", "aclk_peri_pre", 0,
+			RK2928_CLKSEL_CON(10), 12, 2, DFLAGS | CLK_DIVIDER_POWER_OF_TWO,
+			RK2928_CLKGATE_CON(2), 3, GFLAGS),
+
+	/*
+	 * Clock-Architecture Diagram 3
+	 */
+
+	COMPOSITE(0, "dclk_lcdc0_src", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(27), 0, 1, MFLAGS, 8, 8, DFLAGS,
+			RK2928_CLKGATE_CON(3), 1, GFLAGS),
+	COMPOSITE(0, "dclk_lcdc1_src", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(28), 0, 1, MFLAGS, 8, 8, DFLAGS,
+			RK2928_CLKGATE_CON(3), 2, GFLAGS),
+
+	COMPOSITE(0, "cif_pll", mux_pll_src_cpll_gpll_p, 0,
+			RK2928_CLKSEL_CON(29), 0, 1, MFLAGS, 1, 5, DFLAGS,
+			RK2928_CLKGATE_CON(3), 7, GFLAGS),
+	MUX(0, "sclk_cif", mux_sclk_cif_p, 0, RK2928_CLKSEL_CON(29), 7, 1, MFLAGS),
+//FIXME: CLKSEL_CON30[8]: select inverter
+	/* FIXME cif_in */
+	GATE(0, "pclkin_cif", "dummy", 0, RK2928_CLKGATE_CON(3), 3, GFLAGS),
+
+	MUX(0, "mux_i2s_pll", mux_pll_src_gpll_cpll_p, 0, RK2928_CLKSEL_CON(2), 15, 1, MFLAGS),
+	COMPOSITE_NOMUX(0, "gate_div_i2s", "mux_i2s_pll", 0,
+			RK2928_CLKSEL_CON(3), 0, 7, DFLAGS,
+			RK2928_CLKGATE_CON(0), 9, GFLAGS),
+	COMPOSITE_NOMUX(0, "gate_div_spdif", "mux_i2s_pll", 0,
+			RK2928_CLKSEL_CON(5), 0, 7, DFLAGS,
+			RK2928_CLKGATE_CON(13), 13, GFLAGS),
+	COMPOSITE_FRAC(0, "i2s_frac", "i2s_pll", 0, RK2928_CLKGATE_CON(7), 0,
+			RK2928_CLKGATE_CON(0), 10, GFLAGS),
+	COMPOSITE_FRAC(0, "spdif_frac", "spdif_pll", 0, RK2928_CLKGATE_CON(9), 0,
+			RK2928_CLKGATE_CON(0), 14, GFLAGS),
+	MUX(0, "sclk_i2s", mux_sclk_i2s_p, 0, RK2928_CLKSEL_CON(3), 8, 2, MFLAGS),
+	MUX(0, "sclk_spdif", mux_sclk_spdif_p, 0, RK2928_CLKSEL_CON(5), 8, 2, MFLAGS),
+
+	/*
+	 * the 480m are generated inside the usb block from these clocks,
+	 * but they are also a source for the hsicphy clock.
+	 */
+	GATE(0, "sclk_otgphy0", "usb480m", 0, RK2928_CLKGATE_CON(1), 5, GFLAGS),
+	GATE(0, "sclk_otgphy1", "usb480m", 0, RK2928_CLKGATE_CON(1), 6, GFLAGS),
+
+	COMPOSITE_NODIV(0, "sclk_hsicphy_480m", mux_hsicphy_p, 0,
+			RK2928_CLKSEL_CON(30), 0, 2, DFLAGS, //ok
+			RK2928_CLKGATE_CON(3), 6, GFLAGS),
+	DIV(0, "sclk_hsicphy_12m", "sclk_hsicphy_480m", 0, RK2928_CLKGATE_CON(11), 8, 6, DFLAGS),
+
 	COMPOSITE(0, "mac", mux_mac_p, 0,
-			RK2928_CLKSEL_CON(21), 0, 2, MFLAGS, 8, 5, DFLAGS,
+			RK2928_CLKSEL_CON(21), 0, 1, MFLAGS, 8, 5, DFLAGS,
 			RK2928_CLKGATE_CON(2), 5, GFLAGS),
+	MUX(SCLK_MAC, "mux_sclk_mac", mux_sclk_mac_p, 0, RK2928_CLKSEL_CON(21), 4, 1, MFLAGS),
+
+	//FIXME: where does lbtest come from?
+	GATE(0, "mac_lbtest", "dummy", RK2928_CLKGATE_CON(2), 12, 0, GFLAGS),
+	/* FIXME there is more to mac */
+
+	COMPOSITE(0, "hsadc_pll", mux_pll_src_gpll_cpll_p, 0,
+			RK2928_CLKSEL_CON(22), 0, 1, MFLAGS, 8, 8, DFLAGS,
+			RK2928_CLKGATE_CON(2), 6, GFLAGS),
+	COMPOSITE_FRAC(0, "hsadc_frac", "hsadc_pll", RK2928_CLKGATE_CON(23), 0,
+			RK2928_CLKGATE_CON(2), 7, 0, GFLAGS),
+	MUX(0, "sclk_hsadc", mux_sclk_hsadc_p, 0, RK2928_CLKSEL_CON(22), 4, 2, MFLAGS),
+	// FIXME: hsadc_inverter at CLKSEL22[7]
 
 	COMPOSITE_NOMUX(SCLK_SARADC, "sclk_saradc", "xin24m", 0,
 			RK2928_CLKSEL_CON(24), 8, 8, DFLAGS,
 			RK2928_CLKGATE_CON(2), 8, GFLAGS),
 
-	COMPOSITE_NOMUX(0, "sclk_spi0", "pclk_peri", 0,
+	/*
+	 * Clock-Architecture Diagram 4
+	 */
+
+	GATE(0, "sclk_smc", "hclk_peri", RK2928_CLKGATE_CON(2), 4, 0, GFLAGS),
+
+	COMPOSITE_NOMUX(SCLK_SPI0, "sclk_spi0", "pclk_peri", 0,
 			RK2928_CLKSEL_CON(25), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(2), 9, GFLAGS),
-	COMPOSITE_NOMUX(0, "sclk_spi1", "pclk_peri", 0,
+	COMPOSITE_NOMUX(SCLK_SPI1, "sclk_spi1", "pclk_peri", 0,
 			RK2928_CLKSEL_CON(25), 8, 7, DFLAGS,
 			RK2928_CLKGATE_CON(2), 10, GFLAGS),
 
@@ -234,228 +330,161 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 			RK2928_CLKSEL_CON(12), 8, 6, DFLAGS,
 			RK2928_CLKGATE_CON(2), 14, GFLAGS),
 
-	COMPOSITE_NOMUX(0, "gate_div_uart0", "mux_uart_pll", 0,
+	MUX(0, "uart_pll", mux_pll_src_gpll_cpll_p, 0, RK2928_CLKSEL_CON(12), 15, 1, MFLAGS),
+	COMPOSITE_NOMUX(0, "uart0_pll", "uart_pll", 0,
 			RK2928_CLKSEL_CON(13), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(1), 8, GFLAGS),
-	COMPOSITE_NOMUX(0, "gate_div_uart1", "mux_uart_pll", 0,
+	COMPOSITE_NOMUX(0, "uart1_pll", "uart_pll", 0,
 			RK2928_CLKSEL_CON(14), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(1), 10, GFLAGS),
-	COMPOSITE_NOMUX(0, "gate_div_uart2", "mux_uart_pll", 0,
+	COMPOSITE_NOMUX(0, "uart2_pll", "uart_pll", 0,
 			RK2928_CLKSEL_CON(15), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(1), 12, GFLAGS),
-	COMPOSITE_NOMUX(0, "gate_div_uart3", "mux_uart_pll", 0,
+	COMPOSITE_NOMUX(0, "uart3_pll", "uart_pll", 0,
 			RK2928_CLKSEL_CON(16), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(1), 14, GFLAGS),
+	COMPOSITE_FRAC(0, "uart0_frac", "uart0_pll", 0, RK2928_CLKSEL_CON(17), 0,
+			RK2928_CLKGATE_CON(1), 9, GFLAGS),
+	COMPOSITE_FRAC(0, "uart1_frac", "uart1_pll", 0, RK2928_CLKSEL_CON(18), 0,
+			RK2928_CLKGATE_CON(1), 11, GFLAGS),
+	COMPOSITE_FRAC(0, "uart2_frac", "uart2_pll", 0, RK2928_CLKSEL_CON(19), 0,
+			RK2928_CLKGATE_CON(1), 13, GFLAGS),
+	COMPOSITE_FRAC(0, "uart3_frac", "uart3_pll", 0, RK2928_CLKSEL_CON(20), 0,
+			RK2928_CLKGATE_CON(1), 15, GFLAGS),
+	MUX(SCLK_UART0, "sclk_uart0", mux_sclk_uart0_p, 0, RK2928_CLKSEL_CON(13), 8, 2, MFLAGS),
+	MUX(SCLK_UART1, "sclk_uart1", mux_sclk_uart1_p, 0, RK2928_CLKSEL_CON(14), 8, 2, MFLAGS),
+	MUX(SCLK_UART2, "sclk_uart2", mux_sclk_uart2_p, 0, RK2928_CLKSEL_CON(15), 8, 2, MFLAGS),
+	MUX(SCLK_UART3, "sclk_uart3", mux_sclk_uart3_p, 0, RK2928_CLKSEL_CON(16), 8, 2, MFLAGS),
 
-	COMPOSITE_NOMUX(0, "gate_div_i2s", "mux_i2s_pll", 0,
-			RK2928_CLKSEL_CON(3), 0, 5, DFLAGS,
-			RK2928_CLKGATE_CON(0), 9, GFLAGS),
+	GATE(0, "timer0", "xin24m", 0, RK2928_CLKGATE_CON(1), 0, GFLAGS),
+	GATE(0, "timer1", "xin24m", 0, RK2928_CLKGATE_CON(1), 1, GFLAGS),
+	GATE(0, "timer2", "xin24m", 0, RK2928_CLKGATE_CON(3), 4, GFLAGS),
+	GATE(0, "timer3", "xin24m", 0, RK2928_CLKGATE_CON(1), 2, GFLAGS),
+	GATE(0, "timer4", "xin24m", 0, RK2928_CLKGATE_CON(3), 5, GFLAGS),
+	GATE(0, "timer5", "xin24m", 0, RK2928_CLKGATE_CON(3), 8, GFLAGS),
+	GATE(0, "timer6", "xin24m", 0, RK2928_CLKGATE_CON(3), 14, GFLAGS),
 
-	COMPOSITE_NOMUX(0, "gate_div_spdif", "mux_i2s_pll", 0,
-			RK2928_CLKSEL_CON(5), 0, 5, DFLAGS,
-			RK2928_CLKGATE_CON(13), 13, GFLAGS),
+	GATE(0, "jtag", "jtag_tck", 0, RK2928_CLKGATE_CON(1), 3, GFLAGS),
 
-	COMPOSITE(0, "dclk_lcdc0_src", mux_pll_src_cpll_gpll_p, 0,
-			RK2928_CLKSEL_CON(27), 0, 1, MFLAGS, 8, 8, DFLAGS,
-			RK2928_CLKGATE_CON(3), 1, GFLAGS),
-	COMPOSITE(0, "dclk_lcdc1_src", mux_pll_src_cpll_gpll_p, 0,
-			RK2928_CLKSEL_CON(28), 0, 1, MFLAGS, 8, 8, DFLAGS,
-			RK2928_CLKGATE_CON(3), 2, GFLAGS),
+	/*
+	 * Clock-Architecture Diagram 5
+	 */
 
-	COMPOSITE(0, "aclk_lcdc0_src", mux_pll_src_cpll_gpll_p, 0,
-			RK2928_CLKSEL_CON(31), 7, 1, MFLAGS, 0, 5, DFLAGS,
-			RK2928_CLKGATE_CON(3), 0, GFLAGS),
-	COMPOSITE(0, "aclk_lcdc1_src", mux_pll_src_cpll_gpll_p, 0,
-			RK2928_CLKSEL_CON(31), 15, 1, MFLAGS, 8, 5, DFLAGS,
-			RK2928_CLKGATE_CON(1), 4, GFLAGS),
+	/* clk_core_pre gates */
+	GATE(CORE_L2C, "core_l2c", "armclk", 0, RK2928_CLKGATE_CON(9), 4, GFLAGS),
+	GATE(0, "core_dbg", "armclk", 0, RK2928_CLKGATE_CON(9), 0, GFLAGS),
 
-	COMPOSITE(0, "aclk_vepu_src", mux_pll_src_cpll_gpll_p, 0,
-			RK2928_CLKSEL_CON(32), 7, 1, MFLAGS, 0, 5, DFLAGS,
-			RK2928_CLKGATE_CON(3), 9, GFLAGS),
-	COMPOSITE(0, "aclk_vdpu_src", mux_pll_src_cpll_gpll_p, 0,
-			RK2928_CLKSEL_CON(32), 15, 1, MFLAGS, 8, 5, DFLAGS,
-			RK2928_CLKGATE_CON(3), 11, GFLAGS),
-	COMPOSITE(0, "aclk_gpu_src", mux_pll_src_cpll_gpll_p, 0,
-			RK2928_CLKSEL_CON(34), 7, 1, MFLAGS, 0, 5, DFLAGS,
-			RK2928_CLKGATE_CON(9), 7, GFLAGS),
+	/* aclk_cpu gates */
+	GATE(ACLK_DMAC0, "aclk_dmac0", "aclk_cpu", 0, RK2928_CLKGATE_CON(5), 0, GFLAGS),
+	GATE(0, "aclk_intmem", "aclk_cpu", 0, RK2928_CLKGATE_CON(4), 12, GFLAGS),
+	GATE(0, "aclk_strc_sys", "aclk_cpu", 0, RK2928_CLKGATE_CON(4), 10, GFLAGS),
 
-	COMPOSITE_NODIV(0, "hsicphy_480m", mux_hsicphy_p, 0,
-			RK2928_CLKSEL_CON(30), 0, 2, DFLAGS,
-			RK2928_CLKGATE_CON(3), 6, GFLAGS),
+	/* hclk_cpu gates */
+	GATE(0, "hclk_rom", "hclk_cpu", 0, RK2928_CLKGATE_CON(5), 6, GFLAGS),
+	GATE(HCLK_I2S, "hclk_i2s", "hclk_cpu", 0, RK2928_CLKGATE_CON(7), 2, GFLAGS),
+	GATE(HCLK_SPDIF, "hclk_spdif", "hclk_cpu", 0, RK2928_CLKGATE_CON(7), 1, GFLAGS),
+	GATE(0, "hclk_cpubus", "hclk_cpu", 0, RK2928_CLKGATE_CON(4), 8, GFLAGS),
+	/* hclk_ahb2apb is part of a clk branch */
+	GATE(0, "hclk_vio_bus", "hclk_cpu", 0, RK2928_CLKGATE_CON(6), 12, GFLAGS),
+	GATE(0, "hclk_lcdc0", "hclk_cpu", 0, RK2928_CLKGATE_CON(6), 1, GFLAGS),
+	GATE(0, "hclk_lcdc1", "aclk_cpu", 0, RK2928_CLKGATE_CON(6), 2, GFLAGS),
+	GATE(0, "hclk_cif", "hclk_cpu", 0, RK2928_CLKGATE_CON(6), 4, GFLAGS),
+	GATE(0, "hclk_ipp", "hclk_cpu", 0, RK2928_CLKGATE_CON(6), 9, GFLAGS),
+	GATE(0, "hclk_rga", "hclk_cpu", 0, RK2928_CLKGATE_CON(6), 10, GFLAGS),
+	GATE(0, "hclk_imem0", "hclk_cpu", 0, RK2928_CLKGATE_CON(4), 14, GFLAGS),
+ 	GATE(0, "hclk_imem1", "hclk_cpu", 0, RK2928_CLKGATE_CON(4), 15, GFLAGS),
 
-	COMPOSITE(0, "hsadc_src", mux_pll_src_gpll_cpll_p, 0,
-			RK2928_CLKSEL_CON(22), 0, 1, MFLAGS, 8, 8, DFLAGS,
-			RK2928_CLKGATE_CON(2), 6, GFLAGS),
+	/* hclk_peri gates */
+	GATE(0, "hclk_peri_axi_matrix", "hclk_peri", 0, RK2928_CLKGATE_CON(4), 0, GFLAGS),
+	GATE(0, "hclk_peri_ahb_arbi", "hclk_peri", 0, RK2928_CLKGATE_CON(4), 6, GFLAGS),
+	GATE(0, "hclk_emem_peri", "hclk_peri", 0, RK2928_CLKGATE_CON(4), 7, GFLAGS),
+	GATE(HCLK_EMAC, "hclk_emac", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 0, GFLAGS),
+	GATE(0, "hclk_nandc", "hclk_peri", 0, RK2928_CLKGATE_CON(5), 9, GFLAGS),
+	GATE(0, "hclk_usb_peri", "hclk_peri", 0, RK2928_CLKGATE_CON(4), 5, GFLAGS),
+	GATE(HCLK_OTG0, "hclk_usbotg0", "hclk_usb_peri", 0, RK2928_CLKGATE_CON(5), 13, GFLAGS),
+	GATE(HCLK_OTG1, "hclk_usbotg1", "hclk_usb_peri", 0, RK2928_CLKGATE_CON(7), 3, GFLAGS),
+	GATE(HCLK_HSIC, "hclk_hsic", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 4, GFLAGS),
+	GATE(HCLK_HSADC, "hclk_hsadc", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 5, GFLAGS),
+	GATE(HCLK_PIDF, "hclk_pidfilter", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 6, GFLAGS),
+	GATE(HCLK_MMC0, "hclk_sdmmc", "hclk_peri", 0, RK2928_CLKGATE_CON(5), 10, GFLAGS),
+	GATE(HCLK_MMC1, "hclk_sdio", "hclk_peri", 0, RK2928_CLKGATE_CON(5), 11, GFLAGS),
+	GATE(HCLK_MMC2, "hclk_emmc", "hclk_peri", 0, RK2928_CLKGATE_CON(5), 12, GFLAGS),
 
+	/* aclk_lcdc0_pre gates */
+	GATE(0, "aclk_vio0", "aclk_lcdc0_pre", 0, RK2928_CLKGATE_CON(6), 13, GFLAGS),
+	GATE(0, "aclk_lcdc0", "aclk_vio0", 0, RK2928_CLKGATE_CON(6), 0, GFLAGS),
+	GATE(0, "aclk_cif", "aclk_vio0", 0, RK2928_CLKGATE_CON(6), 5, GFLAGS),
+	GATE(0, "aclk_ipp", "aclk_vio0", 0, RK2928_CLKGATE_CON(6), 8, GFLAGS),
 
-	DIV(0, "hsicphy_12m", "hsicphy_480m", 0, RK2928_CLKGATE_CON(11), 8, 6, DFLAGS),
+	/* aclk_lcdc1_pre gates */
+	GATE(0, "aclk_vio1", "aclk_lcdc1_pre", 0, RK2928_CLKGATE_CON(9), 5, GFLAGS),
+	GATE(0, "aclk_lcdc1", "aclk_vio1", 0, RK2928_CLKGATE_CON(6), 3, GFLAGS),
+	GATE(0, "aclk_rga", "aclk_vio1", 0, RK2928_CLKGATE_CON(6), 11, GFLAGS),
 
-	/* pll source selection shared by more than one clock */
-	MUX(0, "mux_i2s_pll", mux_pll_src_gpll_cpll_p, 0, RK2928_CLKSEL_CON(2), 15, 1, MFLAGS),
-	MUX(0, "mux_uart_pll", mux_pll_src_gpll_cpll_p, 0, RK2928_CLKSEL_CON(12), 15, 1, MFLAGS),
+	/* atclk_cpu gates */
+	GATE(0, "atclk", "atclk_cpu", 0, RK2928_CLKGATE_CON(9), 3, GFLAGS),
+	GATE(0, "trace", "atclk_cpu", 0, RK2928_CLKGATE_CON(9), 2, GFLAGS),
 
-	/* device source-clock selection from more than source */
-	MUX(0, "mux_sclk_i2s", mux_sclk_i2s_p, 0, RK2928_CLKSEL_CON(3), 8, 2, MFLAGS),
-	MUX(0, "mux_sclk_spdif", mux_sclk_spdif_p, 0, RK2928_CLKSEL_CON(5), 8, 2, MFLAGS),
-	MUX(0, "mux_sclk_hsadc", mux_sclk_hsadc_p, 0, RK2928_CLKSEL_CON(22), 4, 2, MFLAGS),
-	MUX(SCLK_UART0, "mux_sclk_uart0", mux_sclk_uart0_p, 0, RK2928_CLKSEL_CON(13), 8, 2, MFLAGS),
-	MUX(SCLK_UART1, "mux_sclk_uart1", mux_sclk_uart1_p, 0, RK2928_CLKSEL_CON(14), 8, 2, MFLAGS),
-	MUX(SCLK_UART2, "mux_sclk_uart2", mux_sclk_uart2_p, 0, RK2928_CLKSEL_CON(15), 8, 2, MFLAGS),
-	MUX(SCLK_UART3, "mux_sclk_uart3", mux_sclk_uart3_p, 0, RK2928_CLKSEL_CON(16), 8, 2, MFLAGS),
-	MUX(SCLK_MAC, "mux_sclk_mac", mux_sclk_mac_p, 0, RK2928_CLKSEL_CON(21), 4, 1, MFLAGS),
-};
+	/* hclk_cpu_h2p gates */
+	GATE(PCLK_UART0, "pclk_uart0", "hclk_ahb2apb", 0, RK2928_CLKGATE_CON(8), 0, GFLAGS),
+	GATE(PCLK_UART1, "pclk_uart1", "hclk_ahb2apb", 0, RK2928_CLKGATE_CON(8), 1, GFLAGS),
 
-static struct rockchip_gate_clock rk3188_gate_clks[] __initdata = {
-	/* CLKGATE_CON_0 */
-	GATE(0, "gpll_armclk", "gpll", RK2928_CLKGATE_CON(0), 1, 0, GFLAGS),
-	GATE(0, "atclk_cpu", "pclk_cpu", RK2928_CLKGATE_CON(0), 6, 0, GFLAGS),
-	GATE(0, "gate_frac_i2s", "frac_i2s", RK2928_CLKGATE_CON(0), 10, 0, GFLAGS),
-	GATE(0, "gate_frac_spdif", "frac_spdif", RK2928_CLKGATE_CON(0), 14, 0, GFLAGS),
-	GATE(0, "testclk", "dummy", RK2928_CLKGATE_CON(0), 15, 0, GFLAGS),
+	/* pclk_cpu gates */
+	GATE(PCLK_PWM01, "pclk_pwm01", "pclk_cpu", 0, RK2928_CLKGATE_CON(7), 10, GFLAGS),
+	GATE(PCLK_TIMER0, "pclk_timer0", "pclk_cpu", 0, RK2928_CLKGATE_CON(7), 7, GFLAGS),
+	GATE(PCLK_TIMER2, "pclk_timer3", "pclk_cpu", 0, RK2928_CLKGATE_CON(7), 9, GFLAGS),
+	GATE(PCLK_I2C0, "pclk_i2c0", "pclk_cpu", 0, RK2928_CLKGATE_CON(8), 4, GFLAGS),
+	GATE(PCLK_I2C1, "pclk_i2c1", "pclk_cpu", 0, RK2928_CLKGATE_CON(8), 5, GFLAGS),
+	GATE(PCLK_GPIO0, "pclk_gpio0", "pclk_cpu", 0, RK2928_CLKGATE_CON(8), 9, GFLAGS),
+	GATE(PCLK_GPIO1, "pclk_gpio1", "pclk_cpu", 0, RK2928_CLKGATE_CON(8), 10, GFLAGS),
+	GATE(PCLK_GPIO2, "pclk_gpio2", "pclk_cpu", 0, RK2928_CLKGATE_CON(8), 11, GFLAGS),
+	GATE(0, "pclk_efuse", "pclk_cpu", 0, RK2928_CLKGATE_CON(5), 2, GFLAGS),
+	GATE(0, "pclk_tzpc", "pclk_cpu", 0, RK2928_CLKGATE_CON(5), 3, GFLAGS),
+	GATE(0, "pclk_ddrupctl", "pclk_cpu", 0, RK2928_CLKGATE_CON(5), 7, GFLAGS),
+	GATE(0, "pclk_ddrpubl", "pclk_cpu", 0, RK2928_CLKGATE_CON(9), 6, GFLAGS),
+	GATE(0, "pclk_dbg", "pclk_cpu", 0, RK2928_CLKGATE_CON(9), 1, GFLAGS),
+	GATE(PCLK_GRF, "pclk_grf", "pclk_cpu", 0, RK2928_CLKGATE_CON(5), 4, GFLAGS),
+	GATE(PCLK_PMU, "pclk_pmu", "pclk_cpu", 0, RK2928_CLKGATE_CON(5), 5, GFLAGS),
 
-	/* CLKGATE_CON_1 */
-	GATE(0, "timer0", "xin24m", RK2928_CLKGATE_CON(1), 0, 0, GFLAGS),
-	GATE(0, "timer1", "xin24m", RK2928_CLKGATE_CON(1), 1, 0, GFLAGS),
-	GATE(0, "timer3", "xin24m", RK2928_CLKGATE_CON(1), 2, 0, GFLAGS),
-	GATE(0, "jtag", "dummy", RK2928_CLKGATE_CON(1), 3, 0, GFLAGS),
-	GATE(0, "otgphy0", "dummy480m", RK2928_CLKGATE_CON(1), 5, 0, GFLAGS),
-	GATE(0, "otgphy1", "dummy480m", RK2928_CLKGATE_CON(1), 6, 0, GFLAGS),
-	GATE(0, "gpll_ddr", "gpll", RK2928_CLKGATE_CON(1), 7, 0, GFLAGS),
+	/* aclk_peri */
+	GATE(ACLK_DMAC1, "aclk_dmac1", "aclk_peri", 0, RK2928_CLKGATE_CON(5), 1, GFLAGS),
+	GATE(0, "aclk_smc", "aclk_peri", 0, RK2928_CLKGATE_CON(5), 8, GFLAGS),
+	GATE(ACLK_GPS, "aclk_gps", "aclk_peri", 0, RK2928_CLKGATE_CON(8), 13, GFLAGS),
+	GATE(0, "aclk_peri_niu", "aclk_peri", 0, RK2928_CLKGATE_CON(4), 4, GFLAGS),
+	GATE(0, "aclk_cpu_peri", "aclk_peri", 0, RK2928_CLKGATE_CON(4), 2, GFLAGS),
+	GATE(0, "aclk_peri_axi_matrix", "aclk_peri", 0, RK2928_CLKGATE_CON(4), 3, GFLAGS),
 
-	GATE(0, "gate_frac_uart0", "frac_uart0", RK2928_CLKGATE_CON(1), 9, 0, GFLAGS),
-	GATE(0, "gate_frac_uart1", "frac_uart1", RK2928_CLKGATE_CON(1), 11, 0, GFLAGS),
-	GATE(0, "gate_frac_uart2", "frac_uart2", RK2928_CLKGATE_CON(1), 13, 0, GFLAGS),
-	GATE(0, "gate_frac_uart3", "frac_uart3", RK2928_CLKGATE_CON(1), 15, 0, GFLAGS),
+	/* pclk_peri gates */
+	GATE(0, "pclk_peri_axi_matrix", "pclk_peri", 0, RK2928_CLKGATE_CON(4), 1, GFLAGS),
+	GATE(PCLK_PWM23, "pclk_pwm23", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 11,GFLAGS),
+	GATE(PCLK_WDT, "pclk_wdt", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 15, GFLAGS),
+	GATE(PCLK_SPI0, "pclk_spi0", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 12, GFLAGS),
+	GATE(PCLK_SPI1, "pclk_spi1", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 13, GFLAGS),
+	GATE(PCLK_UART2, "pclk_uart2", "pclk_peri", 0, RK2928_CLKGATE_CON(8), 2, GFLAGS),
+	GATE(PCLK_UART3, "pclk_uart3", "pclk_peri", 0, RK2928_CLKGATE_CON(8), 3, GFLAGS),
+	GATE(PCLK_I2C2, "pclk_i2c2", "pclk_peri", 0, RK2928_CLKGATE_CON(8), 6, GFLAGS),
+	GATE(PCLK_I2C3, "pclk_i2c3", "pclk_peri", 0, RK2928_CLKGATE_CON(8), 7, GFLAGS),
+	GATE(PCLK_I2C4, "pclk_i2c4", "pclk_peri", 0, RK2928_CLKGATE_CON(8), 8, GFLAGS),
+	GATE(PCLK_GPIO3, "pclk_gpio3", "pclk_peri", 0, RK2928_CLKGATE_CON(8), 12, GFLAGS),
+	GATE(PCLK_SARADC, "pclk_saradc", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 14, GFLAGS),
 
-	/* CLKGATE_CON_2 */
-	GATE(0, "peri_src", "aclk_peri", RK2928_CLKGATE_CON(2), 0, 0, GFLAGS),
-	GATE(0, "smc", "hclk_peri", RK2928_CLKGATE_CON(2), 4, 0, GFLAGS),
-	GATE(0, "gate_frac_hsadc", "frac_hsadc", RK2928_CLKGATE_CON(2), 7, 0, GFLAGS),
-	GATE(0, "mac_lbtest", "dummy", RK2928_CLKGATE_CON(2), 12, 0, GFLAGS),
-	/* reserved */
-
-	/* CLKGATE_CON_3 */
-	GATE(0, "pclkin_cif", "dummy", RK2928_CLKGATE_CON(3), 3, 0, GFLAGS),
-	GATE(0, "timer2", "xin24m", RK2928_CLKGATE_CON(3), 4, 0, GFLAGS),
-	GATE(0, "timer4", "xin24m", RK2928_CLKGATE_CON(3), 5, 0, GFLAGS),
-	GATE(0, "gate_div_cif_out", "div_cif_out", RK2928_CLKGATE_CON(3), 7, 0, GFLAGS),
-	GATE(0, "timer5", "xin24m", RK2928_CLKGATE_CON(3), 8, 0, GFLAGS),
-	GATE(0, "hclk_vepu", "aclk_vepu_src", RK2928_CLKGATE_CON(3), 10, 0, GFLAGS),
-	GATE(0, "hclk_vdpu", "aclk_vdpu_src", RK2928_CLKGATE_CON(3), 12, 0, GFLAGS),
-	/* reserved 13 */
-	GATE(0, "timer6", "xin24m", RK2928_CLKGATE_CON(3), 14, 0, GFLAGS),
-	GATE(0, "aclk_gpu_src", "dummy", RK2928_CLKGATE_CON(3), 15, 0, GFLAGS),
-
-	/* CLKGATE_CON_4 */
-	GATE(0, "hclk_peri_axi_matrix", "hclk_peri", RK2928_CLKGATE_CON(4), 0, 0, GFLAGS),
-	GATE(0, "pclk_peri_axi_matrix", "pclk_peri", RK2928_CLKGATE_CON(4), 1, 0, GFLAGS),
-	GATE(0, "aclk_cpu_peri", "aclk_peri", RK2928_CLKGATE_CON(4), 2, 0, GFLAGS),
-	GATE(0, "aclk_peri_axi_matrix", "aclk_peri", RK2928_CLKGATE_CON(4), 3, 0, GFLAGS),
-	GATE(0, "aclk_peri_niu", "aclk_peri", RK2928_CLKGATE_CON(4), 4, 0, GFLAGS),
-	GATE(0, "hclk_peri_usb", "hclk_peri", RK2928_CLKGATE_CON(4), 5, 0, GFLAGS),
-	GATE(0, "hclk_peri_ahb_arbi", "hclk_peri", RK2928_CLKGATE_CON(4), 6, 0, GFLAGS),
-	GATE(0, "hclk_peri_emem", "hclk_peri", RK2928_CLKGATE_CON(4), 7, 0, GFLAGS),
-	GATE(0, "hclk_cpubus", "hclk_cpu", RK2928_CLKGATE_CON(4), 8, 0, GFLAGS),
-	GATE(0, "aclk_strc_sys", "aclk_cpu", RK2928_CLKGATE_CON(4), 10, 0, GFLAGS),
-	/* reserved 11 */
-	GATE(0, "aclk_intmem", "aclk_cpu", RK2928_CLKGATE_CON(4), 12, 0, GFLAGS),
-	/* reserved 13 */
-	GATE(0, "hclk_imem0", "hclk_cpu", RK2928_CLKGATE_CON(4), 14, 0, GFLAGS),
-	GATE(0, "hclk_imem1", "hclk_cpu", RK2928_CLKGATE_CON(4), 15, 0, GFLAGS),
-
-	/* CLKGATE_CON_5 */
-	GATE(ACLK_DMAC0, "aclk_dmac0", "aclk_cpu", RK2928_CLKGATE_CON(5), 0, 0, GFLAGS),
-	GATE(ACLK_DMAC1, "aclk_dmac1", "aclk_peri", RK2928_CLKGATE_CON(5), 1, 0, GFLAGS),
-	GATE(0, "pclk_efuse", "pclk_cpu", RK2928_CLKGATE_CON(5), 2, 0, GFLAGS),
-	GATE(0, "pclk_tzpc", "pclk_cpu", RK2928_CLKGATE_CON(5), 3, 0, GFLAGS),
-	GATE(PCLK_GRF, "pclk_grf", "pclk_cpu", RK2928_CLKGATE_CON(5), 4, 0, GFLAGS),
-	GATE(PCLK_PMU, "pclk_pmu", "pclk_cpu", RK2928_CLKGATE_CON(5), 5, 0, GFLAGS),
-	GATE(0, "hclk_rom", "hclk_cpu", RK2928_CLKGATE_CON(5), 6, 0, GFLAGS),
-	GATE(0, "pclk_ddrupctl", "pclk_cpu", RK2928_CLKGATE_CON(5), 7, 0, GFLAGS),
-	GATE(0, "aclk_smc", "aclk_peri", RK2928_CLKGATE_CON(5), 8, 0, GFLAGS),
-	GATE(0, "hclk_nand", "hclk_peri", RK2928_CLKGATE_CON(5), 9, 0, GFLAGS),
-	GATE(HCLK_MMC0, "hclk_mmc0", "hclk_peri", RK2928_CLKGATE_CON(5), 10, 0, GFLAGS),
-	GATE(HCLK_MMC1, "hclk_mmc1", "hclk_peri", RK2928_CLKGATE_CON(5), 11, 0, GFLAGS),
-	GATE(HCLK_MMC2, "hclk_mmc2", "hclk_peri", RK2928_CLKGATE_CON(5), 12, 0, GFLAGS),
-	GATE(HCLK_OTG0, "hclk_otg0", "hclk_peri_usb", RK2928_CLKGATE_CON(5), 13, 0, GFLAGS),
-	/* reserved 14:15 */
-
-	/* CLKGATE_CON_6 */
-	GATE(0, "aclk_lcdc0", "aclk_vio0", RK2928_CLKGATE_CON(6), 0, 0, GFLAGS),
-	GATE(0, "hclk_lcdc0", "hclk_cpu", RK2928_CLKGATE_CON(6), 1, 0, GFLAGS),
-	GATE(0, "hclk_lcdc1", "aclk_cpu", RK2928_CLKGATE_CON(6), 2, 0, GFLAGS),
-	GATE(0, "aclk_lcdc1", "aclk_vio1", RK2928_CLKGATE_CON(6), 3, 0, GFLAGS),
-	GATE(0, "hclk_cif", "hclk_cpu", RK2928_CLKGATE_CON(6), 4, 0, GFLAGS),
-	GATE(0, "aclk_cif", "aclk_vio0", RK2928_CLKGATE_CON(6), 5, 0, GFLAGS),
-	/* reserved 6:7 */
-	GATE(0, "aclk_ipp", "aclk_vio0", RK2928_CLKGATE_CON(6), 8, 0, GFLAGS),
-	GATE(0, "hclk_ipp", "hclk_cpu", RK2928_CLKGATE_CON(6), 9, 0, GFLAGS),
-	GATE(0, "hclk_rga", "hclk_cpu", RK2928_CLKGATE_CON(6), 10, 0, GFLAGS),
-	GATE(0, "aclk_rga", "aclk_vio1", RK2928_CLKGATE_CON(6), 11, 0, GFLAGS),
-	GATE(0, "hclk_vio_bus", "hclk_cpu", RK2928_CLKGATE_CON(6), 12, 0, GFLAGS),
-	GATE(0, "aclk_vio0", "aclk_lcdc0_src", RK2928_CLKGATE_CON(6), 13, 0, GFLAGS),
-	/* reserved 14:15 */
-
-	/* CLKGATE_CON_7 */
-	GATE(HCLK_EMAC, "hclk_emac", "hclk_peri", RK2928_CLKGATE_CON(7), 0, 0, GFLAGS),
-	GATE(HCLK_SPDIF, "hclk_spdif", "hclk_cpu", RK2928_CLKGATE_CON(7), 1, 0, GFLAGS),
-	GATE(HCLK_I2S, "hclk_i2s", "hclk_cpu", RK2928_CLKGATE_CON(7), 2, 0, GFLAGS),
-	GATE(HCLK_OTG1, "hclk_otg1", "hclk_peri_usb", RK2928_CLKGATE_CON(7), 3, 0, GFLAGS),
-	GATE(HCLK_HSIC, "hclk_hsic", "hclk_peri", RK2928_CLKGATE_CON(7), 4, 0, GFLAGS),
-	GATE(HCLK_HSADC, "hclk_hsadc", "hclk_peri", RK2928_CLKGATE_CON(7), 5, 0, GFLAGS),
-	GATE(HCLK_PIDF, "hclk_pidf", "hclk_peri", RK2928_CLKGATE_CON(7), 6, 0, GFLAGS),
-	GATE(PCLK_TIMER0, "pclk_timer0", "pclk_cpu", RK2928_CLKGATE_CON(7), 7, 0, GFLAGS),
-	/* reserved 8 */
-	GATE(PCLK_TIMER2, "pclk_timer2", "pclk_cpu", RK2928_CLKGATE_CON(7), 9, 0, GFLAGS),
-	GATE(PCLK_PWM01, "pclk_pwm01", "pclk_cpu", RK2928_CLKGATE_CON(7), 10, 0, GFLAGS),
-	GATE(PCLK_PWM23, "pclk_pwm23", "pclk_peri", RK2928_CLKGATE_CON(7), 11, 0, GFLAGS),
-	GATE(PCLK_SPI0, "pclk_spi0", "pclk_peri", RK2928_CLKGATE_CON(7), 12, 0, GFLAGS),
-	GATE(PCLK_SPI1, "pclk_spi1", "pclk_peri", RK2928_CLKGATE_CON(7), 13, 0, GFLAGS),
-	GATE(PCLK_SARADC, "pclk_saradc", "pclk_peri", RK2928_CLKGATE_CON(7), 14, 0, GFLAGS),
-	GATE(PCLK_WDT, "pclk_wdt", "pclk_peri", RK2928_CLKGATE_CON(7), 15, 0, GFLAGS),
-
-	/* CLKGATE_CON_8 */
-	GATE(PCLK_UART0, "pclk_uart0", "hclk_ahb2apb", RK2928_CLKGATE_CON(8), 0, 0, GFLAGS),
-	GATE(PCLK_UART1, "pclk_uart1", "hclk_ahb2apb", RK2928_CLKGATE_CON(8), 1, 0, GFLAGS),
-	GATE(PCLK_UART2, "pclk_uart2", "pclk_peri", RK2928_CLKGATE_CON(8), 2, 0, GFLAGS),
-	GATE(PCLK_UART3, "pclk_uart3", "pclk_peri", RK2928_CLKGATE_CON(8), 3, 0, GFLAGS),
-	GATE(PCLK_I2C0, "pclk_i2c0", "pclk_cpu", RK2928_CLKGATE_CON(8), 4, 0, GFLAGS),
-	GATE(PCLK_I2C1, "pclk_i2c1", "pclk_cpu", RK2928_CLKGATE_CON(8), 5, 0, GFLAGS),
-	GATE(PCLK_I2C2, "pclk_i2c2", "pclk_peri", RK2928_CLKGATE_CON(8), 6, 0, GFLAGS),
-	GATE(PCLK_I2C3, "pclk_i2c3", "pclk_peri", RK2928_CLKGATE_CON(8), 7, 0, GFLAGS),
-	GATE(PCLK_I2C4, "pclk_i2c4", "pclk_peri", RK2928_CLKGATE_CON(8), 8, 0, GFLAGS),
-	GATE(PCLK_GPIO0, "pclk_gpio0", "pclk_cpu", RK2928_CLKGATE_CON(8), 9, 0, GFLAGS),
-	GATE(PCLK_GPIO1, "pclk_gpio1", "pclk_cpu", RK2928_CLKGATE_CON(8), 10, 0, GFLAGS),
-	GATE(PCLK_GPIO2, "pclk_gpio2", "pclk_cpu", RK2928_CLKGATE_CON(8), 11, 0, GFLAGS),
-	GATE(PCLK_GPIO3, "pclk_gpio3", "pclk_peri", RK2928_CLKGATE_CON(8), 12, 0, GFLAGS),
-	GATE(ACLK_GPS, "aclk_gps", "aclk_peri", RK2928_CLKGATE_CON(8), 13, 0, GFLAGS),
-	/* reserved 14:15 */
-
-	/* CLKGATE_CON_9 */
-	GATE(0, "core_dbg", "armclk", RK2928_CLKGATE_CON(9), 0, 0, GFLAGS),
-	GATE(0, "pclk_dbg", "pclk_cpu", RK2928_CLKGATE_CON(9), 1, 0, GFLAGS),
-	GATE(0, "clk_trace", "dummy", RK2928_CLKGATE_CON(9), 2, 0, GFLAGS),
-	GATE(0, "atclk", "dummy", RK2928_CLKGATE_CON(9), 3, 0, GFLAGS),
-	GATE(CORE_L2C, "core_l2c", "armclk", RK2928_CLKGATE_CON(9), 4, 0, GFLAGS),
-	GATE(0, "aclk_vio1", "aclk_lcdc1_src", RK2928_CLKGATE_CON(9), 5, 0, GFLAGS),
-	GATE(0, "pclk_publ", "pclk_cpu", RK2928_CLKGATE_CON(9), 6, 0, GFLAGS),
-	/* reserved 8:15 */
+	COMPOSITE_NODIV(0, "testclk", mux_testclk_p, 0,
+			RK2928_MISC_CON, 8, 3, MFLAGS,
+			RK2928_CLKGATE_CON(0), 15, GFLAGS),
 };
 
 
 struct rockchip_clk_init_table rk3188_clk_init_tbl[] __initdata = {
-//	{ "apll", NULL, 0, 1 },
-//	{ "dpll", NULL, 0, 1 },
 	{ "gpll", NULL, 891000000, 0 },
 	{ "cpll", NULL, 600000000, 0 },
 
-	{ "aclk_cpu", "gpll", 300000000, 0 },
+	{ "aclk_cpu", NULL, 300000000, 0 },
 
 	{ "hclk_cpu", NULL, 150000000, 0 },
 	{ "pclk_cpu", NULL,  75000000, 0 },
 	{ "hclk_ahb2apb", NULL, 75000000, 0 },
 
-	{ "aclk_peri", "cpll", 150000000, 0 },
+	{ "aclk_peri_pre", "cpll", 150000000, 0 },
 
 	{ "hclk_peri", NULL, 150000000, 0 },
 	{ "pclk_peri", NULL,  75000000, 0 },
@@ -476,7 +505,7 @@ static void __init rk3188_clock_apply_init_table(void)
 static void __init rk3188a_clk_init(struct device_node *np)
 {
 	void __iomem *reg_base, *reg_grf_soc_status;
-	struct clk *clk;
+	struct clk *clk, *clk2;
 
 	reg_base = of_iomap(np, 0);
 	if (!reg_base) {
@@ -498,18 +527,35 @@ static void __init rk3188a_clk_init(struct device_node *np)
 		pr_warn("%s: could not register clock xin12m: %ld\n",
 			__func__, PTR_ERR(clk));
 
+
+	clk = clk_register_fixed_factor(NULL, "usb480m", "xin24m", 0, 20, 1);
+	if (IS_ERR(clk))
+		pr_warn("%s: could not register clock usb480m: %ld\n",
+			__func__, PTR_ERR(clk));
+
 	rockchip_clk_register_plls(rk3188_pll_clks,
 				   ARRAY_SIZE(rk3188_pll_clks),
 				   reg_grf_soc_status);
 	rockchip_clk_register_branches(rk3188_clk_branches,
 				  ARRAY_SIZE(rk3188_clk_branches));
-	rockchip_clk_register_gates(rk3188_gate_clks,
-				   ARRAY_SIZE(rk3188_gate_clks));
+//	rockchip_clk_register_gates(rk3188_gate_clks,
+//				   ARRAY_SIZE(rk3188_gate_clks));
 	rockchip_clk_register_armclk(SCLK_ARMCLK, "armclk", mux_armclk_p,
 				     ARRAY_SIZE(mux_armclk_p), reg_base, np);
 
 	rockchip_register_softrst(np, 9, reg_base + RK2928_SOFTRST_CON(0),
 				  ROCKCHIP_SOFTRST_HIWORD_MASK);
+
+	/* reparent aclk_cpu_pre to gpll */
+	clk = __clk_lookup("aclk_cpu_pre");
+	clk2 = __clk_lookup("gpll");
+	if (!IS_ERR(clk) && ! IS_ERR(clk2)) {
+		if (clk_set_parent(clk, clk2)) {
+			pr_err("%s: Failed to set parent gpll of aclk_cpu_pre\n",
+			       __func__);
+			WARN_ON(1);
+		}
+	}
 
 	rockchip_clk_apply_init_table = rk3188_clock_apply_init_table;
 }

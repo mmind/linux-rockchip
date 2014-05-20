@@ -38,6 +38,7 @@
 #define RK2928_GLB_SRST_FST		0x100
 #define RK2928_GLB_SRST_SND		0x104
 #define RK2928_SOFTRST_CON(x)	(x * 0x4 + 0x110)
+#define RK2928_MISC_CON		0x134
 
 enum rockchip_pll_type {
 	pll_rk3066,
@@ -117,28 +118,39 @@ struct clk *rockchip_clk_register_cpuclk(const char *name,
 
 #define PNAME(x) static const char *x[] __initconst
 
-struct rockchip_clk_branch {
-	unsigned int		id;
-	const char		*name;
-	const char		**parent_names;
-	u8			num_parents;
-	unsigned long		flags;
-	int			muxdiv_offset;
-	u8			mux_shift;
-	u8			mux_width;
-	u8			mux_flags;
-	u8			div_shift;
-	u8			div_width;
-	u8			div_flags;
-	struct clk_div_table	*div_table;
-	int			gate_offset;
-	u8			gate_shift;
-	u8			gate_flags;
+enum rockchip_clk_branch_type {
+	branch_composite,
+	branch_mux,
+	branch_divider,
+	branch_fraction_divider,
+	branch_gate,
 };
 
-#define COMPOSITE(_id, cname, pnames, f, mo, ms, mw, mf, ds, dw, df, go, gs, gf)\
+struct rockchip_clk_branch {
+	unsigned int			id;
+	enum rockchip_clk_branch_type	branch_type;
+	const char			*name;
+	const char			**parent_names;
+	u8				num_parents;
+	unsigned long			flags;
+	int				muxdiv_offset;
+	u8				mux_shift;
+	u8				mux_width;
+	u8				mux_flags;
+	u8				div_shift;
+	u8				div_width;
+	u8				div_flags;
+	struct clk_div_table		*div_table;
+	int				gate_offset;
+	u8				gate_shift;
+	u8				gate_flags;
+};
+
+#define COMPOSITE(_id, cname, pnames, f, mo, ms, mw, mf, ds, dw,\
+		  df, go, gs, gf)				\
 	{							\
 		.id		= _id,				\
+		.branch_type	= branch_composite,		\
 		.name		= cname,			\
 		.parent_names	= pnames,			\
 		.num_parents	= ARRAY_SIZE(pnames),		\
@@ -155,9 +167,11 @@ struct rockchip_clk_branch {
 		.gate_flags	= gf,				\
 	}
 
-#define COMPOSITE_NOMUX(_id, cname, pname, f, mo, ds, dw, df, go, gs, gf)\
+#define COMPOSITE_NOMUX(_id, cname, pname, f, mo, ds, dw, df,	\
+			go, gs, gf)				\
 	{							\
 		.id		= _id,				\
+		.branch_type	= branch_composite,		\
 		.name		= cname,			\
 		.parent_names	= (const char *[]){ pname },	\
 		.num_parents	= 1,				\
@@ -171,10 +185,11 @@ struct rockchip_clk_branch {
 		.gate_flags	= gf,				\
 	}
 
-#define COMPOSITE_NOMUX_DIVTBL(_id, cname, pname, f, mo, ds, dw, df, dt,\
-			       go, gs, gf)\
+#define COMPOSITE_NOMUX_DIVTBL(_id, cname, pname, f, mo, ds, dw,\
+			       df, dt, go, gs, gf)		\
 	{							\
 		.id		= _id,				\
+		.branch_type	= branch_composite,		\
 		.name		= cname,			\
 		.parent_names	= (const char *[]){ pname },	\
 		.num_parents	= 1,				\
@@ -189,9 +204,11 @@ struct rockchip_clk_branch {
 		.gate_flags	= gf,				\
 	}
 
-#define COMPOSITE_NODIV(_id, cname, pnames, f, mo, ms, mw, mf, go, gs, gf)\
+#define COMPOSITE_NODIV(_id, cname, pnames, f, mo, ms, mw, mf,	\
+			go, gs, gf)				\
 	{							\
 		.id		= _id,				\
+		.branch_type	= branch_composite,		\
 		.name		= cname,			\
 		.parent_names	= pnames,			\
 		.num_parents	= ARRAY_SIZE(pnames),		\
@@ -205,9 +222,46 @@ struct rockchip_clk_branch {
 		.gate_flags	= gf,				\
 	}
 
+#define COMPOSITE_NOGATE(_id, cname, pnames, f, mo, ms, mw, mf,	\
+			 ds, dw, df)				\
+	{							\
+		.id		= _id,				\
+		.branch_type	= branch_composite,		\
+		.name		= cname,			\
+		.parent_names	= pnames,			\
+		.num_parents	= ARRAY_SIZE(pnames),		\
+		.flags		= f,				\
+		.muxdiv_offset	= mo,				\
+		.mux_shift	= ms,				\
+		.mux_width	= mw,				\
+		.mux_flags	= mf,				\
+		.div_shift	= ds,				\
+		.div_width	= dw,				\
+		.div_flags	= df,				\
+		.gate_offset	= -1,				\
+	}
+
+#define COMPOSITE_FRAC(_id, cname, pname, f, mo, df, go, gs, gf)\
+	{							\
+		.id		= _id,				\
+		.branch_type	= branch_fraction_divider,	\
+		.name		= cname,			\
+		.parent_names	= (const char *[]){ pname },	\
+		.num_parents	= 1,				\
+		.flags		= f,				\
+		.muxdiv_offset	= mo,				\
+		.div_shift	= 16,				\
+		.div_width	= 16,				\
+		.div_flags	= df,				\
+		.gate_offset	= go,				\
+		.gate_shift	= gs,				\
+		.gate_flags	= gf,				\
+	}
+
 #define MUX(_id, cname, pnames, f, o, s, w, mf)			\
 	{							\
 		.id		= _id,				\
+		.branch_type	= branch_mux,			\
 		.name		= cname,			\
 		.parent_names	= pnames,			\
 		.num_parents	= ARRAY_SIZE(pnames),		\
@@ -222,6 +276,7 @@ struct rockchip_clk_branch {
 #define DIV(_id, cname, pname, f, o, s, w, df)			\
 	{							\
 		.id		= _id,				\
+		.branch_type	= branch_divider,		\
 		.name		= cname,			\
 		.parent_names	= (const char *[]){ pname },	\
 		.num_parents	= 1,				\
@@ -233,36 +288,19 @@ struct rockchip_clk_branch {
 		.gate_offset	= -1,				\
 	}
 
-/**
- * struct rockchip_gate_clock: information about gate clock
- * @id: platform specific id of the clock.
- * @name: name of this gate clock.
- * @parent_name: name of the parent clock.
- * @flags: optional flags for basic clock.
- * @offset: offset of the register for configuring the gate.
- * @bit_idx: bit index of the gate control bit-field in @reg.
- * @gate_flags: flags for gate-type clock.
- */
-struct rockchip_gate_clock {
-	unsigned int		id;
-	const char		*name;
-	const char		*parent_name;
-	unsigned long		flags;
-	unsigned long		offset;
-	u8			bit_idx;
-	u8			gate_flags;
-};
-
-#define GATE(_id, cname, pname, o, b, f, gf)			\
+#define GATE(_id, cname, pname, f, o, b, gf)			\
 	{							\
 		.id		= _id,				\
+		.branch_type	= branch_gate,			\
 		.name		= cname,			\
-		.parent_name	= pname,			\
+		.parent_names	= (const char *[]){ pname },	\
+		.num_parents	= 1,				\
 		.flags		= f,				\
-		.offset		= o,				\
-		.bit_idx	= b,				\
+		.gate_offset	= o,				\
+		.gate_shift	= b,				\
 		.gate_flags	= gf,				\
 	}
+
 
 void rockchip_clk_init(struct device_node *np, void __iomem *base,
 		       unsigned long nr_clks);
@@ -271,8 +309,6 @@ void rockchip_clk_add_lookup(struct clk *clk, unsigned int id);
 
 void rockchip_clk_register_branches(struct rockchip_clk_branch *clk_list,
 			       unsigned int nr_clk);
-void rockchip_clk_register_gates(struct rockchip_gate_clock *clk_list,
-				unsigned int nr_clk);
 void rockchip_clk_register_plls(struct rockchip_pll_clock *pll_list,
 				unsigned int nr_pll, void __iomem *reg_lock);
 void rockchip_clk_register_armclk(unsigned int lookup_id,

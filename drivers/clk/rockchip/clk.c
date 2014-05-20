@@ -165,13 +165,43 @@ void __init rockchip_clk_register_branches(
 		flags = list->flags;
 
 		/* catch simple muxes */
-		if (list->gate_offset < 0 && list->div_width == 0) {
+		switch (list->branch_type) {
+		case branch_mux:
 			clk = clk_register_mux(NULL, list->name,
 				list->parent_names, list->num_parents,
-				list->flags, reg_base + list->muxdiv_offset,
+				flags, reg_base + list->muxdiv_offset,
 				list->mux_shift, list->mux_width,
 				list->mux_flags, &clk_lock);
-		} else {
+			break;
+		case branch_divider:
+			if (list->div_table)
+				clk = clk_register_divider_table(NULL, list->name,
+					list->parent_names[0], flags,
+					reg_base + list->muxdiv_offset, list->div_shift,
+					list->div_width, list->div_flags,
+					list->div_table, &clk_lock);
+			else
+				clk = clk_register_divider(NULL, list->name,
+					list->parent_names[0], flags,
+					reg_base + list->muxdiv_offset,
+					list->div_shift, list->div_width,
+					list->div_flags, &clk_lock);
+			break;
+		case branch_fraction_divider:
+			/* unimplemented */
+			break;
+		case branch_gate:
+			flags |= CLK_SET_RATE_PARENT;
+
+			/* keep all gates untouched for now */
+			flags |= CLK_IGNORE_UNUSED;
+
+			clk = clk_register_gate(NULL, list->name,
+				list->parent_names[0], flags,
+				reg_base + list->gate_offset,
+				list->gate_shift, list->gate_flags, &clk_lock);
+			break;
+		case branch_composite:
 			/* keep all gates untouched for now */
 			flags |= CLK_IGNORE_UNUSED;
 
@@ -183,6 +213,7 @@ void __init rockchip_clk_register_branches(
 				list->div_flags, list->div_table,
 				list->gate_offset, list->gate_shift,
 				list->gate_flags, flags, &clk_lock);
+			break;
 		}
 
 		if (IS_ERR(clk)) {
@@ -211,32 +242,6 @@ void __init rockchip_clk_register_armclk(unsigned int lookup_id,
 	}
 
 	rockchip_clk_add_lookup(clk, lookup_id);
-}
-
-void __init rockchip_clk_register_gates(struct rockchip_gate_clock *list,
-			       unsigned int nr_clk)
-{
-	struct clk *clk;
-	unsigned int idx;
-	unsigned long flags;
-
-	for (idx = 0; idx < nr_clk; idx++, list++) {
-		flags = list->flags | CLK_SET_RATE_PARENT;
-
-		/* keep all gates untouched for now */
-		flags |= CLK_IGNORE_UNUSED;
-
-		clk = clk_register_gate(NULL, list->name, list->parent_name,
-				flags, reg_base + list->offset,
-				list->bit_idx, list->gate_flags, &clk_lock);
-		if (IS_ERR(clk)) {
-			pr_err("%s: failed to register clock %s: %ld\n",
-			       __func__, list->name, PTR_ERR(clk));
-			continue;
-		}
-
-		rockchip_clk_add_lookup(clk, list->id);
-	}
 }
 
 void __init rockchip_clk_init_from_table(struct rockchip_clk_init_table *tbl,
