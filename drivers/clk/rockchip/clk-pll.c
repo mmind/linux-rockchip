@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/regmap.h>
 #include "clk.h"
 
 #define PLL_MODE_MASK		0x3
@@ -36,7 +37,7 @@ struct rockchip_clk_pll {
 	bool			rate_change_remuxed;
 
 	void __iomem		*reg_base;
-	void __iomem		*reg_lock;
+	int			lock_offset;
 	unsigned int		lock_shift;
 	enum rockchip_pll_type	type;
 	const struct rockchip_pll_rate_table *rate_table;
@@ -79,12 +80,26 @@ static long rockchip_pll_round_rate(struct clk_hw *hw,
 	return rate_table[i - 1].rate;
 }
 
+/*
+ * Wait for the pll to reach the locked state.
+ * The calling set_rate function is responsible for making sure the
+ * grf regmap is available.
+ */
 static int rockchip_pll_wait_lock(struct rockchip_clk_pll *pll)
 {
-	int delay = 24000000;
+	struct regmap *grf = rockchip_clk_get_grf();
+	unsigned int val;
+	int delay = 24000000, ret;
 
 	while (delay > 0) {
-		if (readl(pll->reg_lock) & BIT(pll->lock_shift))
+		ret = regmap_read(grf, pll->lock_offset, &val);
+		if (ret) {
+			pr_err("%s: failed to read pll lock status: %d\n",
+			       __func__, ret);
+			return ret;
+		}
+
+		if (val & BIT(pll->lock_shift))
 			return 0;
 		delay--;
 	}
@@ -178,7 +193,14 @@ static int rockchip_rk3066_pll_set_rate(struct clk_hw *hw, unsigned long drate,
 	struct rockchip_clk_pll *pll = to_rockchip_clk_pll(hw);
 	const struct rockchip_pll_rate_table *rate;
 	unsigned long old_rate = rockchip_rk3066_pll_recalc_rate(hw, prate);
+	struct regmap *grf = rockchip_clk_get_grf();
 	int ret;
+
+	if (IS_ERR(grf)) {
+		pr_warn("%s: grf regmap not available, aborting rate change\n",
+			 __func__);
+		return PTR_ERR(grf);
+	}
 
 	pr_debug("%s: changing %s from %lu to %lu with a parent rate of %lu\n",
 		 __func__, __clk_get_name(hw->clk), old_rate, drate, prate);
@@ -276,7 +298,7 @@ static const struct clk_ops rockchip_rk3066_pll_clk_ops = {
 
 struct clk *rockchip_clk_register_pll(enum rockchip_pll_type pll_type,
 		const char *name, const char **parent_names, u8 num_parents,
-		void __iomem *base, int con_offset, void __iomem *reg_lock,
+		void __iomem *base, int con_offset, int grf_lock_offset,
 		int lock_shift, int mode_offset, int mode_shift,
 		struct rockchip_pll_rate_table *rate_table,
 		spinlock_t *lock)
@@ -341,7 +363,7 @@ struct clk *rockchip_clk_register_pll(enum rockchip_pll_type pll_type,
 	pll->hw.init = &init;
 	pll->type = pll_type;
 	pll->reg_base = base + con_offset;
-	pll->reg_lock = reg_lock;
+	pll->lock_offset = grf_lock_offset;
 	pll->lock_shift = lock_shift;
 	pll->lock = lock;
 	pll->clk_nb.notifier_call = rockchip_pll_notifier_cb;

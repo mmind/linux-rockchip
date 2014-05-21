@@ -23,6 +23,9 @@
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/mfd/syscon.h>
+#include <linux/regmap.h>
+
 #include "clk.h"
 
 /*
@@ -105,24 +108,30 @@ static DEFINE_SPINLOCK(clk_lock);
 static struct clk **clk_table;
 static void __iomem *reg_base;
 static struct clk_onecell_data clk_data;
+static struct device_node *cru_node;
+static struct regmap *grf;
 
 void __init rockchip_clk_init(struct device_node *np, void __iomem *base,
 			      unsigned long nr_clks)
 {
 	reg_base = base;
+	cru_node = np;
+	grf = ERR_PTR(-EPROBE_DEFER);
 
 	clk_table = kzalloc(sizeof(struct clk *) * nr_clks, GFP_KERNEL);
 	if (!clk_table)
 		pr_err("%s: could not allocate clock lookup table\n", __func__);
 
-	if (!np)
-		return;
-
-#ifdef CONFIG_OF
 	clk_data.clks = clk_table;
 	clk_data.clk_num = nr_clks;
 	of_clk_add_provider(np, of_clk_src_onecell_get, &clk_data);
-#endif
+}
+
+struct regmap *rockchip_clk_get_grf(void)
+{
+	if (IS_ERR(grf))
+		grf = syscon_regmap_lookup_by_phandle(cru_node, "rockchip,grf");
+	return grf;
 }
 
 void rockchip_clk_add_lookup(struct clk *clk, unsigned int id)
@@ -132,7 +141,7 @@ void rockchip_clk_add_lookup(struct clk *clk, unsigned int id)
 }
 
 void __init rockchip_clk_register_plls(struct rockchip_pll_clock *list,
-				unsigned int nr_pll, void __iomem *reg_lock)
+				unsigned int nr_pll, int grf_lock_offset)
 {
 	struct clk *clk;
 	int idx;
@@ -140,7 +149,7 @@ void __init rockchip_clk_register_plls(struct rockchip_pll_clock *list,
 	for (idx = 0; idx < nr_pll; idx++, list++) {
 		clk = rockchip_clk_register_pll(list->type, list->name,
 				list->parent_names, list->num_parents,
-				reg_base, list->con_offset, reg_lock,
+				reg_base, list->con_offset, grf_lock_offset,
 				list->lock_shift, list->mode_offset,
 				list->mode_shift, list->rate_table, &clk_lock);
 		if (IS_ERR(clk)) {

@@ -106,7 +106,7 @@ struct rockchip_pll_clock {
 
 struct clk *rockchip_clk_register_pll(enum rockchip_pll_type pll_type,
 		const char *name, const char **parent_names, u8 num_parents,
-		void __iomem *base, int con_offset, void __iomem *reg_lock,
+		void __iomem *base, int con_offset, int grf_lock_offset,
 		int lock_shift, int reg_mode, int mode_shift,
 		struct rockchip_pll_rate_table *rate_table,
 		spinlock_t *lock);
@@ -304,13 +304,12 @@ struct rockchip_clk_branch {
 
 void rockchip_clk_init(struct device_node *np, void __iomem *base,
 		       unsigned long nr_clks);
-
+struct regmap *rockchip_clk_get_grf(void);
 void rockchip_clk_add_lookup(struct clk *clk, unsigned int id);
-
 void rockchip_clk_register_branches(struct rockchip_clk_branch *clk_list,
 			       unsigned int nr_clk);
 void rockchip_clk_register_plls(struct rockchip_pll_clock *pll_list,
-				unsigned int nr_pll, void __iomem *reg_lock);
+				unsigned int nr_pll, int grf_lock_offset);
 void rockchip_clk_register_armclk(unsigned int lookup_id,
 			const char *name, const char **parent_names,
 			unsigned int num_parents, void __iomem *reg_base,
