@@ -88,19 +88,6 @@
 			clock-frequency = <24000000>;
 			#clock-cells = <0>;
 		};
-
-		dummy150m: dummy150m {
-			compatible = "fixed-clock";
-			clock-frequency = <150000000>;
-			#clock-cells = <0>;
-		};
-
-		dummy480m: dummy480m {
-			compatible = "fixed-clock";
-			clock-frequency = <480000000>;
-			#clock-cells = <0>;
-		};
-
 	};
 
 	soc {
@@ -137,10 +124,12 @@
 
 		global-timer@1013c200 {
 			interrupts = <GIC_PPI 11 0xf04>;
+			clocks = <&cru CORE_PERI>;
 		};
 
 		local-timer@1013c600 {
 			interrupts = <GIC_PPI 13 0xf04>;
+			clocks = <&cru CORE_PERI>;
 		};
 
 		dwc2@10180000 {
