@@ -197,7 +197,7 @@ static int rockchip_rk3066_pll_set_rate(struct clk_hw *hw, unsigned long drate,
 	int ret;
 
 	if (IS_ERR(grf)) {
-		pr_warn("%s: grf regmap not available, aborting rate change\n",
+		pr_debug("%s: grf regmap not available, aborting rate change\n",
 			 __func__);
 		return PTR_ERR(grf);
 	}
