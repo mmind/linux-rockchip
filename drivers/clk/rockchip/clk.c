@@ -197,7 +197,9 @@ void __init rockchip_clk_register_branches(
 					list->div_flags, &clk_lock);
 			break;
 		case branch_fraction_divider:
+		case branch_muxgrf:
 			/* unimplemented */
+			continue;
 			break;
 		case branch_gate:
 			flags |= CLK_SET_RATE_PARENT;
