@@ -17,13 +17,11 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <dt-bindings/clock/rk3188-cru.h>
-
 #include "clk.h"
 
 #define RK3188_GRF_SOC_CON1	0xa4
 #define RK3188_GRF_SOC_STATUS	0xac
 
-/* list of PLLs to be registered */
 enum rk3188_plls {
 	apll, cpll, dpll, gpll,
 };
@@ -179,7 +177,7 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 	 */
 
 	GATE(0, "gpll_armclk", "gpll", 0, RK2928_CLKGATE_CON(0), 1, GFLAGS),
-//	COMPOSITE_NOGATE(0, "armclk", mux_armclk_p, 0,
+//	COMPOSITE_NOGATE(ARMCLK, "armclk", mux_armclk_p, 0,
 //			RK2928_CLKSEL_CON(0), 8, 1, MFLAGS, 9, 5, DFLAGS),
 
 	/* these two are set by the cpuclk and should not be changed */
@@ -270,9 +268,9 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 			RK2928_CLKGATE_CON(3), 7, GFLAGS),
 	MUX(0, "sclk_cif", mux_sclk_cif_p, 0,
 			RK2928_CLKSEL_CON(29), 7, 1, MFLAGS),
-//FIXME: CLKSEL_CON30[8]: select inverter
-	/* FIXME cif_in */
-	GATE(0, "pclkin_cif", "dummy", 0,
+	//FIXME: CLKSEL_CON30[8]: add inverter
+
+	GATE(0, "pclk_cif_in", "xin_cif", 0,
 			RK2928_CLKGATE_CON(3), 3, GFLAGS),
 
 	MUX(0, "i2s_src", mux_pll_src_gpll_cpll_p, 0,
@@ -326,7 +324,7 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 			RK2928_CLKGATE_CON(2), 7, 0, GFLAGS),
 	MUX(0, "sclk_hsadc", mux_sclk_hsadc_p, 0,
 			RK2928_CLKSEL_CON(22), 4, 2, MFLAGS),
-	// FIXME: hsadc_inverter at CLKSEL22[7]
+	// FIXME: add hsadc_inverter at CLKSEL22[7]
 
 	COMPOSITE_NOMUX(SCLK_SARADC, "sclk_saradc", "xin24m", 0,
 			RK2928_CLKSEL_CON(24), 8, 8, DFLAGS,
@@ -548,7 +546,7 @@ static void __init rk3188a_clk_init(struct device_node *np)
 		return;
 	}
 
-	rockchip_clk_init(np, reg_base, NR_CLKS);
+	rockchip_clk_init(np, reg_base, CLK_NR_CLKS);
 
 	/* xin12m is created by an cru-internal divider */
 	clk = clk_register_fixed_factor(NULL, "xin12m", "xin24m", 0, 1, 2);
@@ -567,7 +565,7 @@ static void __init rk3188a_clk_init(struct device_node *np)
 				   RK3188_GRF_SOC_STATUS);
 	rockchip_clk_register_branches(rk3188_clk_branches,
 				  ARRAY_SIZE(rk3188_clk_branches));
-	rockchip_clk_register_armclk(SCLK_ARMCLK, "armclk", mux_armclk_p,
+	rockchip_clk_register_armclk(ARMCLK, "armclk", mux_armclk_p,
 				     ARRAY_SIZE(mux_armclk_p), reg_base, np);
 
 	rockchip_register_softrst(np, 9, reg_base + RK2928_SOFTRST_CON(0),

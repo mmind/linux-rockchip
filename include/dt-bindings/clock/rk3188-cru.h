@@ -13,72 +13,68 @@
  * GNU General Public License for more details.
  */
 
-/*
- * Keep gate clock numbers sorted according to their gate and index.
- * This also adds space in front for 31 special clocks.
- */
-#define CLK_GATE(_reg, _bit) ((_reg + 2) * 16 + _bit)
+/* core clocks from 1 */
+#define ARMCLK			1
+#define CORE_PERI		2
+#define CORE_L2C		3
 
-/* special clocks not ending in a gate */
-#define SCLK_ARMCLK	1
-#define SCLK_UART0	2
-#define SCLK_UART1	3
-#define SCLK_UART2	4
-#define SCLK_UART3	5
-#define SCLK_MAC	6
+/* sclk gates (special clocks) from 64 */
+#define SCLK_UART0		64
+#define SCLK_UART1		65
+#define SCLK_UART2		66
+#define SCLK_UART3		67
+#define SCLK_MAC		68
+#define SCLK_SPI0		69
+#define SCLK_SPI1		70
+#define SCLK_SARADC		71
+#define SCLK_MMC0		72
+#define SCLK_MMC1		73
+#define SCLK_MMC2		74
 
-/* gated clock used by peripherals */
-#define CORE_PERI	CLK_GATE(0, 0)
+/* aclk gates from 192*/
+#define ACLK_DMAC0		192
+#define ACLK_DMAC1		193
+#define ACLK_GPS		194
 
-#define SCLK_SARADC	CLK_GATE(2, 8)
 
-#define SCLK_MMC0	CLK_GATE(2, 11)
-#define SCLK_MMC1	CLK_GATE(2, 13)
-#define SCLK_MMC2	CLK_GATE(2, 14)
+/* pclk gates from 320*/
+#define PCLK_GRF		320
+#define PCLK_PMU		321
+#define PCLK_TIMER0		322
+#define PCLK_TIMER2		323
+#define PCLK_PWM01		324
+#define PCLK_PWM23		325
+#define PCLK_SPI0		326
+#define PCLK_SPI1		327
+#define PCLK_SARADC		328
+#define PCLK_WDT		329
+#define PCLK_UART0		330
+#define PCLK_UART1		331
+#define PCLK_UART2		332
+#define PCLK_UART3		333
+#define PCLK_I2C0		334
+#define PCLK_I2C1		335
+#define PCLK_I2C2		336
+#define PCLK_I2C3		337
+#define PCLK_I2C4		338
+#define PCLK_GPIO0		339
+#define PCLK_GPIO1		340
+#define PCLK_GPIO2		341
+#define PCLK_GPIO3		342
 
-#define SCLK_SPI0	7
-#define SCLK_SPI1	8
+/* hclk gates from 448 */
+#define HCLK_MMC0		448
+#define HCLK_MMC1		449
+#define HCLK_MMC2		450
+#define HCLK_OTG0		451
+#define HCLK_EMAC		452
+#define HCLK_SPDIF		453
+#define HCLK_I2S		454
+#define HCLK_OTG1		455
+#define HCLK_HSIC		456
+#define HCLK_HSADC		457
+#define HCLK_PIDF		458
 
-#define ACLK_DMAC0	CLK_GATE(5, 0)
-#define ACLK_DMAC1	CLK_GATE(5, 1)
-#define PCLK_GRF	CLK_GATE(5, 4)
-#define PCLK_PMU	CLK_GATE(5, 5)
-#define HCLK_MMC0	CLK_GATE(5, 10)
-#define HCLK_MMC1	CLK_GATE(5, 11)
-#define HCLK_MMC2	CLK_GATE(5, 12)
-#define HCLK_OTG0	CLK_GATE(5, 13)
 
-#define HCLK_EMAC	CLK_GATE(7, 0)
-#define HCLK_SPDIF	CLK_GATE(7, 1)
-#define HCLK_I2S	CLK_GATE(7, 2)
-#define HCLK_OTG1	CLK_GATE(7, 3)
-#define HCLK_HSIC	CLK_GATE(7, 4)
-#define HCLK_HSADC	CLK_GATE(7, 5)
-#define HCLK_PIDF	CLK_GATE(7, 6)
-#define PCLK_TIMER0	CLK_GATE(7, 7)
-#define PCLK_TIMER2	CLK_GATE(7, 9)
-#define PCLK_PWM01	CLK_GATE(7, 10)
-#define PCLK_PWM23	CLK_GATE(7, 11)
-#define PCLK_SPI0	CLK_GATE(7, 12)
-#define PCLK_SPI1	CLK_GATE(7, 13)
-#define PCLK_SARADC	CLK_GATE(7, 14)
-#define PCLK_WDT	CLK_GATE(7, 15)
 
-#define PCLK_UART0	CLK_GATE(8, 0)
-#define PCLK_UART1	CLK_GATE(8, 1)
-#define PCLK_UART2	CLK_GATE(8, 2)
-#define PCLK_UART3	CLK_GATE(8, 3)
-#define PCLK_I2C0	CLK_GATE(8, 4)
-#define PCLK_I2C1	CLK_GATE(8, 5)
-#define PCLK_I2C2	CLK_GATE(8, 6)
-#define PCLK_I2C3	CLK_GATE(8, 7)
-#define PCLK_I2C4	CLK_GATE(8, 8)
-#define PCLK_GPIO0	CLK_GATE(8, 9)
-#define PCLK_GPIO1	CLK_GATE(8, 10)
-#define PCLK_GPIO2	CLK_GATE(8, 11)
-#define PCLK_GPIO3	CLK_GATE(8, 12)
-#define ACLK_GPS	CLK_GATE(8, 13)
-
-#define CORE_L2C	CLK_GATE(9, 4)
-
-#define NR_CLKS		(CORE_L2C + 1)
+#define CLK_NR_CLKS		576

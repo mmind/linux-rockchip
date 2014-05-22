@@ -44,7 +44,7 @@
 				312000 875000
 			>;
 			clock-latency = <40000>;
-			clocks = <&cru SCLK_ARMCLK>;
+			clocks = <&cru ARMCLK>;
 		};
 		cpu@1 {
 			device_type = "cpu";
