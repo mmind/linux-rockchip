@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/clk-provider.h>
-
 #include "clk.h"
 
 /**

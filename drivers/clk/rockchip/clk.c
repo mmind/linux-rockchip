@@ -25,10 +25,10 @@
 #include <linux/clk-provider.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
-
 #include "clk.h"
 
-/*
+/**
+ * Register a clock branch.
  * Most clock branches have a form like
  *
  * src1 --|--\
@@ -37,7 +37,6 @@
  *
  * sometimes without one of those components.
  */
-
 struct clk *rockchip_clk_register_branch(const char *name,
 		const char **parent_names, u8 num_parents, void __iomem *base,
 		int muxdiv_offset, u8 mux_shift, u8 mux_width, u8 mux_flags,

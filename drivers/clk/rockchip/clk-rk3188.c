@@ -131,7 +131,7 @@ PNAME(mux_sclk_uart2_p)		= { "uart2_pll", "uart2_frac", "xin24m" };
 PNAME(mux_sclk_uart3_p)		= { "uart3_pll", "uart3_frac", "xin24m" };
 PNAME(mux_sclk_hsadc_p)		= { "hsadc_pll", "hsadc_frac", "ext_hsadc" };
 PNAME(mux_mac_p)		= { "gpll", "dpll" };
-PNAME(mux_sclk_macref_p)	= { "mac_src", "rmii_clkin" };
+PNAME(mux_sclk_macref_p)	= { "mac_src", "ext_rmii" };
 PNAME(mux_hsicphy_p)		= { "sclk_otgphy0", "sclk_otgphy1",
 				    "gpll", "cpll" };
 PNAME(mux_testclk_p)		= { "pclk_cpu", "hclk_peri", "dclk_lcdc0_src",
@@ -270,7 +270,7 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 			RK2928_CLKSEL_CON(29), 7, 1, MFLAGS),
 	//FIXME: CLKSEL_CON30[8]: add inverter
 
-	GATE(0, "pclk_cif_in", "xin_cif", 0,
+	GATE(0, "pclk_cif_in", "ext_cif", 0,
 			RK2928_CLKGATE_CON(3), 3, GFLAGS),
 
 	MUX(0, "i2s_src", mux_pll_src_gpll_cpll_p, 0,
@@ -301,7 +301,7 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 			RK2928_CLKGATE_CON(1), 6, GFLAGS),
 
 	COMPOSITE_NODIV(0, "sclk_hsicphy_480m", mux_hsicphy_p, 0,
-			RK2928_CLKSEL_CON(30), 0, 2, DFLAGS, //ok
+			RK2928_CLKSEL_CON(30), 0, 2, DFLAGS,
 			RK2928_CLKGATE_CON(3), 6, GFLAGS),
 	DIV(0, "sclk_hsicphy_12m", "sclk_hsicphy_480m", 0,
 			RK2928_CLKGATE_CON(11), 8, 6, DFLAGS),
@@ -309,11 +309,10 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 	COMPOSITE(0, "mac_src", mux_mac_p, 0,
 			RK2928_CLKSEL_CON(21), 0, 1, MFLAGS, 8, 5, DFLAGS,
 			RK2928_CLKGATE_CON(2), 5, GFLAGS),
-	MUX(SCLK_MAC, "sclk_macref", mux_sclk_macref_p, CLK_SET_RATE_PARENT,
+	MUX(SCLK_MAC, "sclk_mac_ref", mux_sclk_macref_p, CLK_SET_RATE_PARENT,
 			RK2928_CLKSEL_CON(21), 4, 1, MFLAGS),
 
-	//FIXME: where does lbtest come from?
-	GATE(0, "sclk_mac_lbtest", "dummy",
+	GATE(0, "sclk_mac_lbtest", "sclk_mac_ref",
 			RK2928_CLKGATE_CON(2), 12, 0, GFLAGS),
 
 	COMPOSITE(0, "hsadc_pll", mux_pll_src_gpll_cpll_p, 0,
@@ -397,7 +396,7 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 	GATE(0, "timer5", "xin24m", 0, RK2928_CLKGATE_CON(3), 8, GFLAGS),
 	GATE(0, "timer6", "xin24m", 0, RK2928_CLKGATE_CON(3), 14, GFLAGS),
 
-	GATE(0, "jtag", "jtag_tck", 0, RK2928_CLKGATE_CON(1), 3, GFLAGS),
+	GATE(0, "jtag", "ext_jtag", 0, RK2928_CLKGATE_CON(1), 3, GFLAGS),
 
 	/*
 	 * Clock-Architecture Diagram 5
@@ -434,8 +433,8 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 	GATE(HCLK_EMAC, "hclk_emac", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 0, GFLAGS),
 	GATE(0, "hclk_nandc", "hclk_peri", 0, RK2928_CLKGATE_CON(5), 9, GFLAGS),
 	GATE(0, "hclk_usb_peri", "hclk_peri", 0, RK2928_CLKGATE_CON(4), 5, GFLAGS),
-	GATE(HCLK_OTG0, "hclk_usbotg0", "hclk_usb_peri", 0, RK2928_CLKGATE_CON(5), 13, GFLAGS),
-	GATE(HCLK_OTG1, "hclk_usbotg1", "hclk_usb_peri", 0, RK2928_CLKGATE_CON(7), 3, GFLAGS),
+	GATE(HCLK_OTG0, "hclk_usbotg0", "hclk_peri", 0, RK2928_CLKGATE_CON(5), 13, GFLAGS),
+	GATE(HCLK_OTG1, "hclk_usbotg1", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 3, GFLAGS),
 	GATE(HCLK_HSIC, "hclk_hsic", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 4, GFLAGS),
 	GATE(HCLK_HSADC, "hclk_hsadc", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 5, GFLAGS),
 	GATE(HCLK_PIDF, "hclk_pidfilter", "hclk_peri", 0, RK2928_CLKGATE_CON(7), 6, GFLAGS),
@@ -524,7 +523,7 @@ struct rockchip_clk_init_table rk3188_clk_init_tbl[] __initdata = {
 
 	{ "sclk_mmc0", NULL,  75000000, 0 },
 
-	{ "sclk_macref", NULL,  50000000, 0 },
+	{ "sclk_mac_ref", NULL,  50000000, 0 },
 
 	/* FIXME: is this needed? */
 	{ "mac_lbtest", NULL, 0, 1 },

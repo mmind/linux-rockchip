@@ -323,7 +323,7 @@ void rockchip_clk_init(struct device_node *np, void __iomem *base,
 struct regmap *rockchip_clk_get_grf(void);
 void rockchip_clk_add_lookup(struct clk *clk, unsigned int id);
 void rockchip_clk_register_branches(struct rockchip_clk_branch *clk_list,
-			       unsigned int nr_clk);
+				    unsigned int nr_clk);
 void rockchip_clk_register_plls(struct rockchip_pll_clock *pll_list,
 				unsigned int nr_pll, int grf_lock_offset);
 void rockchip_clk_register_armclk(unsigned int lookup_id,
