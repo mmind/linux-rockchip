@@ -278,7 +278,7 @@ static struct rockchip_clk_branch rk3188_clk_branches[] __initdata = {
 	COMPOSITE_NOMUX(0, "i2s_pre", "i2s_src", 0,
 			RK2928_CLKSEL_CON(3), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(0), 9, GFLAGS),
-	COMPOSITE_FRAC(0, "i2s_frac", "i2s_pll", 0, RK2928_CLKGATE_CON(7), 0,
+	COMPOSITE_FRAC(0, "i2s_frac", "i2s_pre", 0, RK2928_CLKGATE_CON(7), 0,
 			RK2928_CLKGATE_CON(0), 10, GFLAGS),
 	MUX(0, "sclk_i2s", mux_sclk_i2s_p, 0,
 			RK2928_CLKSEL_CON(3), 8, 2, MFLAGS),
