@@ -18,6 +18,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
+#include <linux/platform_data/syscon.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
@@ -121,7 +122,11 @@ struct regmap *syscon_regmap_lookup_by_phandle(struct device_node *np,
 	struct device_node *syscon_np;
 	struct regmap *regmap;
 
-	syscon_np = of_parse_phandle(np, property, 0);
+	if (property)
+		syscon_np = of_parse_phandle(np, property, 0);
+	else
+		syscon_np = np;
+
 	if (!syscon_np)
 		return ERR_PTR(-ENODEV);
 
@@ -153,6 +158,8 @@ static struct regmap_config syscon_regmap_config = {
 static int early_syscon_probe(struct device_node *np, struct syscon **syscon_p,
 			      struct resource *res)
 {
+	struct device *dev = &pdev->dev;
+	struct syscon_platform_data *pdata = dev_get_platdata(dev);
 	struct syscon *syscon;
 	int ret;
 
@@ -189,6 +196,8 @@ static int early_syscon_probe(struct device_node *np, struct syscon **syscon_p,
 
 	syscon_regmap_config.max_register = syscon->res.end -
 					    syscon->res.start - 3;
+	if (pdata)
+		syscon_regmap_config.name = pdata->label;
 	syscon->regmap = regmap_init_mmio(NULL, syscon->base,
 					  &syscon_regmap_config);
 	if (IS_ERR(syscon->regmap)) {

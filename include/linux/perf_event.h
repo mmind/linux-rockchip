@@ -172,6 +172,7 @@ struct perf_event;
 struct pmu {
 	struct list_head		entry;
 
+	struct module			*module;
 	struct device			*dev;
 	const struct attribute_group	**attr_groups;
 	const char			*name;
@@ -402,6 +403,8 @@ struct perf_event {
 
 	struct ring_buffer		*rb;
 	struct list_head		rb_entry;
+	unsigned long			rcu_batches;
+	int				rcu_pending;
 
 	/* poll related */
 	wait_queue_head_t		waitq;

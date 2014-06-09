@@ -90,7 +90,7 @@ static void __init rockchip_dt_init(void)
 
 	rockchip_clocks_apply_init_table();
 
-	l2x0_of_init(0, ~0UL);
+//	l2x0_of_init(0, ~0UL);
 
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
 	platform_device_register_full(&devinfo);
@@ -105,7 +105,9 @@ static const char * const rockchip_board_dt_compat[] = {
 };
 
 DT_MACHINE_START(ROCKCHIP_DT, "Rockchip Cortex-A9 (Device Tree)")
-	.init_machine	= rockchip_dt_init,
+	.l2c_aux_val	= 0,
+	.l2c_aux_mask	= ~0,
 	.init_time	= rockchip_timer_init,
+	.init_machine	= rockchip_dt_init,
 	.dt_compat	= rockchip_board_dt_compat,
 MACHINE_END

@@ -642,7 +642,7 @@ static int create_snapshot(struct btrfs_root *root, struct inode *dir,
 		return -EINVAL;
 
 	atomic_inc(&root->will_be_snapshoted);
-	smp_mb__after_atomic_inc();
+	smp_mb__after_atomic();
 	btrfs_wait_nocow_write(root);
 
 	ret = btrfs_start_delalloc_inodes(root, 0);
@@ -3120,6 +3120,8 @@ process_slot:
 			} else if (type == BTRFS_FILE_EXTENT_INLINE) {
 				u64 skip = 0;
 				u64 trim = 0;
+				u64 aligned_end = 0;
+
 				if (off > key.offset) {
 					skip = off - key.offset;
 					new_key.offset += skip;
@@ -3136,9 +3138,11 @@ process_slot:
 				size -= skip + trim;
 				datal -= skip + trim;
 
+				aligned_end = ALIGN(new_key.offset + datal,
+						    root->sectorsize);
 				ret = btrfs_drop_extents(trans, root, inode,
 							 new_key.offset,
-							 new_key.offset + datal,
+							 aligned_end,
 							 1);
 				if (ret) {
 					if (ret != -EOPNOTSUPP)
