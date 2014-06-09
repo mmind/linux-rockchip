@@ -10,7 +10,7 @@
 
 struct dma_chan;
 
-#if defined(CONFIG_DMA_OMAP) || defined(CONFIG_DMA_OMAP_MODULE)
+#if defined(CONFIG_DMA_OMAP) || (defined(CONFIG_DMA_OMAP_MODULE) && defined(MODULE))
 bool omap_dma_filter_fn(struct dma_chan *, void *);
 #else
 static inline bool omap_dma_filter_fn(struct dma_chan *c, void *d)
@@ -393,7 +393,7 @@ extern int omap_modify_dma_chain_params(int chain_id,
 extern int omap_dma_chain_status(int chain_id);
 #endif
 
-#if defined(CONFIG_ARCH_OMAP1) && defined(CONFIG_FB_OMAP)
+#if defined(CONFIG_ARCH_OMAP1) && IS_ENABLED(CONFIG_FB_OMAP)
 #include <mach/lcd_dma.h>
 #else
 static inline int omap_lcd_dma_running(void)

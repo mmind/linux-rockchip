@@ -736,7 +736,7 @@ void target_qf_do_work(struct work_struct *work)
 	list_for_each_entry_safe(cmd, cmd_tmp, &qf_cmd_list, se_qf_node) {
 		list_del(&cmd->se_qf_node);
 		atomic_dec(&dev->dev_qf_count);
-		smp_mb__after_atomic_dec();
+		smp_mb__after_atomic();
 
 		pr_debug("Processing %s cmd: %p QUEUE_FULL in work queue"
 			" context: %s\n", cmd->se_tfo->get_fabric_name(), cmd,
@@ -1113,6 +1113,7 @@ void transport_init_se_cmd(
 	init_completion(&cmd->cmd_wait_comp);
 	init_completion(&cmd->task_stop_comp);
 	spin_lock_init(&cmd->t_state_lock);
+	kref_init(&cmd->cmd_kref);
 	cmd->transport_state = CMD_T_DEV_ACTIVE;
 
 	cmd->se_tfo = tfo;
@@ -1148,7 +1149,7 @@ transport_check_alloc_task_attr(struct se_cmd *cmd)
 	 * Dormant to Active status.
 	 */
 	cmd->se_ordered_id = atomic_inc_return(&dev->dev_ordered_id);
-	smp_mb__after_atomic_inc();
+	smp_mb__after_atomic();
 	pr_debug("Allocated se_ordered_id: %u for Task Attr: 0x%02x on %s\n",
 			cmd->se_ordered_id, cmd->sam_task_attr,
 			dev->transport->name);
@@ -1705,7 +1706,7 @@ static bool target_handle_task_attr(struct se_cmd *cmd)
 		return false;
 	case MSG_ORDERED_TAG:
 		atomic_inc(&dev->dev_ordered_sync);
-		smp_mb__after_atomic_inc();
+		smp_mb__after_atomic();
 
 		pr_debug("Added ORDERED for CDB: 0x%02x to ordered list, "
 			 " se_ordered_id: %u\n",
@@ -1723,7 +1724,7 @@ static bool target_handle_task_attr(struct se_cmd *cmd)
 		 * For SIMPLE and UNTAGGED Task Attribute commands
 		 */
 		atomic_inc(&dev->simple_cmds);
-		smp_mb__after_atomic_inc();
+		smp_mb__after_atomic();
 		break;
 	}
 
@@ -1828,7 +1829,7 @@ static void transport_complete_task_attr(struct se_cmd *cmd)
 
 	if (cmd->sam_task_attr == MSG_SIMPLE_TAG) {
 		atomic_dec(&dev->simple_cmds);
-		smp_mb__after_atomic_dec();
+		smp_mb__after_atomic();
 		dev->dev_cur_ordered_id++;
 		pr_debug("Incremented dev->dev_cur_ordered_id: %u for"
 			" SIMPLE: %u\n", dev->dev_cur_ordered_id,
@@ -1840,7 +1841,7 @@ static void transport_complete_task_attr(struct se_cmd *cmd)
 			cmd->se_ordered_id);
 	} else if (cmd->sam_task_attr == MSG_ORDERED_TAG) {
 		atomic_dec(&dev->dev_ordered_sync);
-		smp_mb__after_atomic_dec();
+		smp_mb__after_atomic();
 
 		dev->dev_cur_ordered_id++;
 		pr_debug("Incremented dev_cur_ordered_id: %u for ORDERED:"
@@ -1899,7 +1900,7 @@ static void transport_handle_queue_full(
 	spin_lock_irq(&dev->qf_cmd_lock);
 	list_add_tail(&cmd->se_qf_node, &cmd->se_dev->qf_cmd_list);
 	atomic_inc(&dev->dev_qf_count);
-	smp_mb__after_atomic_inc();
+	smp_mb__after_atomic();
 	spin_unlock_irq(&cmd->se_dev->qf_cmd_lock);
 
 	schedule_work(&cmd->se_dev->qf_work_queue);
@@ -2357,7 +2358,6 @@ int target_get_sess_cmd(struct se_session *se_sess, struct se_cmd *se_cmd,
 	unsigned long flags;
 	int ret = 0;
 
-	kref_init(&se_cmd->cmd_kref);
 	/*
 	 * Add a second kref if the fabric caller is expecting to handle
 	 * fabric acknowledgement that requires two target_put_sess_cmd()
@@ -2875,7 +2875,7 @@ void transport_send_task_abort(struct se_cmd *cmd)
 		if (cmd->se_tfo->write_pending_status(cmd) != 0) {
 			cmd->transport_state |= CMD_T_ABORTED;
 			cmd->se_cmd_flags |= SCF_SEND_DELAYED_TAS;
-			smp_mb__after_atomic_inc();
+			smp_mb__after_atomic();
 			return;
 		}
 	}

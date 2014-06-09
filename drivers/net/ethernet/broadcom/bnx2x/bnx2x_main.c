@@ -1858,10 +1858,10 @@ void bnx2x_sp_event(struct bnx2x_fastpath *fp, union eth_rx_cqe *rr_cqe)
 		return;
 #endif
 
-	smp_mb__before_atomic_inc();
+	smp_mb__before_atomic();
 	atomic_inc(&bp->cq_spq_left);
 	/* push the change in bp->spq_left and towards the memory */
-	smp_mb__after_atomic_inc();
+	smp_mb__after_atomic();
 
 	DP(BNX2X_MSG_SP, "bp->cq_spq_left %x\n", atomic_read(&bp->cq_spq_left));
 
@@ -1876,11 +1876,11 @@ void bnx2x_sp_event(struct bnx2x_fastpath *fp, union eth_rx_cqe *rr_cqe)
 		 * sp_state is cleared, and this order prevents
 		 * races
 		 */
-		smp_mb__before_clear_bit();
+		smp_mb__before_atomic();
 		set_bit(BNX2X_AFEX_PENDING_VIFSET_MCP_ACK, &bp->sp_state);
 		wmb();
 		clear_bit(BNX2X_AFEX_FCOE_Q_UPDATE_PENDING, &bp->sp_state);
-		smp_mb__after_clear_bit();
+		smp_mb__after_atomic();
 
 		/* schedule the sp task as mcp ack is required */
 		bnx2x_schedule_sp_task(bp);
@@ -5272,9 +5272,9 @@ static void bnx2x_after_function_update(struct bnx2x *bp)
 		__clear_bit(RAMROD_COMP_WAIT, &queue_params.ramrod_flags);
 
 		/* mark latest Q bit */
-		smp_mb__before_clear_bit();
+		smp_mb__before_atomic();
 		set_bit(BNX2X_AFEX_FCOE_Q_UPDATE_PENDING, &bp->sp_state);
-		smp_mb__after_clear_bit();
+		smp_mb__after_atomic();
 
 		/* send Q update ramrod for FCoE Q */
 		rc = bnx2x_queue_state_change(bp, &queue_params);
@@ -5500,7 +5500,7 @@ next_spqe:
 		spqe_cnt++;
 	} /* for */
 
-	smp_mb__before_atomic_inc();
+	smp_mb__before_atomic();
 	atomic_add(spqe_cnt, &bp->eq_spq_left);
 
 	bp->eq_cons = sw_cons;
@@ -10051,8 +10051,8 @@ static void bnx2x_prev_unload_close_mac(struct bnx2x *bp,
 #define BCM_5710_UNDI_FW_MF_MAJOR	(0x07)
 #define BCM_5710_UNDI_FW_MF_MINOR	(0x08)
 #define BCM_5710_UNDI_FW_MF_VERS	(0x05)
-#define BNX2X_PREV_UNDI_MF_PORT(p)	(0x1a150c + ((p) << 4))
-#define BNX2X_PREV_UNDI_MF_FUNC(f)	(0x1a184c + ((f) << 4))
+#define BNX2X_PREV_UNDI_MF_PORT(p) (BAR_TSTRORM_INTMEM + 0x150c + ((p) << 4))
+#define BNX2X_PREV_UNDI_MF_FUNC(f) (BAR_TSTRORM_INTMEM + 0x184c + ((f) << 4))
 static bool bnx2x_prev_unload_undi_fw_supports_mf(struct bnx2x *bp)
 {
 	u8 major, minor, version;
@@ -10352,6 +10352,7 @@ static int bnx2x_prev_unload_common(struct bnx2x *bp)
 	/* Reset should be performed after BRB is emptied */
 	if (reset_reg & MISC_REGISTERS_RESET_REG_1_RST_BRB1) {
 		u32 timer_count = 1000;
+		bool need_write = true;
 
 		/* Close the MAC Rx to prevent BRB from filling up */
 		bnx2x_prev_unload_close_mac(bp, &mac_vals);
@@ -10398,7 +10399,10 @@ static int bnx2x_prev_unload_common(struct bnx2x *bp)
 			 * cleaning methods - might be redundant but harmless.
 			 */
 			if (bnx2x_prev_unload_undi_fw_supports_mf(bp)) {
-				bnx2x_prev_unload_undi_mf(bp);
+				if (need_write) {
+					bnx2x_prev_unload_undi_mf(bp);
+					need_write = false;
+				}
 			} else if (prev_undi) {
 				/* If UNDI resides in memory,
 				 * manually increment it
@@ -13871,9 +13875,9 @@ static int bnx2x_drv_ctl(struct net_device *dev, struct drv_ctl_info *ctl)
 	case DRV_CTL_RET_L2_SPQ_CREDIT_CMD: {
 		int count = ctl->data.credit.credit_count;
 
-		smp_mb__before_atomic_inc();
+		smp_mb__before_atomic();
 		atomic_add(count, &bp->cq_spq_left);
-		smp_mb__after_atomic_inc();
+		smp_mb__after_atomic();
 		break;
 	}
 	case DRV_CTL_ULP_REGISTER_CMD: {
