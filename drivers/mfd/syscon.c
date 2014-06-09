@@ -158,8 +158,6 @@ static struct regmap_config syscon_regmap_config = {
 static int early_syscon_probe(struct device_node *np, struct syscon **syscon_p,
 			      struct resource *res)
 {
-	struct device *dev = &pdev->dev;
-	struct syscon_platform_data *pdata = dev_get_platdata(dev);
 	struct syscon *syscon;
 	int ret;
 
@@ -196,8 +194,6 @@ static int early_syscon_probe(struct device_node *np, struct syscon **syscon_p,
 
 	syscon_regmap_config.max_register = syscon->res.end -
 					    syscon->res.start - 3;
-	if (pdata)
-		syscon_regmap_config.name = pdata->label;
 	syscon->regmap = regmap_init_mmio(NULL, syscon->base,
 					  &syscon_regmap_config);
 	if (IS_ERR(syscon->regmap)) {
