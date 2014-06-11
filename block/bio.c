@@ -849,7 +849,13 @@ int bio_add_page(struct bio *bio, struct page *page, unsigned int len,
 		 unsigned int offset)
 {
 	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
-	return __bio_add_page(q, bio, page, len, offset, queue_max_sectors(q));
+	unsigned int max_sectors;
+
+	max_sectors = blk_max_size_offset(q, bio->bi_iter.bi_sector);
+	if ((max_sectors < (len >> 9)) && !bio->bi_iter.bi_size)
+		max_sectors = len >> 9;
+
+	return __bio_add_page(q, bio, page, len, offset, max_sectors);
 }
 EXPORT_SYMBOL(bio_add_page);
 
@@ -1971,7 +1977,7 @@ int bio_associate_current(struct bio *bio)
 	/* associate blkcg if exists */
 	rcu_read_lock();
 	css = task_css(current, blkio_cgrp_id);
-	if (css && css_tryget(css))
+	if (css && css_tryget_online(css))
 		bio->bi_css = css;
 	rcu_read_unlock();
 
