@@ -6,12 +6,17 @@ RK3xxx SoCs.
 Required properties :
 
  - reg : Offset and length of the register set for the device
- - compatible : should be "rockchip,rk3x-i2c"
+ - compatible : should be "rockchip,rk3066-i2c", "rockchip,rk3188-i2c" or
+		"rockchip,rk3288-i2c".
  - interrupts : interrupt number
  - clocks : parent clock
+
+Required on RK3066, RK3188 :
+
  - rockchip,grf : the phandle of the syscon node for the general register
 		  file (GRF)
- - rockchip,bus-index : index of the bus in the GRF
+ - on those SoCs an alias with the correct I2C bus ID (bit offset in the GRF)
+   is also required.
 
 Optional properties :
 
@@ -19,15 +24,18 @@ Optional properties :
 
 Example:
 
+aliases {
+	i2c0 = &i2c0;
+}
+
 i2c0: i2c@2002d000 {
-	compatible = "rockchip,rk3x-i2c";
+	compatible = "rockchip,rk3188-i2c";
 	reg = <0x2002d000 0x1000>;
 	interrupts = <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;
 	#address-cells = <1>;
 	#size-cells = <0>;
 
 	rockchip,grf = <&grf>;
-	rockchip,bus-index = <0>;
 
 	clock-names = "i2c";
 	clocks = <&cru PCLK_I2C0>;
