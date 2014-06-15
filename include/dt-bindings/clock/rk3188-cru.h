@@ -30,12 +30,18 @@
 #define SCLK_MMC0		72
 #define SCLK_MMC1		73
 #define SCLK_MMC2		74
+#define SCLK_I2S		75
+#define SCLK_SPDIF		76
+
+#define DCLK_LCDC0		190
+#define DCLK_LCDC1		191
 
 /* aclk gates from 192*/
 #define ACLK_DMAC0		192
 #define ACLK_DMAC1		193
 #define ACLK_GPS		194
-
+#define ACLK_LCDC0		195
+#define ACLK_LCDC1		196
 
 /* pclk gates from 320*/
 #define PCLK_GRF		320
@@ -74,7 +80,7 @@
 #define HCLK_HSIC		456
 #define HCLK_HSADC		457
 #define HCLK_PIDF		458
-
-
+#define HCLK_LCDC0		459
+#define HCLK_LCDC1		460
 
 #define CLK_NR_CLKS		576
