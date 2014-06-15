@@ -246,7 +246,7 @@
 			ranges;
 
 			gpio0: gpio0@0x2000a000 {
-				compatible = "rockchip,rk3188-gpio-bank0";
+				compatible = "rockchip,gpio-bank";
 				reg = <0x2000a000 0x100>;
 				interrupts = <GIC_SPI 54 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&cru PCLK_GPIO0>;
