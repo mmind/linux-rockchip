@@ -467,6 +467,9 @@ static int dw8250_remove(struct platform_device *pdev)
 
 	serial8250_unregister_port(data->line);
 
+	if (!IS_ERR(data->pclk))
+		clk_disable_unprepare(data->pclk);
+
 	if (!IS_ERR(data->clk))
 		clk_disable_unprepare(data->clk);
 
@@ -504,12 +507,18 @@ static int dw8250_runtime_suspend(struct device *dev)
 	if (!IS_ERR(data->clk))
 		clk_disable_unprepare(data->clk);
 
+	if (!IS_ERR(data->pclk))
+		clk_disable_unprepare(data->pclk);
+
 	return 0;
 }
 
 static int dw8250_runtime_resume(struct device *dev)
 {
 	struct dw8250_data *data = dev_get_drvdata(dev);
+
+	if (!IS_ERR(data->pclk))
+		clk_prepare_enable(data->pclk);
 
 	if (!IS_ERR(data->clk))
 		clk_prepare_enable(data->clk);
