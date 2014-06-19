@@ -27,11 +27,25 @@
 #define SCLK_SPI0		69
 #define SCLK_SPI1		70
 #define SCLK_SARADC		71
-#define SCLK_MMC0		72
-#define SCLK_MMC1		73
-#define SCLK_MMC2		74
-#define SCLK_I2S		75
+#define SCLK_SDMMC		72
+#define SCLK_SDIO		73
+#define SCLK_EMMC		74
+#define SCLK_I2S0		75
 #define SCLK_SPDIF		76
+#define SCLK_CIF		77
+#define SCLK_OTGPHY0		78
+#define SCLK_OTGPHY1		79
+#define SCLK_HSADC		80
+#define SCLK_TIMER0		81
+#define SCLK_TIMER1		82
+#define SCLK_TIMER2		83
+#define SCLK_TIMER3		84
+#define SCLK_TIMER4		85
+#define SCLK_TIMER5		86
+#define SCLK_TIMER6		87
+#define SCLK_JTAG		88
+#define SCLK_SMC		89
+#define SCLK_CIF0		90
 
 #define DCLK_LCDC0		190
 #define DCLK_LCDC1		191
@@ -42,6 +56,12 @@
 #define ACLK_GPS		194
 #define ACLK_LCDC0		195
 #define ACLK_LCDC1		196
+#define ACLK_GPU		197
+#define ACLK_SMC		198
+#define ACLK_CIF		199
+#define ACLK_IPP		200
+#define ACLK_RGA		201
+#define ACLK_CIF0		202
 
 /* pclk gates from 320*/
 #define PCLK_GRF		320
@@ -67,11 +87,13 @@
 #define PCLK_GPIO1		340
 #define PCLK_GPIO2		341
 #define PCLK_GPIO3		342
+#define PCLK_EFUSE		343
+#define PCLK_TZPC		344
 
 /* hclk gates from 448 */
-#define HCLK_MMC0		448
-#define HCLK_MMC1		449
-#define HCLK_MMC2		450
+#define HCLK_SDMMC		448
+#define HCLK_SDIO		449
+#define HCLK_EMMC		450
 #define HCLK_OTG0		451
 #define HCLK_EMAC		452
 #define HCLK_SPDIF		453
@@ -82,5 +104,10 @@
 #define HCLK_PIDF		458
 #define HCLK_LCDC0		459
 #define HCLK_LCDC1		460
+#define HCLK_ROM		461
+#define HCLK_CIF		462
+#define HCLK_IPP		463
+#define HCLK_RGA		464
+#define HCLK_NANDC		465
 
 #define CLK_NR_CLKS		576

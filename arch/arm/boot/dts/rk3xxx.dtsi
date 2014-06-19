@@ -138,7 +138,7 @@
 			#size-cells = <0>;
 
 //			clocks = <&clk_gates5 10>, <&clk_gates2 11>;
-			clocks = <&cru HCLK_MMC0>, <&cru SCLK_MMC0>;
+			clocks = <&cru HCLK_SDMMC>, <&cru SCLK_SDMMC>;
 
 			clock-names = "biu", "ciu";
 
@@ -153,7 +153,7 @@
 			#size-cells = <0>;
 
 //			clocks = <&clk_gates5 11>, <&clk_gates2 13>;
-			clocks = <&cru HCLK_MMC1>, <&cru SCLK_MMC1>;
+			clocks = <&cru HCLK_SDIO>, <&cru SCLK_SDIO>;
 			clock-names = "biu", "ciu";
 
 			status = "disabled";
