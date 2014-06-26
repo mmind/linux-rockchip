@@ -304,6 +304,21 @@ struct rockchip_clk_branch {
 		.gate_offset	= -1,				\
 	}
 
+#define DIVTBL(_id, cname, pname, f, o, s, w, df, dt)		\
+	{							\
+		.id		= _id,				\
+		.branch_type	= branch_divider,		\
+		.name		= cname,			\
+		.parent_names	= (const char *[]){ pname },	\
+		.num_parents	= 1,				\
+		.flags		= f,				\
+		.muxdiv_offset	= o,				\
+		.div_shift	= s,				\
+		.div_width	= w,				\
+		.div_flags	= df,				\
+		.div_table	= dt,				\
+	}
+
 #define GATE(_id, cname, pname, f, o, b, gf)			\
 	{							\
 		.id		= _id,				\
