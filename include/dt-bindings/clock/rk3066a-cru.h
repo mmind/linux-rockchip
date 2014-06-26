@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 MundoReader S.L.
+ * Copyright (c) 2014 MundoReader S.L.
  * Author: Heiko Stuebner <heiko@sntech.de>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -13,29 +13,23 @@
  * GNU General Public License for more details.
  */
 
-/ {
-	clocks {
-		#address-cells = <1>;
-		#size-cells = <1>;
-		ranges;
+#include <dt-bindings/clock/rk3188-cru-common.h>
 
-		/*
-		 * This is a dummy clock, to be used as placeholder on
-		 * other mux clocks when a specific parent clock is not
-		 * yet implemented. It should be dropped when the driver
-		 * is complete.
-		 */
-		dummy: dummy {
-			compatible = "fixed-clock";
-			clock-frequency = <18000000>;
-			#clock-cells = <0>;
-		};
+/* soft-reset indices */
+#define SRST_SRST1		0
+#define SRST_SRST2		1
 
-		xin24m: xin24m {
-			compatible = "fixed-clock";
-			clock-frequency = <24000000>;
-			#clock-cells = <0>;
-		};
-	};
+#define SRST_L2MEM		18
+#define SRST_I2S0		23
+#define SRST_I2S1		24
+#define SRST_I2S2		25
+#define SRST_TIMER2		29
 
-};
+#define SRST_GPIO4		36
+#define SRST_GPIO6		38
+
+#define SRST_TSADC		92
+
+#define SRST_HDMI		96
+#define SRST_HDMI_APB		97
+#define SRST_CIF1		111

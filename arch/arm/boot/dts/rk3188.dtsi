@@ -15,7 +15,6 @@
 
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/pinctrl/rockchip.h>
-#include <dt-bindings/clock/rk3188-cru.h>
 #include "rk3xxx.dtsi"
 #include "rk3188-clocks.dtsi"
 
@@ -44,7 +43,7 @@
 				312000 875000
 			>;
 			clock-latency = <40000>;
-			clocks = <&cru ARMCLK>;
+//			clocks = <&cru ARMCLK>;
 		};
 		cpu@1 {
 			device_type = "cpu";
@@ -117,19 +116,17 @@
 				#dma-cells = <1>;
 				#dma-channels = <7>;
 				#dma-requests = <14>;
-				clocks = <&cru ACLK_DMAC1>;
+				clocks = <&cru ACLK_DMA2>;
 				clock-names = "apb_pclk";
 			};
 		};
 
 		global-timer@1013c200 {
 			interrupts = <GIC_PPI 11 0xf04>;
-			clocks = <&cru CORE_PERI>;
 		};
 
 		local-timer@1013c600 {
 			interrupts = <GIC_PPI 13 0xf04>;
-			clocks = <&cru CORE_PERI>;
 		};
 
 		dwc2@10180000 {
