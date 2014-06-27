@@ -131,10 +131,15 @@
 			};
 		};
 
-		i2c1: i2c@2002f000 {
-			pinctrl-names = "default";
-			pinctrl-0 = <&i2c1_xfer>;
-			status = "okay";
+		i2c@0 {
+			compatible = "i2c-gpio";
+			gpios = <&gpio1 26 0   /* sda */
+				 &gpio1 27 0>; /* scl */
+			i2c-gpio,sda-open-drain;
+			i2c-gpio,scl-open-drain;
+			i2c-gpio,delay-us = <2>;	/* ~100 kHz */
+			#address-cells = <1>;
+			#size-cells = <0>;
 
 			hym8563@51 {
 				compatible = "haoyu,hym8563";
