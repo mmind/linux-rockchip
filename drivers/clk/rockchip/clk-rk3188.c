@@ -631,12 +631,12 @@ struct rockchip_clk_init_table rk3188_clk_init_tbl[] __initdata = {
 	{ "hclk_peri", NULL, 150000000, 0 },
 	{ "pclk_peri", NULL,  75000000, 0 },
 
-	{ "sclk_mmc0", NULL,  75000000, 0 },
+	{ "sclk_sdmmc", NULL,  75000000, 0 },
 
-	{ "sclk_mac_ref", NULL,  50000000, 0 },
+	{ "sclk_macref", NULL,  50000000, 0 },
 
 	/* FIXME: is this needed? */
-	{ "mac_lbtest", NULL, 0, 1 },
+	{ "sclk_mac_lbtest", NULL, 0, 1 },
 };
 
 static void __init rk3188_clock_apply_init_table(void)
