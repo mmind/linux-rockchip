@@ -66,7 +66,7 @@ static long clk_composite_determine_rate(struct clk_hw *hw, unsigned long rate,
 	struct clk_hw *mux_hw = composite->mux_hw;
 	struct clk *parent;
 	unsigned long parent_rate;
-	long tmp_rate, best_rate;
+	long tmp_rate, best_rate = 0;
 	unsigned long rate_diff;
 	unsigned long best_rate_diff = ULONG_MAX;
 	int i;
@@ -99,10 +99,7 @@ static long clk_composite_determine_rate(struct clk_hw *hw, unsigned long rate,
 			if (tmp_rate < 0)
 				continue;
 
-			if (tmp_rate < rate)
-				rate_diff = rate - tmp_rate;
-			else
-				rate_diff = tmp_rate - rate;
+			rate_diff = abs(rate - tmp_rate);
 
 			if (!rate_diff || !*best_parent_p || best_rate_diff > rate_diff) {
 				*best_parent_p = parent;
