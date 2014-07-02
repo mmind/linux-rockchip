@@ -165,7 +165,7 @@ void __init rockchip_clk_register_branches(
 				      struct rockchip_clk_branch *list,
 				      unsigned int nr_clk)
 {
-	struct clk *clk;
+	struct clk *clk = NULL;
 	unsigned int idx;
 	unsigned long flags;
 
@@ -224,6 +224,13 @@ void __init rockchip_clk_register_branches(
 				list->gate_offset, list->gate_shift,
 				list->gate_flags, flags, &clk_lock);
 			break;
+		}
+
+		/* none of the cases above matched */
+		if (!clk) {
+			pr_err("%s: unknown clock type %d\n",
+			       __func__, list->branch_type);
+			continue;
 		}
 
 		if (IS_ERR(clk)) {
