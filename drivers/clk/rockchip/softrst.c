@@ -61,8 +61,8 @@ static int rockchip_softrst_deassert(struct reset_controller_dev *rcdev,
 	struct rockchip_softrst *softrst = container_of(rcdev,
 						     struct rockchip_softrst,
 						     rcdev);
-	int bank = id / BITS_PER_LONG;
-	int offset = id % BITS_PER_LONG;
+	int bank = id / softrst->num_per_reg;
+	int offset = id % softrst->num_per_reg;
 
 	if (softrst->flags & ROCKCHIP_SOFTRST_HIWORD_MASK) {
 		writel((BIT(offset) << 16), softrst->reg_base + (bank * 4));
@@ -97,7 +97,10 @@ void __init rockchip_register_softrst(struct device_node *np,
 	if (!softrst)
 		return;
 
+	spin_lock_init(&softrst->lock);
+
 	softrst->reg_base = base;
+	softrst->flags = flags;
 	softrst->num_regs = num_regs;
 	softrst->num_per_reg = (flags & ROCKCHIP_SOFTRST_HIWORD_MASK) ? 16
 								      : 32;
