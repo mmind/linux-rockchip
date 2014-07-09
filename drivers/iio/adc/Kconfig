@@ -189,7 +189,7 @@ config NAU7802
 
 config ROCKCHIP_SARADC
 	tristate "Rockchip SARADC driver"
-	depends on OF
+	depends on ARCH_ROCKCHIP || (OF && COMPILE_TEST)
 	help
 	  Say yes here to build support for the SARADC found in SoCs from
 	  Rockchip.

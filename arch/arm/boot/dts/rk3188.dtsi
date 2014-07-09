@@ -469,24 +469,5 @@
 		i2c4: i2c@2005e000 {
 			compatible = "rockchip,rk3188-i2c";
 		};
-
-		saradc: saradc@2006c000 {
-			compatible = "rockchip,saradc";
-			reg = <0x2006c000 0x100>;
-			interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
-			#io-channel-cells = <1>;
-//			io-channel-ranges;
-
-			clock-frequency = <1000000>;
-			clocks = <&cru SCLK_SARADC>, <&cru PCLK_SARADC>;
-			clock-names = "saradc", "pclk_saradc";
-//			status = "disabled";
-			status = "okay";
-		};
-
-		iio_hwmon@1 {
-			compatible = "iio-hwmon";
-			io-channels = <&saradc 0>, <&saradc 1>, <&saradc 2>;
-		};
 	};
 };
