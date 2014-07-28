@@ -1,13 +1,12 @@
-* Rockchip RK3188/RK3066 Clock and Reset Unit
+* Rockchip RK3288 Clock and Reset Unit
 
-The RK3188/RK3066 clock controller generates and supplies clock to various
+The RK3288 clock controller generates and supplies clock to various
 controllers within the SoC and also implements a reset controller for SoC
 peripherals.
 
 Required Properties:
 
-- compatible: should be "rockchip,rk3188-cru", "rockchip,rk3188a-cru" or
-			"rockchip,rk3066a-cru"
+- compatible: should be "rockchip,rk3288-cru"
 - reg: physical base address of the controller and length of memory mapped
   region.
 - #clock-cells: should be 1.
@@ -20,9 +19,9 @@ Optional Properties:
 
 Each clock is assigned an identifier and client nodes can use this identifier
 to specify the clock which they consume. All available clocks are defined as
-preprocessor macros in the dt-bindings/clock/rk3188-cru.h and
-dt-bindings/clock/rk3066-cru.h headers and can be used in device tree sources.
-Similar macros exist for the reset sources in these files.
+preprocessor macros in the dt-bindings/clock/rk3288-cru.h headers and can be
+used in device tree sources. Similar macros exist for the reset sources in
+these files.
 
 External clocks:
 
@@ -31,11 +30,12 @@ that they are defined using standard clock bindings with following
 clock-output-names:
  - "xin24m" - crystal input - required,
  - "xin32k" - rtc clock - optional,
- - "xin27m" - 27mhz crystal input on rk3066 - optional,
+ - "ext_i2s" - external I2S clock - optional,
  - "ext_hsadc" - external HSADC clock - optional,
- - "ext_cif0" - external camera clock - optional,
- - "ext_rmii" - external RMII clock - optional,
- - "ext_jtag" - externalJTAG clock - optional
+ - "ext_edp_24m" - external display port clock - optional,
+ - "ext_vip" - external VIP clock - optional,
+ - "ext_isp" - external ISP clock - optional,
+ - "ext_jtag" - external JTAG clock - optional
 
 Example: Clock controller node:
 

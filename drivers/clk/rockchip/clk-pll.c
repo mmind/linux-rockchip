@@ -273,6 +273,7 @@ static int rockchip_rk3066_pll_is_enabled(struct clk_hw *hw)
 {
 	struct rockchip_clk_pll *pll = to_rockchip_clk_pll(hw);
 	u32 pllcon = readl(pll->reg_base + RK3066_PLLCON(3));
+
 	return !(pllcon & RK3066_PLLCON3_PWRDOWN);
 }
 

@@ -117,7 +117,7 @@ void __init rockchip_clk_init(struct device_node *np, void __iomem *base,
 	cru_node = np;
 	grf = ERR_PTR(-EPROBE_DEFER);
 
-	clk_table = kzalloc(sizeof(struct clk *) * nr_clks, GFP_KERNEL);
+	clk_table = kcalloc(nr_clks, sizeof(struct clk *), GFP_KERNEL);
 	if (!clk_table)
 		pr_err("%s: could not allocate clock lookup table\n", __func__);
 
@@ -183,11 +183,12 @@ void __init rockchip_clk_register_branches(
 			break;
 		case branch_divider:
 			if (list->div_table)
-				clk = clk_register_divider_table(NULL, list->name,
-					list->parent_names[0], flags,
-					reg_base + list->muxdiv_offset, list->div_shift,
-					list->div_width, list->div_flags,
-					list->div_table, &clk_lock);
+				clk = clk_register_divider_table(NULL,
+					list->name, list->parent_names[0],
+					flags, reg_base + list->muxdiv_offset,
+					list->div_shift, list->div_width,
+					list->div_flags, list->div_table,
+					&clk_lock);
 			else
 				clk = clk_register_divider(NULL, list->name,
 					list->parent_names[0], flags,

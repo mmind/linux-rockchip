@@ -389,7 +389,7 @@ static struct rockchip_clk_branch common_clk_branches[] __initdata = {
 
 	/* pclk_peri gates */
 	GATE(0, "pclk_peri_axi_matrix", "pclk_peri", 0, RK2928_CLKGATE_CON(4), 1, GFLAGS),
-	GATE(PCLK_PWM23, "pclk_pwm23", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 11,GFLAGS),
+	GATE(PCLK_PWM23, "pclk_pwm23", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 11, GFLAGS),
 	GATE(PCLK_WDT, "pclk_wdt", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 15, GFLAGS),
 	GATE(PCLK_SPI0, "pclk_spi0", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 12, GFLAGS),
 	GATE(PCLK_SPI1, "pclk_spi1", "pclk_peri", 0, RK2928_CLKGATE_CON(7), 13, GFLAGS),
@@ -474,7 +474,7 @@ static struct rockchip_clk_branch rk3066a_clk_branches[] __initdata = {
 			RK2928_CLKSEL_CON(2), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(0), 7, GFLAGS),
 	COMPOSITE_FRAC(0, "i2s0_frac", "i2s0_pre", 0,
-		        RK2928_CLKSEL_CON(6), 0,
+			RK2928_CLKSEL_CON(6), 0,
 			RK2928_CLKGATE_CON(0), 8, GFLAGS),
 	MUX(SCLK_I2S0, "sclk_i2s0", mux_sclk_i2s0_p, 0,
 			RK2928_CLKSEL_CON(2), 8, 2, MFLAGS),
@@ -482,7 +482,7 @@ static struct rockchip_clk_branch rk3066a_clk_branches[] __initdata = {
 			RK2928_CLKSEL_CON(3), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(0), 9, GFLAGS),
 	COMPOSITE_FRAC(0, "i2s1_frac", "i2s1_pre", 0,
-		        RK2928_CLKSEL_CON(7), 0,
+			RK2928_CLKSEL_CON(7), 0,
 			RK2928_CLKGATE_CON(0), 10, GFLAGS),
 	MUX(SCLK_I2S1, "sclk_i2s1", mux_sclk_i2s1_p, 0,
 			RK2928_CLKSEL_CON(3), 8, 2, MFLAGS),
@@ -490,7 +490,7 @@ static struct rockchip_clk_branch rk3066a_clk_branches[] __initdata = {
 			RK2928_CLKSEL_CON(4), 0, 7, DFLAGS,
 			RK2928_CLKGATE_CON(0), 11, GFLAGS),
 	COMPOSITE_FRAC(0, "i2s2_frac", "i2s2_pre", 0,
-		        RK2928_CLKSEL_CON(8), 0,
+			RK2928_CLKSEL_CON(8), 0,
 			RK2928_CLKGATE_CON(0), 12, GFLAGS),
 	MUX(SCLK_I2S2, "sclk_i2s2", mux_sclk_i2s2_p, 0,
 			RK2928_CLKSEL_CON(4), 8, 2, MFLAGS),
@@ -662,7 +662,6 @@ static void __init rk3188_common_clk_init(struct device_node *np)
 	if (IS_ERR(clk))
 		pr_warn("%s: could not register clock xin12m: %ld\n",
 			__func__, PTR_ERR(clk));
-
 
 	clk = clk_register_fixed_factor(NULL, "usb480m", "xin24m", 0, 20, 1);
 	if (IS_ERR(clk))

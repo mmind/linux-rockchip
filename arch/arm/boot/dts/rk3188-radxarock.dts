@@ -37,287 +37,279 @@
 		};
 	};
 
-	regulators {
-		compatible = "simple-bus";
+	gpio-keys {
+		compatible = "gpio-keys";
 		#address-cells = <1>;
 		#size-cells = <0>;
+		autorepeat;
 
-		vcc_sd0: fixed-regulator@0 {
-			compatible = "regulator-fixed";
-			reg = <0>;
-
-			regulator-name = "sdmmc-supply";
-			regulator-min-microvolt = <3300000>;
-			regulator-max-microvolt = <3300000>;
-			gpio = <&gpio3 1 GPIO_ACTIVE_LOW>;
-			startup-delay-us = <100000>;
-			vin-supply = <&vcc_io>;
-		};
-
-		vcc_otg: fixed-regulator@1 {
-			compatible = "regulator-fixed";
-			reg = <1>;
-
-			regulator-name = "otg-vbus";
-			regulator-min-microvolt = <5000000>;
-			regulator-max-microvolt = <5000000>;
-			gpio = <&gpio2 31 GPIO_ACTIVE_LOW>;
-			startup-delay-us = <100000>;
-		};
-
-		vcc_usb: fixed-regulator@2 {
-			compatible = "regulator-fixed";
-			reg = <2>;
-
-			regulator-name = "usb-vbus";
-			regulator-min-microvolt = <5000000>;
-			regulator-max-microvolt = <5000000>;
-			gpio = <&gpio0 3 GPIO_ACTIVE_LOW>;
-			startup-delay-us = <100000>;
+		button@0 {
+			gpios = <&gpio0 4 GPIO_ACTIVE_LOW>;
+			linux,code = <116>;
+			label = "GPIO Key Power";
+			linux,input-type = <1>;
+			gpio-key,wakeup = <1>;
+			debounce-interval = <100>;
 		};
 	};
 
-	soc {
-		uart0: serial@10124000 {
-			status = "okay";
+	gpio-leds {
+		compatible = "gpio-leds";
+
+		green {
+			gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+			default-state = "off";
 		};
 
-		uart1: serial@10126000 {
-			status = "okay";
+		yellow {
+			gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+			default-state = "off";
 		};
 
-		uart2: serial@20064000 {
-			pinctrl-names = "default";
-			pinctrl-0 = <&uart2_xfer>;
-			status = "okay";
+		sleep {
+			gpios = <&gpio0 15 0>;
+			default-state = "off";
 		};
+	};
 
-		uart3: serial@20068000 {
-			status = "okay";
-		};
+	ir_recv: gpio-ir-receiver {
+		compatible = "gpio-ir-receiver";
+		gpios = <&gpio0 10 1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ir_recv_pin>;
+	};
 
-		gpio-keys {
-			compatible = "gpio-keys";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			autorepeat;
+	vcc_sd0: sdmmc-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "sdmmc-supply";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio3 1 GPIO_ACTIVE_LOW>;
+		startup-delay-us = <100000>;
+		vin-supply = <&vcc_io>;
+	};
 
-			button@0 {
-				gpios = <&gpio0 4 GPIO_ACTIVE_LOW>;
-				linux,code = <116>;
-				label = "GPIO Key Power";
-				linux,input-type = <1>;
-				gpio-key,wakeup = <1>;
-				debounce-interval = <100>;
-			};
-		};
+	vcc_otg: usb-otg-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "otg-vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&gpio2 31 GPIO_ACTIVE_LOW>;
+		startup-delay-us = <100000>;
+	};
 
-		gpio-leds {
-			compatible = "gpio-leds";
+	vcc_usb: usb-host-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "usb-vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&gpio0 3 GPIO_ACTIVE_LOW>;
+		startup-delay-us = <100000>;
+	};
+};
 
-			green {
-				gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
-				default-state = "off";
-			};
+&emac {
+	status = "okay";
 
-			yellow {
-				gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
-				default-state = "off";
-			};
+	pinctrl-names = "default";
+	pinctrl-0 = <&emac_xfer>, <&emac_mdio>, <&phy_int>;
 
-			sleep {
-				gpios = <&gpio0 15 0>;
-				default-state = "off";
-			};
-		};
+	mac-address = [ c6 ef 91 8e 60 4b ];
+	phy = <&phy0>;
 
-		i2c@0 {
-			compatible = "i2c-gpio";
-			gpios = <&gpio1 26 0   /* sda */
-				 &gpio1 27 0>; /* scl */
-			i2c-gpio,sda-open-drain;
-			i2c-gpio,scl-open-drain;
-			i2c-gpio,delay-us = <2>;	/* ~100 kHz */
-			#address-cells = <1>;
-			#size-cells = <0>;
+	phy0: ethernet-phy@0 {
+		reg = <0>;
+		interrupt-parent = <&gpio3>;
+		interrupts = <26 IRQ_TYPE_LEVEL_LOW>;
+	};
+};
 
-			hym8563@51 {
-				compatible = "haoyu,hym8563";
-				reg = <0x51>;
 
-				interrupt-parent = <&gpio0>;
-				interrupts = <13 IRQ_TYPE_EDGE_FALLING>; /* gpio0_b5 */
 
-				gpios = <&gpio0 13 0>;
+&i2c1 {
+	status = "okay";
+	clock-frequency = <400000>;
 
-				pinctrl-names = "default";
-				pinctrl-0 = <&hym8563_int>;
+	/* due to "random" init ordering and unsupported regulator handling
+	 * in the arc_emac, using the rk3x-i2c breaks the network interface.
+	 * There is a fix in the works though.
+	 */
+	compatible = "i2c-gpio";
+	gpios = <&gpio1 26 0   /* sda */
+		 &gpio1 27 0>; /* scl */
+	i2c-gpio,sda-open-drain;
+	i2c-gpio,scl-open-drain;
+	i2c-gpio,delay-us = <2>;	/* ~100 kHz */
 
-				#clock-cells = <0>;
-				clock-output-names = "xin32k";
-			};
+	hym8563@51 {
+		compatible = "haoyu,hym8563";
+		reg = <0x51>;
 
-			pmic: act8846@5a {
-				compatible = "active-semi,act8846";
-				reg = <0x5a>;
-				status = "okay";
+		interrupt-parent = <&gpio0>;
+		interrupts = <13 IRQ_TYPE_EDGE_FALLING>; /* gpio0_b5 */
 
-				pinctrl-names = "default";
-				pinctrl-0 = <&act8846_dvs0_ctl>;
+		gpios = <&gpio0 13 0>;
 
-				regulators {
-					vcc_ddr: DCDC_REG1 { /* vccdr */
-						regulator-name = "VCC_DDR";
-						regulator-min-microvolt = <1200000>;
-						regulator-max-microvolt = <1200000>;
-						regulator-always-on;
-					};
+		pinctrl-names = "default";
+		pinctrl-0 = <&hym8563_int>;
 
-					vdd_log: DCDC_REG2 {
-						regulator-name = "VDD_LOG";
-						regulator-min-microvolt = <1000000>;
-						regulator-max-microvolt = <1000000>;
-						regulator-always-on;
-					};
+		#clock-cells = <0>;
+		clock-output-names = "xin32k";
+	};
 
-					vdd_arm: DCDC_REG3 {
-						regulator-name = "VDD_ARM";
-						regulator-min-microvolt = <875000>;
-						regulator-max-microvolt = <1300000>;
-						regulator-always-on;
-					};
 
-					vcc_io: DCDC_REG4 {
-						regulator-name = "VCC_IO";
-						regulator-min-microvolt = <3300000>;
-						regulator-max-microvolt = <3300000>;
-						regulator-always-on;
-					};
+	act8846: act8846@5a {
+		compatible = "active-semi,act8846";
+		reg = <0x5a>;
+		status = "okay";
 
-					vdd_10: LDO_REG5 {
-						regulator-name = "VDD_10";
-						regulator-min-microvolt = <1000000>;
-						regulator-max-microvolt = <1000000>;
-						regulator-always-on;
-					};
+		pinctrl-names = "default";
+		pinctrl-0 = <&act8846_dvs0_ctl>;
 
-					vdd_hdmi: LDO_REG6 {
-						regulator-name = "VDD_HDMI";
-						regulator-min-microvolt = <2500000>;
-						regulator-max-microvolt = <2500000>;
-						regulator-always-on;
-					};
-
-					vcc18: LDO_REG7 {
-						regulator-name = "VCC_18";
-						regulator-min-microvolt = <1800000>;
-						regulator-max-microvolt = <1800000>;
-						regulator-always-on;
-					};
-
-					vcca_33: LDO_REG8 {
-						regulator-name = "VCCA_33";
-						regulator-min-microvolt = <3300000>;
-						regulator-max-microvolt = <3300000>;
-						regulator-always-on;
-					};
-
-					vcc_rmii: LDO_REG9 {
-						regulator-name = "VCC_RMII";
-						regulator-min-microvolt = <3300000>;
-						regulator-max-microvolt = <3300000>;
-						regulator-always-on;
-					};
-
-					vccio_wl: LDO_REG10 {
-						regulator-name = "VCCIO_WL";
-						regulator-min-microvolt = <3300000>;
-						regulator-max-microvolt = <3300000>;
-						regulator-always-on;
-					};
-
-					vcc_18: LDO_REG11 {
-						regulator-name = "VCC18_IO";
-						regulator-min-microvolt = <1800000>;
-						regulator-max-microvolt = <1800000>;
-						regulator-always-on;
-					};
-
-					vcc28: LDO_REG12 {
-						regulator-name = "VCC_28";
-						regulator-min-microvolt = <2800000>;
-						regulator-max-microvolt = <2800000>;
-						regulator-always-on;
-					};
-
-					vcc18_rtc: LDO_REG13 {
-						regulator-name = "VCC_RTC";
-						regulator-min-microvolt = <1800000>;
-						regulator-max-microvolt = <1800000>;
-						regulator-always-on;
-					};
-				};
-			};
-		};
-
-		pinctrl@20008000 {
-			pcfg_output_low: pcfg_output_low {
-				output-low;
+		regulators {
+			vcc_ddr: REG1 {
+				regulator-name = "VCC_DDR";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>;
+				regulator-always-on;
 			};
 
-			hym8563 {
-				hym8563_int: hym8563-int {
-					rockchip,pins = <RK_GPIO0 0 RK_FUNC_GPIO &pcfg_pull_up>;
-				};
+			vdd_log: REG2 {
+				regulator-name = "VDD_LOG";
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <1000000>;
+				regulator-always-on;
 			};
 
-			act8846 {
-				/*
-				 * set the dvs0_ctl pin low, this makes the
-				 * act8846 only use the vset1 values in
-				 * regulators supporting switching.
-				 */
-				act8846_dvs0_ctl: act8846-dvs0-ctl {
-					rockchip,pins = <RK_GPIO3 27 RK_FUNC_GPIO &pcfg_output_low>;
-				};
+			vdd_arm: REG3 {
+				regulator-name = "VDD_ARM";
+				regulator-min-microvolt = <875000>;
+				regulator-max-microvolt = <1300000>;
+				regulator-always-on;
 			};
 
-			lan8720a  {
-				phy_int: phy-int {
-					rockchip,pins = <RK_GPIO3 26 RK_FUNC_GPIO &pcfg_pull_up>;
-				};
+			vcc_io: REG4 {
+				regulator-name = "VCC_IO";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
 			};
-		};
 
-		emac@10204000 {
-			status = "okay";
-
-			pinctrl-names = "default";
-			pinctrl-0 = <&emac_xfer>, <&emac_mdio>, <&phy_int>;
-
-			mac-address = [ c6 ef 91 8e 60 4b ];
-			phy = <&phy0>;
-
-			phy0: ethernet-phy@0 {
-				reg = <0>;
-				interrupt-parent = <&gpio3>;
-				interrupts = <26 IRQ_TYPE_LEVEL_LOW>;
+			vdd_10: REG5 {
+				regulator-name = "VDD_10";
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <1000000>;
+				regulator-always-on;
 			};
-		};
 
-		dwmmc@10214000 { /* sdmmc */
-			num-slots = <1>;
-			status = "okay";
+			vdd_hdmi: REG6 {
+				regulator-name = "VDD_HDMI";
+				regulator-min-microvolt = <2500000>;
+				regulator-max-microvolt = <2500000>;
+				regulator-always-on;
+			};
 
-			pinctrl-names = "default";
-			pinctrl-0 = <&sd0_clk &sd0_cmd &sd0_cd &sd0_bus4>;
-			vmmc-supply = <&vcc_sd0>;
+			vcc18: REG7 {
+				regulator-name = "VCC_18";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				regulator-always-on;
+			};
 
-			slot@0 {
-				reg = <0>;
-				bus-width = <4>;
-				disable-wp;
+			vcca_33: REG8 {
+				regulator-name = "VCCA_33";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+
+			vcc_rmii: REG9 {
+				regulator-name = "VCC_RMII";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+
+			vccio_wl: REG10 {
+				regulator-name = "VCCIO_WL";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+
+			vcc_18: REG11 {
+				regulator-name = "VCC18_IO";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				regulator-always-on;
+			};
+
+			vcc28: REG12 {
+				regulator-name = "VCC_28";
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
+				regulator-always-on;
 			};
 		};
 	};
+};
+
+&mmc0 {
+	num-slots = <1>;
+	status = "okay";
+	vmmc-supply = <&vcc_sd0>;
+
+	slot@0 {
+		reg = <0>;
+		bus-width = <4>;
+		disable-wp;
+	};
+};
+
+&pinctrl {
+	pcfg_output_low: pcfg-output-low {
+		output-low;
+	};
+
+	act8846 {
+		act8846_dvs0_ctl: act8846-dvs0-ctl {
+			rockchip,pins = <RK_GPIO3 27 RK_FUNC_GPIO &pcfg_output_low>;
+		};
+	};
+
+	hym8563 {
+		hym8563_int: hym8563-int {
+			rockchip,pins = <RK_GPIO0 0 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	lan8720a  {
+		phy_int: phy-int {
+			rockchip,pins = <RK_GPIO3 26 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	ir-receiver {
+		ir_recv_pin: ir-recv-pin {
+			rockchip,pins = <RK_GPIO0 10 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&uart1 {
+	status = "okay";
+};
+
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_xfer>;
+	status = "okay";
+};
+
+&uart3 {
+	status = "okay";
 };
