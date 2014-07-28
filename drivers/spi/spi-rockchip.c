@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2014, Fuzhou Rockchip Electronics Co., Ltd
- * Author: addy ke <addy.ke@rock-chips.com>
+ * Author: Addy Ke <addy.ke@rock-chips.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -186,7 +186,7 @@ struct rockchip_spi {
 	void *rx_end;
 
 	u32 state;
-
+	/* protect state */
 	spinlock_t lock;
 
 	struct completion xfer_completion;
@@ -212,6 +212,18 @@ static inline void flush_fifo(struct rockchip_spi *rs)
 {
 	while (readl_relaxed(rs->regs + ROCKCHIP_SPI_RXFLR))
 		readl_relaxed(rs->regs + ROCKCHIP_SPI_RXDR);
+}
+
+static inline void wait_for_idle(struct rockchip_spi *rs)
+{
+	unsigned long timeout = jiffies + msecs_to_jiffies(5);
+
+	do {
+		if (!(readl_relaxed(rs->regs + ROCKCHIP_SPI_SR) & SR_BUSY))
+			return;
+	} while (time_before(jiffies, timeout));
+
+	dev_warn(rs->dev, "spi controller is in busy state!\n");
 }
 
 static u32 get_fifo_len(struct rockchip_spi *rs)
@@ -278,15 +290,10 @@ static void rockchip_spi_set_cs(struct spi_device *spi, bool enable)
 }
 
 static int rockchip_spi_prepare_message(struct spi_master *master,
-		struct spi_message *msg)
+					struct spi_message *msg)
 {
 	struct rockchip_spi *rs = spi_master_get_devdata(master);
 	struct spi_device *spi = msg->spi;
-
-	if (spi->mode & SPI_CS_HIGH) {
-		dev_err(rs->dev, "spi_cs_hign: not support\n");
-		return -EINVAL;
-	}
 
 	rs->mode = spi->mode;
 
@@ -294,13 +301,19 @@ static int rockchip_spi_prepare_message(struct spi_master *master,
 }
 
 static int rockchip_spi_unprepare_message(struct spi_master *master,
-		struct spi_message *msg)
+					  struct spi_message *msg)
 {
 	unsigned long flags;
 	struct rockchip_spi *rs = spi_master_get_devdata(master);
 
 	spin_lock_irqsave(&rs->lock, flags);
 
+	/*
+	 * For DMA mode, we need terminate DMA channel and flush
+	 * fifo for the next transfer if DMA thansfer timeout.
+	 * unprepare_message() was called by core if transfer complete
+	 * or timeout. Maybe it is reasonable for error handling here.
+	 */
 	if (rs->use_dma) {
 		if (rs->state & RXBUSY) {
 			dmaengine_terminate_all(rs->dma_rx.ch);
@@ -344,7 +357,7 @@ static void rockchip_spi_pio_reader(struct rockchip_spi *rs)
 		else
 			*(u16 *)(rs->rx) = (u16)rxw;
 		rs->rx += rs->n_bytes;
-	};
+	}
 }
 
 static int rockchip_spi_pio_transfer(struct rockchip_spi *rs)
@@ -364,6 +377,10 @@ static int rockchip_spi_pio_transfer(struct rockchip_spi *rs)
 
 		cpu_relax();
 	} while (remain);
+
+	/* If tx, wait until the FIFO data completely. */
+	if (rs->tx)
+		wait_for_idle(rs);
 
 	return 0;
 }
@@ -386,6 +403,9 @@ static void rockchip_spi_dma_txcb(void *data)
 {
 	unsigned long flags;
 	struct rockchip_spi *rs = data;
+
+	/* Wait until the FIFO data completely. */
+	wait_for_idle(rs);
 
 	spin_lock_irqsave(&rs->lock, flags);
 
@@ -414,7 +434,8 @@ static int rockchip_spi_dma_transfer(struct rockchip_spi *rs)
 		rxconf.src_maxburst = rs->n_bytes;
 		dmaengine_slave_config(rs->dma_rx.ch, &rxconf);
 
-		rxdesc = dmaengine_prep_slave_sg(rs->dma_rx.ch,
+		rxdesc = dmaengine_prep_slave_sg(
+				rs->dma_rx.ch,
 				rs->rx_sg.sgl, rs->rx_sg.nents,
 				rs->dma_rx.direction, DMA_PREP_INTERRUPT);
 
@@ -429,7 +450,8 @@ static int rockchip_spi_dma_transfer(struct rockchip_spi *rs)
 		txconf.dst_maxburst = rs->n_bytes;
 		dmaengine_slave_config(rs->dma_tx.ch, &txconf);
 
-		txdesc = dmaengine_prep_slave_sg(rs->dma_tx.ch,
+		txdesc = dmaengine_prep_slave_sg(
+				rs->dma_tx.ch,
 				rs->tx_sg.sgl, rs->tx_sg.nents,
 				rs->dma_tx.direction, DMA_PREP_INTERRUPT);
 
@@ -495,13 +517,13 @@ static void rockchip_spi_config(struct rockchip_spi *rs)
 
 	spi_set_clk(rs, div);
 
-	dev_dbg(rs->dev, "cr0 0x%x, div %d\n",
-			cr0, div);
+	dev_dbg(rs->dev, "cr0 0x%x, div %d\n", cr0, div);
 
 	spi_enable_chip(rs, 1);
 }
 
-static int rockchip_spi_transfer_one(struct spi_master *master,
+static int rockchip_spi_transfer_one(
+		struct spi_master *master,
 		struct spi_device *spi,
 		struct spi_transfer *xfer)
 {
@@ -528,11 +550,6 @@ static int rockchip_spi_transfer_one(struct spi_master *master,
 	rs->tx_sg = xfer->tx_sg;
 	rs->rx_sg = xfer->rx_sg;
 
-	/* Delay until the FIFO data completely */
-	if (xfer->tx_buf)
-		xfer->delay_usecs
-			= rs->fifo_len * rs->bpw * 1000000 / rs->speed;
-
 	if (rs->tx && rs->rx)
 		rs->tmode = CR0_XFM_TR;
 	else if (rs->tx)
@@ -556,8 +573,8 @@ static int rockchip_spi_transfer_one(struct spi_master *master,
 }
 
 static bool rockchip_spi_can_dma(struct spi_master *master,
-		struct spi_device *spi,
-		struct spi_transfer *xfer)
+				 struct spi_device *spi,
+				 struct spi_transfer *xfer)
 {
 	struct rockchip_spi *rs = spi_master_get_devdata(master);
 
@@ -572,10 +589,9 @@ static int rockchip_spi_probe(struct platform_device *pdev)
 	struct resource *mem;
 
 	master = spi_alloc_master(&pdev->dev, sizeof(struct rockchip_spi));
-	if (!master) {
-		dev_err(&pdev->dev, "No memory for spi_master\n");
+	if (!master)
 		return -ENOMEM;
-	}
+
 	platform_set_drvdata(pdev, master);
 
 	rs = spi_master_get_devdata(master);
@@ -636,7 +652,7 @@ static int rockchip_spi_probe(struct platform_device *pdev)
 
 	master->auto_runtime_pm = true;
 	master->bus_num = pdev->id;
-	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_CS_HIGH | SPI_LOOP;
+	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LOOP;
 	master->num_chipselect = 2;
 	master->dev.of_node = pdev->dev.of_node;
 	master->bits_per_word_mask = SPI_BPW_MASK(16) | SPI_BPW_MASK(8);
@@ -675,8 +691,6 @@ static int rockchip_spi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register master\n");
 		goto err_register_master;
 	}
-
-	dev_info(&pdev->dev, "Rockchip SPI controller initialized\n");
 
 	return 0;
 
@@ -800,6 +814,8 @@ static const struct dev_pm_ops rockchip_spi_pm = {
 
 static const struct of_device_id rockchip_spi_dt_match[] = {
 	{ .compatible = "rockchip,rk3066-spi", },
+	{ .compatible = "rockchip,rk3188-spi", },
+	{ .compatible = "rockchip,rk3288-spi", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, rockchip_spi_dt_match);
@@ -817,6 +833,6 @@ static struct platform_driver rockchip_spi_driver = {
 
 module_platform_driver(rockchip_spi_driver);
 
-MODULE_AUTHOR("addy ke <addy.ke@rock-chips.com>");
+MODULE_AUTHOR("Addy Ke <addy.ke@rock-chips.com>");
 MODULE_DESCRIPTION("ROCKCHIP SPI Controller Driver");
 MODULE_LICENSE("GPL v2");
