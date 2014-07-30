@@ -15,7 +15,6 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
-#include <dt-bindings/clock/rk3188-cru.h>
 #include "skeleton.dtsi"
 
 / {
