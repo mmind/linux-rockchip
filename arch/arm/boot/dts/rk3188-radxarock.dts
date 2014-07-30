@@ -313,3 +313,7 @@
 &uart3 {
 	status = "okay";
 };
+
+&wdt {
+	status = "okay";
+};
