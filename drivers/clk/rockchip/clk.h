@@ -344,6 +344,7 @@ struct rockchip_clk_branch {
 
 void rockchip_clk_init(struct device_node *np, void __iomem *base,
 		       unsigned long nr_clks);
+void rockchip_clk_finalize(struct device_node *np);
 struct regmap *rockchip_clk_get_grf(void);
 void rockchip_clk_add_lookup(struct clk *clk, unsigned int id);
 void rockchip_clk_register_branches(struct rockchip_clk_branch *clk_list,

@@ -711,6 +711,8 @@ static void __init rk3288_clk_init(struct device_node *np)
 	rockchip_clk_register_branches(rk3288_clk_branches,
 				  ARRAY_SIZE(rk3288_clk_branches));
 
+	rockchip_clk_finalize(np);
+
 	rockchip_register_softrst(np, 9, reg_base + RK3288_SOFTRST_CON(0),
 				  ROCKCHIP_SOFTRST_HIWORD_MASK);
 }
