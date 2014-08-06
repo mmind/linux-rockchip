@@ -123,10 +123,6 @@ void __init rockchip_clk_init(struct device_node *np, void __iomem *base,
 
 	clk_data.clks = clk_table;
 	clk_data.clk_num = nr_clks;
-}
-
-void __init rockchip_clk_finalize(struct device_node *np)
-{
 	of_clk_add_provider(np, of_clk_src_onecell_get, &clk_data);
 }
 
