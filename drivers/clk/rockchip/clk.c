@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/clk/clk-conf.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include "clk.h"
@@ -125,6 +126,18 @@ void __init rockchip_clk_init(struct device_node *np, void __iomem *base,
 	clk_data.clk_num = nr_clks;
 	of_clk_add_provider(np, of_clk_src_onecell_get, &clk_data);
 }
+
+/**
+ * Set clock-defaults again, after grf regmap is available for PLLs.
+ */
+static int __init rockchip_clk_set_defaults(void)
+{
+	if (cru_node)
+		return of_clk_set_defaults(cru_node, true);
+
+	return 0;
+}
+arch_initcall(rockchip_clk_set_defaults);
 
 struct regmap *rockchip_clk_get_grf(void)
 {
