@@ -26,7 +26,6 @@
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/io.h>
-#include <linux/scatterlist.h>
 #include <linux/dmaengine.h>
 
 #define DRIVER_NAME "rockchip-spi"
@@ -601,7 +600,6 @@ static int rockchip_spi_probe(struct platform_device *pdev)
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	rs->regs = devm_ioremap_resource(&pdev->dev, mem);
 	if (IS_ERR(rs->regs)) {
-		dev_err(&pdev->dev, "Failed to map SPI region\n");
 		ret =  PTR_ERR(rs->regs);
 		goto err_ioremap_resource;
 	}
@@ -642,6 +640,7 @@ static int rockchip_spi_probe(struct platform_device *pdev)
 	rs->fifo_len = get_fifo_len(rs);
 	if (!rs->fifo_len) {
 		dev_err(&pdev->dev, "Failed to get fifo length\n");
+		ret = -EINVAL;
 		goto err_get_fifo_len;
 	}
 
