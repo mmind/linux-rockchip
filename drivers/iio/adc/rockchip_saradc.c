@@ -47,7 +47,6 @@ struct rockchip_saradc {
 	struct clk		*clk;
 	struct completion	completion;
 	struct regulator	*vref;
-	int			vref_mv;
 	u16			last_val;
 };
 
@@ -56,13 +55,18 @@ static int rockchip_saradc_read_raw(struct iio_dev *indio_dev,
 				    int *val, int *val2, long mask)
 {
 	struct rockchip_saradc *info = iio_priv(indio_dev);
+	int ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 		mutex_lock(&indio_dev->mlock);
 
+		reinit_completion(&info->completion);
+
+		/* 8 clock periods as delay between power up and start cmd */
+		writel_relaxed(8, info->regs + SARADC_DLY_PU_SOC);
+
 		/* Select the channel to be used and trigger conversion */
-		writel_relaxed(0x08, info->regs + SARADC_DLY_PU_SOC);
 		writel(SARADC_CTRL_POWER_CTRL
 				| (chan->channel & SARADC_CTRL_CHN_MASK)
 				| SARADC_CTRL_IRQ_ENABLE,
@@ -79,7 +83,13 @@ static int rockchip_saradc_read_raw(struct iio_dev *indio_dev,
 		mutex_unlock(&indio_dev->mlock);
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SCALE:
-		*val = info->vref_mv;
+		ret = regulator_get_voltage(info->vref);
+		if (ret < 0) {
+			dev_err(&indio_dev->dev, "failed to get voltage\n");
+			return ret;
+		}
+
+		*val = ret / 1000;
 		*val2 = SARADC_BITS;
 		return IIO_VAL_FRACTIONAL_LOG2;
 	default:
@@ -129,12 +139,12 @@ static int rockchip_saradc_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	struct iio_dev *indio_dev = NULL;
 	struct resource	*mem;
-	int ret = -ENODEV;
+	int ret;
 	int irq;
 	u32 rate;
 
 	if (!np)
-		return ret;
+		return -ENODEV;
 
 	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(*info));
 	if (!indio_dev) {
@@ -144,9 +154,11 @@ static int rockchip_saradc_probe(struct platform_device *pdev)
 	info = iio_priv(indio_dev);
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	info->regs = devm_request_and_ioremap(&pdev->dev, mem);
-	if (!info->regs)
-		return -ENOMEM;
+	info->regs = devm_ioremap_resource(&pdev->dev, mem);
+	if (IS_ERR(info->regs))
+		return PTR_ERR(info->regs);
+
+	init_completion(&info->completion);
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
@@ -160,8 +172,6 @@ static int rockchip_saradc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed requesting irq %d\n", irq);
 		return ret;
 	}
-
-	init_completion(&info->completion);
 
 	info->pclk = devm_clk_get(&pdev->dev, "apb_pclk");
 	if (IS_ERR(info->pclk)) {
@@ -182,37 +192,30 @@ static int rockchip_saradc_probe(struct platform_device *pdev)
 		return PTR_ERR(info->vref);
 	}
 
-	/* use a default of 1MHz for the converter clock */
-	if (of_property_read_u32(np, "clock-frequency", &rate))
-		rate = 1000000;
-
-	ret = clk_set_rate(info->clk, rate);
-	if (ret) {
+	/*
+	 * Use a default of 1MHz for the converter clock.
+	 * This may become user-configurable in the future.
+	 */
+	ret = clk_set_rate(info->clk, 1000000);
+	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to set adc clk rate, %d\n", ret);
 		return ret;
 	}
 
 	ret = regulator_enable(info->vref);
-	if (ret) {
+	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to enable vref regulator\n");
 		return ret;
 	}
 
-	ret = regulator_get_voltage(info->vref);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "failed to get regulator voltage\n");
-		goto err_reg_voltage;
-	}
-	info->vref_mv = ret / 1000;
-
 	ret = clk_prepare_enable(info->pclk);
-	if (ret) {
+	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to enable pclk\n");
 		goto err_reg_voltage;
 	}
 
 	ret = clk_prepare_enable(info->clk);
-	if (ret) {
+	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to enable converter clock\n");
 		goto err_pclk;
 	}
