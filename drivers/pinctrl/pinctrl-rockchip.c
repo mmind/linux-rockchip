@@ -848,23 +848,6 @@ static int rockchip_pmx_enable(struct pinctrl_dev *pctldev, unsigned selector,
 	return 0;
 }
 
-static void rockchip_pmx_disable(struct pinctrl_dev *pctldev,
-					unsigned selector, unsigned group)
-{
-	struct rockchip_pinctrl *info = pinctrl_dev_get_drvdata(pctldev);
-	const unsigned int *pins = info->groups[group].pins;
-	struct rockchip_pin_bank *bank;
-	int cnt;
-
-	dev_dbg(info->dev, "disable function %s group %s\n",
-		info->functions[selector].name, info->groups[group].name);
-
-	for (cnt = 0; cnt < info->groups[group].npins; cnt++) {
-		bank = pin_to_bank(info, pins[cnt]);
-		rockchip_set_mux(bank, pins[cnt] - bank->pin_base, 0);
-	}
-}
-
 /*
  * The calls to gpio_direction_output() and gpio_direction_input()
  * leads to this function call (via the pinctrl_gpio_direction_{input|output}()
@@ -907,7 +890,6 @@ static const struct pinmux_ops rockchip_pmx_ops = {
 	.get_function_name	= rockchip_pmx_get_func_name,
 	.get_function_groups	= rockchip_pmx_get_groups,
 	.enable			= rockchip_pmx_enable,
-	.disable		= rockchip_pmx_disable,
 	.gpio_set_direction	= rockchip_pmx_gpio_set_direction,
 };
 
@@ -1627,10 +1609,7 @@ fail:
 	for (--i, --bank; i >= 0; --i, --bank) {
 		if (!bank->valid)
 			continue;
-
-		if (gpiochip_remove(&bank->gpio_chip))
-			dev_err(&pdev->dev, "gpio chip %s remove failed\n",
-							bank->gpio_chip.label);
+		gpiochip_remove(&bank->gpio_chip);
 	}
 	return ret;
 }
@@ -1640,20 +1619,15 @@ static int rockchip_gpiolib_unregister(struct platform_device *pdev,
 {
 	struct rockchip_pin_ctrl *ctrl = info->ctrl;
 	struct rockchip_pin_bank *bank = ctrl->pin_banks;
-	int ret = 0;
 	int i;
 
-	for (i = 0; !ret && i < ctrl->nr_banks; ++i, ++bank) {
+	for (i = 0; i < ctrl->nr_banks; ++i, ++bank) {
 		if (!bank->valid)
 			continue;
-
-		ret = gpiochip_remove(&bank->gpio_chip);
+		gpiochip_remove(&bank->gpio_chip);
 	}
 
-	if (ret)
-		dev_err(&pdev->dev, "gpio chip remove failed\n");
-
-	return ret;
+	return 0;
 }
 
 static int rockchip_get_bank_data(struct rockchip_pin_bank *bank,

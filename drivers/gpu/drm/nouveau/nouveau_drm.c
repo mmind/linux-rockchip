@@ -652,12 +652,12 @@ int nouveau_pmops_resume(struct device *dev)
 	ret = nouveau_do_resume(drm_dev);
 	if (ret)
 		return ret;
-	if (drm_dev->mode_config.num_crtc)
-		nouveau_fbcon_set_suspend(drm_dev, 0);
 
-	nouveau_fbcon_zfill_all(drm_dev);
-	if (drm_dev->mode_config.num_crtc)
+	if (drm_dev->mode_config.num_crtc) {
 		nouveau_display_resume(drm_dev);
+		nouveau_fbcon_set_suspend(drm_dev, 0);
+	}
+
 	return 0;
 }
 
@@ -683,11 +683,12 @@ static int nouveau_pmops_thaw(struct device *dev)
 	ret = nouveau_do_resume(drm_dev);
 	if (ret)
 		return ret;
-	if (drm_dev->mode_config.num_crtc)
-		nouveau_fbcon_set_suspend(drm_dev, 0);
-	nouveau_fbcon_zfill_all(drm_dev);
-	if (drm_dev->mode_config.num_crtc)
+
+	if (drm_dev->mode_config.num_crtc) {
 		nouveau_display_resume(drm_dev);
+		nouveau_fbcon_set_suspend(drm_dev, 0);
+	}
+
 	return 0;
 }
 
@@ -844,6 +845,7 @@ driver = {
 	.gem_prime_export = drm_gem_prime_export,
 	.gem_prime_import = drm_gem_prime_import,
 	.gem_prime_pin = nouveau_gem_prime_pin,
+	.gem_prime_res_obj = nouveau_gem_prime_res_obj,
 	.gem_prime_unpin = nouveau_gem_prime_unpin,
 	.gem_prime_get_sg_table = nouveau_gem_prime_get_sg_table,
 	.gem_prime_import_sg_table = nouveau_gem_prime_import_sg_table,
