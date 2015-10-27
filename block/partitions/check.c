@@ -35,6 +35,7 @@
 #include "karma.h"
 #include "sysv68.h"
 #include "cmdline.h"
+#include "mtdpart.h"
 
 int warn_no_part = 1; /*This is ugly: should make genhd removable media aware*/
 
@@ -43,6 +44,9 @@ static int (*check_part[])(struct parsed_partitions *) = {
 	 * Probe partition formats with tables at disk address 0
 	 * that also have an ADFS boot block at 0xdc0.
 	 */
+#if CONFIG_MMC_DW_ROCKCHIP
+	mtdpart_partition,
+#endif
 #ifdef CONFIG_ACORN_PARTITION_ICS
 	adfspart_check_ICS,
 #endif
