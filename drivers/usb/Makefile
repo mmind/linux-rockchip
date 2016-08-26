@@ -43,6 +43,7 @@ obj-$(CONFIG_USB_ACM)		+= class/
 obj-$(CONFIG_USB_PRINTER)	+= class/
 obj-$(CONFIG_USB_WDM)		+= class/
 obj-$(CONFIG_USB_TMC)		+= class/
+obj-$(CONFIG_USB_GOOGLE_SERVO)	+= class/
 
 obj-$(CONFIG_USB_STORAGE)	+= storage/
 obj-$(CONFIG_USB)		+= storage/
