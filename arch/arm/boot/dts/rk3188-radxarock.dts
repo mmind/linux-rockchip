@@ -4,6 +4,7 @@
  */
 
 /dts-v1/;
+#include <dt-bindings/i2c/i2c.h>
 #include <dt-bindings/input/input.h>
 #include "rk3188.dtsi"
 
@@ -49,6 +50,20 @@
 			label = "rock:red:power";
 			gpios = <&gpio0 RK_PB7 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
+		};
+	};
+
+	hdmi_sound: hdmi-sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+//		simple-audio-card,mclk-fs = <256>;
+		simple-audio-card,name = "hdmi-sound";
+
+		simple-audio-card,cpu {
+			sound-dai = <&i2s0>;
+		};
+		simple-audio-card,codec {
+			sound-dai = <&it66121>;
 		};
 	};
 
@@ -211,7 +226,7 @@
 				regulator-always-on;
 			};
 
-			vcc_io: REG4 {
+			vcc_io: vcc_hdmi: REG4 {
 				regulator-name = "VCC_IO";
 				regulator-min-microvolt = <3300000>;
 				regulator-max-microvolt = <3300000>;
@@ -276,6 +291,41 @@
 	};
 };
 
+&i2c2 {
+	status = "okay";
+
+	it66121: hdmi@4c {
+		compatible = "ite,it66121";
+		reg = <0x4c>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <RK_PD6 IRQ_TYPE_LEVEL_LOW>;
+		ite,cec-address = <0x4e>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hdmi_int>;
+		reset-gpios = <&gpio3 RK_PB2 GPIO_ACTIVE_LOW>;
+		#sound-dai-cells = <0>;
+
+		avcc12-supply = <&vdd_hdmi>;
+		dvdd12-supply = <&vdd_hdmi>;
+		ivdd12-supply = <&vdd_hdmi>;
+		ovdd-supply = <&vcc_io>;
+		ovdd33-supply = <&vcc_hdmi>;
+		pvcc12-supply = <&vdd_hdmi>;
+		pvcc33-supply = <&vcc_hdmi>;
+		vcc33-supply = <&vcc_hdmi>;
+
+		port {
+			it66121_in_vop1: endpoint {
+				remote-endpoint = <&vop1_out_it66121>;
+			};
+		};
+	};
+};
+
+&i2s0 {
+	status = "okay";
+};
+
 &mmc0 {
 	status = "okay";
 	pinctrl-names = "default";
@@ -308,6 +358,12 @@
 	act8846 {
 		act8846_dvs0_ctl: act8846-dvs0-ctl {
 			rockchip,pins = <RK_GPIO3 27 RK_FUNC_GPIO &pcfg_output_low>;
+		};
+	};
+
+	hdmi {
+		hdmi_int: hdmi-int {
+			rockchip,pins = <2 RK_PD6 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};
 
@@ -375,6 +431,26 @@
 
 &usb_otg {
 	status = "okay";
+};
+
+&vop0 {
+	status = "okay";
+};
+
+&vop0_out {
+	/* rk1000 */
+};
+
+&vop1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&lcdc1_dclk &lcdc1_den &lcdc1_hsync &lcdc1_vsync &lcdc1_rgb24>;
+	status = "okay";
+};
+
+&vop1_out {
+	vop1_out_it66121: endpoint {
+		remote-endpoint = <&it66121_in_vop1>;
+	};
 };
 
 &wdt {
