@@ -252,7 +252,7 @@
 	snps,reset-active-low;
 	snps,reset-delays-us = <0 10000 50000>;
 	tx_delay = <0x28>;
-	rx_delay = <0x1b>;
+	rx_delay = <0x1f>;
 	status = "okay";
 };
 
