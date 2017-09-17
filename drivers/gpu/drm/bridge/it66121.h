@@ -1,0 +1,1033 @@
+#ifndef _ITE_IT66121_H_
+#define _ITE_IT66121_H_
+
+#define IT66121_VENDOR_ID0			0x00
+#define IT66121_VENDOR_ID1			0x01
+#define IT66121_DEVICE_ID0			0x02
+#define IT66121_DEVICE_ID1			0x03
+#define IT66121_DEVICE_ID1_DEVID_SHIFT		0
+#define IT66121_DEVICE_ID1_DEVID_MASK		0xf
+#define IT66121_DEVICE_ID1_REVID_SHIFT		4
+#define IT66121_DEVICE_ID1_REVID_MASK		0xf
+
+#define IT66121_SW_RST				0x04
+#define IT66121_SW_RST_ENTEST			BIT(7)
+#define IT66121_SW_RST_REF			BIT(5)
+#define IT66121_SW_RST_SOFT_AUD			BIT(4)
+#define IT66121_SW_RST_SOFT_VID			BIT(3)
+#define IT66121_SW_RST_AUDIO_FIFO		BIT(2)
+#define IT66121_SW_RST_HDMI			BIT(1)
+#define IT66121_SW_RST_HDCP			BIT(0)
+
+#define IT66121_INT_CTRL			0x05
+#define IT66121_INT_CTRL_POL_ACT_HIGH		BIT(7)
+#define IT66121_INT_CTRL_PUSHPULL		0
+#define IT66121_INT_CTRL_OPENDRAIN		BIT(6)
+#define IT66121_INT_CTRL_EN_INT			BIT(5)
+#define IT66121_INT_CTRL_REFCLK_DIV_SHIFT	2
+#define IT66121_INT_CTRL_REFCLK_DIV_MASK	0x3
+enum {
+	IT66121_INT_CTRL_REFCLK_DIV2 = 0,
+	IT66121_INT_CTRL_REFCLK_DIV4,
+	IT66121_INT_CTRL_REFCLK_DIV8,
+};
+#define IT66121_INT_CTRL_REFCLK_REDUCE		BIT(1)
+#define IT66121_INT_CTRL_TXCLK_POWERDN		BIT(0)
+
+#define IT66121_INT_STAT1			0x06
+#define IT66121_INT_STAT1_AUDIO_OVERFLOW	BIT(7)
+//#define IT66121_INT_STAT1_ROMACQ_NOACK		BIT(6)
+#define IT66121_INT_STAT1_DDC_NOACK		BIT(5)
+#define IT66121_INT_STAT1_DDC_FIFO_ERR		BIT(4)
+//#define IT66121_INT_STAT1_ROMACQ_BUS_HANG	BIT(3)
+#define IT66121_INT_STAT1_DDC_BUS_HANG		BIT(2)
+#define IT66121_INT_STAT1_RX_SENSE		BIT(1)
+#define IT66121_INT_STAT1_HPD			BIT(0)
+
+#define IT66121_INT_STAT2			0x07
+//#define IT66121_INT_STAT2_HDCP_SYNC_DET_FAIL	BIT(7) //PKT_3D_STATUS?
+#define IT66121_INT_STAT2_VID_UNSTABLE		BIT(6)
+#define IT66121_INT_STAT2_PKT_ACP		BIT(5)
+#define IT66121_INT_STAT2_PKT_NULL		BIT(4)
+#define IT66121_INT_STAT2_PKT_GEN		BIT(3)
+#define IT66121_INT_STAT2_KSVLIST_CHK		BIT(2)
+#define IT66121_INT_STAT2_AUTH_DONE		BIT(1)
+#define IT66121_INT_STAT2_AUTH_FAIL		BIT(0)
+
+#define IT66121_INT_STAT3			0x08
+#define IT66121_INT_STAT3_AUD_CTS		BIT(6)
+#define IT66121_INT_STAT3_VSYNC			BIT(5)
+#define IT66121_INT_STAT3_VID_STABLE		BIT(4)
+#define IT66121_INT_STAT3_PKT_MPG		BIT(3)
+//#define IT66121_INT_STAT3_PKT_SPD		BIT(2)
+#define IT66121_INT_STAT3_PKT_AUD		BIT(1)
+#define IT66121_INT_STAT3_PKT_AVI		BIT(0)
+
+#define IT66121_INT_MASK1			0x09
+#define IT66121_INT_MASK1_AUDIO_OVERFLOW	BIT(7)
+#define IT66121_INT_MASK1_DDC_NOACK		BIT(5)
+#define IT66121_INT_MASK1_DDC_FIFO_ERR		BIT(4)
+#define IT66121_INT_MASK1_DDC_BUS_HANG		BIT(2)
+#define IT66121_INT_MASK1_RX_SENSE		BIT(1)
+#define IT66121_INT_MASK1_HPD			BIT(0)
+
+#define IT66121_INT_MASK2			0x0a
+#define IT66121_INT_MASK2_PKT_AVI		BIT(7)
+#define IT66121_INT_MASK2_VID_UNSTABLE		BIT(6)
+#define IT66121_INT_MASK2_PKT_ACP		BIT(5)
+#define IT66121_INT_MASK2_PKT_NULL		BIT(4)
+#define IT66121_INT_MASK2_PKT_GEN		BIT(3)
+#define IT66121_INT_MASK2_KSVLIST_CHK		BIT(2)
+#define IT66121_INT_MASK2_AUTH_DONE		BIT(1)
+#define IT66121_INT_MASK2_AUTH_FAIL		BIT(0)
+
+#define IT66121_INT_MASK3			0x0b
+// #define IT66121_INT_MASK3_HDCP_SYNC_DET_FAIL	BIT(6) PKT_3D_MASK?
+#define IT66121_INT_MASK3_AUD_CTS		BIT(5)
+#define IT66121_INT_MASK3_VSYNC			BIT(4)
+#define IT66121_INT_MASK3_VID_STABLE		BIT(3)
+#define IT66121_INT_MASK3_PKT_MPG		BIT(2)
+//#define IT66121_INT_MASK3_PKT_SPD		BIT(1)
+#define IT66121_INT_MASK3_PKT_AUD		BIT(0)
+
+#define IT66121_INT_CLR0			0x0c
+#define IT66121_INT_CLR0_PKT_ACP		BIT(7)
+#define IT66121_INT_CLR0_PKT_NULL		BIT(6)
+#define IT66121_INT_CLR0_PKT_GEN		BIT(5)
+#define IT66121_INT_CLR0_KSVLIST_CHK		BIT(4)
+#define IT66121_INT_CLR0_AUTH_DONE		BIT(3)
+#define IT66121_INT_CLR0_AUTH_FAIL		BIT(2)
+#define IT66121_INT_CLR0_RX_SENSE		BIT(1)
+#define IT66121_INT_CLR0_HPD			BIT(0)
+
+#define IT66121_INT_CLR1			0x0d
+#define IT66121_INT_CLR1_VSYNC			BIT(7)
+#define IT66121_INT_CLR1_VID_STABLE		BIT(6)
+#define IT66121_INT_CLR1_PKT_MPG		BIT(5)
+// #define IT66121_INT_CLR1_PKT_SPD		BIT(4)
+#define IT66121_INT_CLR1_PKT_AUD		BIT(3)
+#define IT66121_INT_CLR1_PKT_AVI		BIT(2)
+#define IT66121_INT_CLR1_HDCP_SYNC_DET_FAIL	BIT(1)
+#define IT66121_INT_CLR1_VID_UNSTABLE		BIT(0)
+
+#define IT66121_SYS_STATUS0			0x0e
+#define IT66121_SYS_STATUS0_INT_ACTIVE		BIT(7)
+#define IT66121_SYS_STATUS0_HP_DETECT		BIT(6)
+#define IT66121_SYS_STATUS0_RX_SENSE_DETECT	BIT(5)
+#define IT66121_SYS_STATUS0_TX_VID_STABLE	BIT(4)
+#define IT66121_SYS_STATUS0_CTSINTSTEP_SHIFT	2
+#define IT66121_SYS_STATUS0_CTSINTSTEP_MASK	0x3
+#define IT66121_SYS_STATUS0_CLEAR_AUD_CTS	BIT(1)
+#define IT66121_SYS_STATUS0_INTACTDONE		BIT(0)
+
+#define IT66121_SYS_STATUS1			0x0f
+#define IT66121_SYS_STATUS1_GATE_RCLK		BIT(6)
+#define IT66121_SYS_STATUS1_GATE_IACLK		BIT(5)
+#define IT66121_SYS_STATUS1_GATE_TXCLK		BIT(4)
+#define IT66121_SYS_STATUS1_GATE_CRCLK		BIT(3)
+#define IT66121_SYS_STATUS1_BANK_MASK		0x3
+#define IT66121_SYS_STATUS1_BANK_SHIFT		0
+
+/*
+ * The registers are separated into three register banks:
+ * Reg_000 - Reg_02F are accessible in any register bank.
+ * Reg_030 - Reg_0FF are accessible in register bank0
+ * Reg_130 - Reg_1BF are accessible in register bank1.
+ *                   These are HDMI packet registers.
+ */
+enum {
+	IT66121_SYS_STATUS1_BANK0 = 0,
+	IT66121_SYS_STATUS1_BANK1,
+};
+
+#define IT66121_DDC_MASTER			0x10
+#define IT66121_DDC_MASTER_ROM			BIT(1)
+#define IT66121_DDC_MASTER_DDC			0
+#define IT66121_DDC_MASTER_HOST			BIT(0)
+#define IT66121_DDC_MASTER_HDCP			(0)
+
+#define IT66121_DDC_HEADER			0x11
+enum {
+	IT66121_DDC_HEADER_HDCP = 0x74,
+	IT66121_DDC_HEADER_EDID = 0xa0,
+	IT66121_DDC_HEADER_EEPROM = 0xa2,
+};
+
+#define IT66121_DDC_REQOFFSET			0x12
+#define IT66121_DDC_REQCOUNT			0x13
+#define IT66121_DDC_SEGMENT			0x14
+
+#define IT66121_DDC_CMD				0x15
+enum {
+	IT66121_DDC_CMD_DDC_SEQ_BURST_READ = 0x0,
+	IT66121_DDC_CMD_LINK_CHK_READ = 0x2,
+	IT66121_DDC_CMD_EDID_READ = 0x3,
+	IT66121_DDC_CMD_AKSV_WRITE = 0x4,
+	IT66121_DDC_CMD_AINFO_WRITE = 0x5,
+	IT66121_DDC_CMD_AN_WRITE = 0x6,
+	IT66121_DDC_CMD_FIFO_CLEAR = 0x9,
+	IT66121_DDC_CMD_GEN_SCLCLK = 0xa,
+	IT66121_DDC_CMD_DDC_ABORT = 0xf,
+};
+
+#define IT66121_DDC_STATUS			0x16
+#define IT66121_DDC_STATUS_DONE			BIT(7)
+#define IT66121_DDC_STATUS_ACT			BIT(6)
+#define IT66121_DDC_STATUS_NOACK		BIT(5)
+#define IT66121_DDC_STATUS_WAIT_BUS		BIT(4)
+#define IT66121_DDC_STATUS_ARBILOSE		BIT(3)
+#define IT66121_DDC_STATUS_ERROR		(IT66121_DDC_STATUS_NOACK | \
+						 IT66121_DDC_STATUS_WAIT_BUS | \
+						 IT66121_DDC_STATUS_ARBILOSE)
+#define IT66121_DDC_STATUS_FIFO_FULL		BIT(2)
+#define IT66121_DDC_STATUS_FIFO_EMPTY		BIT(1)
+#define IT66121_DDC_STATUS_VRVALID		BIT(0)
+
+#define IT66121_DDC_READ_FIFO			0x17
+
+#define IT66121_ROM_STARTADDR			0x18
+#define IT66121_HDCP_HEADER			0x19
+#define IT66121_ROM_HEADER			0x1a
+#define IT66121_DDC_BUS_HOLD_TIME		0x1b
+/*#define IT66121_ROM_STATUS			0x1c
+    #define B_TX_ROM_DONE  (1<<7)
+    #define B_TX_ROM_ACTIVE	(1<<6)
+    #define B_TX_ROM_NOACK	(1<<5)
+    #define B_TX_ROM_WAITBUS	(1<<4)
+    #define B_TX_ROM_ARBILOSE	(1<<3)
+    #define B_TX_ROM_BUSHANG	(1<<2)
+*/
+// HDCP
+
+#define IT66121_HDCP_AN_GENERATE		0x1f
+    #define B_TX_START_CIPHER_GEN  1
+    #define B_TX_STOP_CIPHER_GEN   0
+
+
+#define IT66121_HDCP				0x20
+#define IT66121_HDCP_ENABLE_HDCP11		BIT(1)
+#define IT66121_HDCP_DESIRED			BIT(0)
+
+
+#define IT66121_HDCP_AUTH			0x21
+#define IT66121_HDCP_AUTH_FIRE			BIT(0)
+
+#define IT66121_LISTCTRL			0x22
+#define IT66121_LISTCTRL_LISTFAIL		BIT(1)
+#define IT66121_LISTCTRL_LISTDONE		BIT(0)
+
+#define IT66121_AKSV0				0x23
+#define IT66121_AKSV1				0x24
+#define IT66121_AKSV2				0x25
+#define IT66121_AKSV3				0x26
+#define IT66121_AKSV4				0x27
+
+#define REG_TX_AN0  0x28
+#define REG_TX_AN_GEN0  0x30
+
+#define IT66121_ARI0				0x38
+#define IT66121_ARI1				0x39
+#define IT66121_APJ				0x3a
+#define IT66121_BKSV0				0x3b
+#define IT66121_BKSV1				0x3c
+#define IT66121_BKSV2				0x3d
+#define IT66121_BKSV3				0x3e
+#define IT66121_BKSV4				0x3f
+#define IT66121_BRI0				0x40
+#define IT66121_BRI1				0x41
+#define IT66121_BPJ				0x42
+
+#define IT66121_BCAP				0x43
+#define IT66121_BCAP_HDCP_REPEATER		BIT(6)
+#define IT66121_BCAP_KSV_FIFO_RDY		BIT(5)
+#define IT66121_BCAP_FAST_400KHZ		BIT(4)
+#define IT66121_BCAP_HDCP11			BIT(1)
+#define IT66121_BCAP_FAST_REAUTH		BIT(0)
+
+#define IT66121_BSTATUS0			0x44
+#define IT66121_BSTATUS0_MAX_DEVS_EXCEEDED	BIT(7)
+#define IT66121_BSTATUS0_DEVICE_COUNT_MASK	0x7f
+#define IT66121_BSTATUS1			0x45
+#define IT66121_BSTATUS1_HDMI_MODE		BIT(4)
+#define IT66121_BSTATUS1_MAX_CASCADE_EXCEEDED	BIT(3)
+#define It66121_BSTATUS1_CASCADE_DEPTH_MASK	0x7
+
+#define IT66121_AUTH_STATUS			0x46
+#define IT66121_AUTH_STATUS_DONE		BIT(7)
+#define IT66121_AUTH_STATUS_DDC_HANG		BIT(6)
+#define IT66121_AUTH_STATUS_SYNC_FAIL		BIT(5)
+#define IT66121_AUTH_STATUS_PJ_FAIL		BIT(4)
+#define IT66121_AUTH_STATUS_RI_FAIL		BIT(3)
+#define IT66121_AUTH_STATUS_R0_FAIL		BIT(2)
+#define IT66121_AUTH_STATUS_BKSV_INVALID	BIT(1)
+#define IT66121_AUTH_STATUS_DDC_NACK		BIT(0)
+
+
+#define IT66121_SHA_SEL       0x50
+#define IT66121_SHA_RD_BYTE1  0x51
+#define IT66121_SHA_RD_BYTE2  0x52
+#define IT66121_SHA_RD_BYTE3  0x53
+#define IT66121_SHA_RD_BYTE4  0x54
+#define IT66121_AKSV_RD_BYTE5 0x55
+
+/* clock control */
+
+#define IT66121_CLK_CTRL0			0x58
+#define IT66121_CLK_CTRL0_MCLK_EXTERNAL		BIT(7)
+#define IT66121_CLK_CTRL0_OSCLK_MASK		(3 << 5)
+#define IT66121_CLK_CTRL0_OSCLK_AUTO		BIT(4)
+#define IT66121_CLK_CTRL0_MCLK_MASK		(3 << 2)
+#define IT66121_CLK_CTRL0_MCLK_1024FS		(3 << 2)
+#define IT66121_CLK_CTRL0_MCLK_512FS		(2 << 2)
+#define IT66121_CLK_CTRL0_MCLK_256FS		(1 << 2)
+#define IT66121_CLK_CTRL0_MCLK_128FS		(0 << 2)
+#define IT66121_CLK_CTRL0_CTS_EXTMCLK		BIT(1)
+#define IT66121_CLK_CTRL0_IPCLK_AUTO		BIT(0)
+
+#define IT66121_CLK_CTRL1			0x59
+#define IT66121_CLK_CTRL1_PLL_MANUAL_MASK	(3 << 6)
+#define IT66121_CLK_CTRL1_TXCLK_CNT_ENABLE	BIT(5)
+#define IT66121_CLK_CTRL1_LOCK_DISABLE		BIT(4)
+#define IT66121_CLK_CTRL1_VDO_LATCH_EDGE	BIT(3)
+#define IT66121_CLK_CTRL1_FORCE_AUDIO_MUTE	BIT(2)
+
+
+
+#define IT66121_CLK_STATUS0			0x5e
+#define IT66121_CLK_STATUS0_TXCLK_CNT7_0_MASK	(0xff << 0)
+#define IT66121_CLK_STATUS1			0x5f
+#define IT66121_CLK_STATUS1_IP_LOCK		BIT(7)
+#define IT66121_CLK_STATUS1_XP_LOCK		BIT(6)
+#define IT66121_CLK_STATUS1_OSF_LOCK		BIT(5)
+#define IT66121_CLK_STATUS1_NO_AUDIO		BIT(4)
+#define IT66121_CLK_STATUS1_TXCLKCNT11_8_MASK	(0xf << 0)
+
+
+
+#define IT66121_AUD_COUNT 0x60
+#define IT66121_AFE_DRV_CTRL 0x61
+
+    #define B_TX_AFE_DRV_PWD    (1<<5)
+    #define B_TX_AFE_DRV_RST    (1<<4)
+
+#define IT66121_PLL_CTRL 0x6A
+
+// Input Data Format Register
+#define IT66121_INPUT_MODE  0x70
+    #define O_TX_INCLKDLY	0
+    #define M_TX_INCLKDLY	3
+    #define B_TX_INDDR	    (1<<2)
+    #define B_TX_SYNCEMB	(1<<3)
+    #define B_TX_2X656CLK	(1<<4)
+	#define B_TX_PCLKDIV2  (1<<5)
+    #define M_TX_INCOLMOD	(3<<6)
+    #define B_TX_IN_RGB    0
+    #define B_TX_IN_YUV422 (1<<6)
+    #define B_TX_IN_YUV444 (2<<6)
+
+#define IT66121_TXFIFO_RST  0x71
+    #define B_TX_ENAVMUTERST	1
+    #define B_TXFFRST	(1<<1)
+
+#define IT66121_CSC_CTRL    0x72
+    #define B_HDMITX_CSC_BYPASS    0
+    #define B_HDMITX_CSC_RGB2YUV   2
+    #define B_HDMITX_CSC_YUV2RGB   3
+    #define M_TX_CSC_SEL       3
+    #define B_TX_EN_DITHER      (1<<7)
+    #define B_TX_EN_UDFILTER    (1<<6)
+    #define B_TX_DNFREE_GO      (1<<5)
+
+#define SIZEOF_CSCMTX 21
+#define SIZEOF_CSCGAIN 6
+#define SIZEOF_CSCOFFSET 3
+
+
+#define IT66121_CSC_YOFF 0x73
+#define IT66121_CSC_COFF 0x74
+#define IT66121_CSC_RGBOFF 0x75
+
+#define IT66121_CSC_MTX11_L 0x76
+#define IT66121_CSC_MTX11_H 0x77
+#define IT66121_CSC_MTX12_L 0x78
+#define IT66121_CSC_MTX12_H 0x79
+#define IT66121_CSC_MTX13_L 0x7A
+#define IT66121_CSC_MTX13_H 0x7B
+#define IT66121_CSC_MTX21_L 0x7C
+#define IT66121_CSC_MTX21_H 0x7D
+#define IT66121_CSC_MTX22_L 0x7E
+#define IT66121_CSC_MTX22_H 0x7F
+#define IT66121_CSC_MTX23_L 0x80
+#define IT66121_CSC_MTX23_H 0x81
+#define IT66121_CSC_MTX31_L 0x82
+#define IT66121_CSC_MTX31_H 0x83
+#define IT66121_CSC_MTX32_L 0x84
+#define IT66121_CSC_MTX32_H 0x85
+#define IT66121_CSC_MTX33_L 0x86
+#define IT66121_CSC_MTX33_H 0x87
+
+#define IT66121_CSC_GAIN1V_L 0x88
+#define IT66121_CSC_GAIN1V_H 0x89
+#define IT66121_CSC_GAIN2V_L 0x8A
+#define IT66121_CSC_GAIN2V_H 0x8B
+#define IT66121_CSC_GAIN3V_L 0x8C
+#define IT66121_CSC_GAIN3V_H 0x8D
+
+#define IT66121_HVPol 0x90
+#define IT66121_HfPixel 0x91
+#define IT66121_HSSL 0x95
+#define IT66121_HSEL 0x96
+#define IT66121_HSH 0x97
+#define IT66121_VSS1 0xA0
+#define IT66121_VSE1 0xA1
+#define IT66121_VSS2 0xA2
+#define IT66121_VSE2 0xA3
+
+// HDMI General Control Registers
+
+#define IT66121_HDMI_MODE   0xC0
+    #define B_TX_HDMI_MODE 1
+    #define B_TX_DVI_MODE  0
+#define IT66121_AV_MUTE 0xC1
+#define IT66121_GCP     0xC1
+    #define B_TX_CLR_AVMUTE    0
+    #define B_TX_SET_AVMUTE    1
+    #define B_TX_SETAVMUTE        (1<<0)
+    #define B_TX_BLUE_SCR_MUTE   (1<<1)
+    #define B_TX_NODEF_PHASE    (1<<2)
+    #define B_TX_PHASE_RESYNC   (1<<3)
+
+    #define O_TX_COLOR_DEPTH     4
+    #define M_TX_COLOR_DEPTH     7
+    #define B_TX_COLOR_DEPTH_MASK (M_TX_COLOR_DEPTH<<O_TX_COLOR_DEPTH)
+    #define B_TX_CD_NODEF  0
+    #define B_TX_CD_24     (4<<4)
+    #define B_TX_CD_30     (5<<4)
+    #define B_TX_CD_36     (6<<4)
+    #define B_TX_CD_48     (7<<4)
+#define IT66121_PKT_GENERAL_CTRL    0xC6
+
+#define IT66121_OESS_CYCLE  0xC3
+
+
+/////////////////////////////////////////////////////////////////////
+// Macro
+/////////////////////////////////////////////////////////////////////
+#define Switch_HDMITX_Bank(x)   HDMITX_SetI2C_Byte(0x0f,1, (x)&1)
+#define HDMITX_OrReg_Byte(reg,ormask) HDMITX_SetI2C_Byte(reg,(ormask),(ormask))
+#define HDMITX_AndReg_Byte(reg,andmask) HDMITX_WriteI2C_Byte(reg,(HDMITX_ReadI2C_Byte(reg) & (andmask)))
+
+// 2008/02/27 added by jj_tseng@chipadvanced.com
+typedef enum _mode_id {
+    UNKNOWN_MODE=0,
+    CEA_640x480p60,
+    CEA_720x480p60,
+    CEA_1280x720p60,
+    CEA_1920x1080i60,
+    CEA_720x480i60,
+    CEA_720x240p60,
+    CEA_1440x480i60,
+    CEA_1440x240p60,
+    CEA_2880x480i60,
+    CEA_2880x240p60,
+    CEA_1440x480p60,
+    CEA_1920x1080p60,
+    CEA_720x576p50,
+    CEA_1280x720p50,
+    CEA_1920x1080i50,
+    CEA_720x576i50,
+    CEA_1440x576i50,
+    CEA_720x288p50,
+    CEA_1440x288p50,
+    CEA_2880x576i50,
+    CEA_2880x288p50,
+    CEA_1440x576p50,
+    CEA_1920x1080p50,
+    CEA_1920x1080p24,
+    CEA_1920x1080p25,
+    CEA_1920x1080p30,
+    VESA_640x350p85,
+    VESA_640x400p85,
+    VESA_720x400p85,
+    VESA_640x480p60,
+    VESA_640x480p72,
+    VESA_640x480p75,
+    VESA_640x480p85,
+    VESA_800x600p56,
+    VESA_800x600p60,
+    VESA_800x600p72,
+    VESA_800x600p75,
+    VESA_800X600p85,
+    VESA_840X480p60,
+    VESA_1024x768p60,
+    VESA_1024x768p70,
+    VESA_1024x768p75,
+    VESA_1024x768p85,
+    VESA_1152x864p75,
+    VESA_1280x768p60R,
+    VESA_1280x768p60,
+    VESA_1280x768p75,
+    VESA_1280x768p85,
+    VESA_1280x960p60,
+    VESA_1280x960p85,
+    VESA_1280x1024p60,
+    VESA_1280x1024p75,
+    VESA_1280X1024p85,
+    VESA_1360X768p60,
+    VESA_1400x768p60R,
+    VESA_1400x768p60,
+    VESA_1400x1050p75,
+    VESA_1400x1050p85,
+    VESA_1440x900p60R,
+    VESA_1440x900p60,
+    VESA_1440x900p75,
+    VESA_1440x900p85,
+    VESA_1600x1200p60,
+    VESA_1600x1200p65,
+    VESA_1600x1200p70,
+    VESA_1600x1200p75,
+    VESA_1600x1200p85,
+    VESA_1680x1050p60R,
+    VESA_1680x1050p60,
+    VESA_1680x1050p75,
+    VESA_1680x1050p85,
+    VESA_1792x1344p60,
+    VESA_1792x1344p75,
+    VESA_1856x1392p60,
+    VESA_1856x1392p75,
+    VESA_1920x1200p60R,
+    VESA_1920x1200p60,
+    VESA_1920x1200p75,
+    VESA_1920x1200p85,
+    VESA_1920x1440p60,
+    VESA_1920x1440p75,
+} MODE_ID ;
+
+// Audio Channel Control
+#define IT66121_AUDIO_CTRL0 0xE0
+	#define M_TX_AUD_SWL (3<<6)
+	#define M_TX_AUD_16BIT (0<<6)
+	#define M_TX_AUD_18BIT (1<<6)
+	#define M_TX_AUD_20BIT (2<<6)
+	#define M_TX_AUD_24BIT (3<<6)
+
+	#define B_TX_SPDIFTC (1<<5)
+
+	#define B_TX_AUD_SPDIF (1<<4)
+	#define B_TX_AUD_I2S (0<<4)
+	#define B_TX_AUD_EN_I2S3   (1<<3)
+	#define B_TX_AUD_EN_I2S2   (1<<2)
+	#define B_TX_AUD_EN_I2S1   (1<<1)
+	#define B_TX_AUD_EN_I2S0   (1<<0)
+    #define B_TX_AUD_EN_SPDIF  1
+
+#define IT66121_AUDIO_CTRL1 0xE1
+	#define B_TX_AUD_FULLPKT (1<<6)
+
+	#define B_TX_AUDFMT_STD_I2S (0<<0)
+	#define B_TX_AUDFMT_32BIT_I2S (1<<0)
+	#define B_TX_AUDFMT_LEFT_JUSTIFY (0<<1)
+	#define B_TX_AUDFMT_RIGHT_JUSTIFY (1<<1)
+	#define B_TX_AUDFMT_DELAY_1T_TO_WS (0<<2)
+	#define B_TX_AUDFMT_NO_DELAY_TO_WS (1<<2)
+	#define B_TX_AUDFMT_WS0_LEFT   (0<<3)
+	#define B_TX_AUDFMT_WS0_RIGHT   (1<<3)
+	#define B_TX_AUDFMT_MSB_SHIFT_FIRST (0<<4)
+	#define B_TX_AUDFMT_LSB_SHIFT_FIRST (1<<4)
+	#define B_TX_AUDFMT_RISE_EDGE_SAMPLE_WS (0<<5)
+	#define B_TX_AUDFMT_FALL_EDGE_SAMPLE_WS (1<<5)
+
+#define IT66121_AUDIO_FIFOMAP 0xE2
+	#define O_TX_FIFO3SEL 6
+	#define O_TX_FIFO2SEL 4
+	#define O_TX_FIFO1SEL 2
+	#define O_TX_FIFO0SEL 0
+	#define B_TX_SELSRC3  3
+	#define B_TX_SELSRC2  2
+	#define B_TX_SELSRC1  1
+	#define B_TX_SELSRC0  0
+
+#define IT66121_AUDIO_CTRL3 0xE3
+	#define B_TX_AUD_MULCH (1<<7)
+	#define B_TX_EN_ZERO_CTS (1<<6)
+	#define B_TX_CHSTSEL (1<<4)
+	#define B_TX_S3RLCHG (1<<3)
+	#define B_TX_S2RLCHG (1<<2)
+	#define B_TX_S1RLCHG (1<<1)
+	#define B_TX_S0RLCHG (1<<0)
+
+#define IT66121_AUD_SRCVALID_FLAT 0xE4
+	#define B_TX_AUD_SPXFLAT_SRC3 (1<<7)
+	#define B_TX_AUD_SPXFLAT_SRC2 (1<<6)
+	#define B_TX_AUD_SPXFLAT_SRC1 (1<<5)
+	#define B_TX_AUD_SPXFLAT_SRC0 (1<<4)
+	#define B_TX_AUD_ERR2FLAT (1<<3)
+	#define B_TX_AUD_S3VALID (1<<2)
+	#define B_TX_AUD_S2VALID (1<<1)
+	#define B_TX_AUD_S1VALID (1<<0)
+
+#define IT66121_AUD_HDAUDIO 0xE5
+#define B_TX_HBR   (1<<3)
+#define B_TX_DSD   (1<<1)
+
+//////////////////////////////////////////
+// Bank 1
+//////////////////////////////////////////
+
+#define REGPktAudCTS0 0x30  // 7:0
+#define REGPktAudCTS1 0x31  // 15:8
+#define REGPktAudCTS2 0x32  // 19:16
+#define REGPktAudN0 0x33    // 7:0
+#define REGPktAudN1 0x34    // 15:8
+#define REGPktAudN2 0x35    // 19:16
+#define REGPktAudCTSCnt0 0x35   // 3:0
+#define REGPktAudCTSCnt1 0x36   // 11:4
+#define REGPktAudCTSCnt2 0x37   // 19:12
+
+
+#define IT66121_AUDCHST_MODE    0x91 // 191 IT66121_AUD_CHSTD[2:0] 6:4
+                                 //     IT66121_AUD_CHSTC 3
+                                 //     IT66121_AUD_NLPCM 2
+                                 //     IT66121_AUD_MONO 0
+#define IT66121_AUDCHST_CAT     0x92 // 192 IT66121_AUD_CHSTCAT 7:0
+#define IT66121_AUDCHST_SRCNUM  0x93 // 193 IT66121_AUD_CHSTSRC 3:0
+#define IT66121_AUD0CHST_CHTNUM 0x94 // 194 IT66121_AUD0_CHSTCHR 7:4
+                                 //     IT66121_AUD0_CHSTCHL 3:0
+#define IT66121_AUD1CHST_CHTNUM 0x95 // 195 IT66121_AUD1_CHSTCHR 7:4
+                                 //     IT66121_AUD1_CHSTCHL 3:0
+#define IT66121_AUD2CHST_CHTNUM 0x96 // 196 IT66121_AUD2_CHSTCHR 7:4
+                                 //     IT66121_AUD2_CHSTCHL 3:0
+#define IT66121_AUD3CHST_CHTNUM 0x97 // 197 IT66121_AUD3_CHSTCHR 7:4
+                                 //     IT66121_AUD3_CHSTCHL 3:0
+#define IT66121_AUDCHST_CA_FS   0x98 // 198 IT66121_AUD_CHSTCA 5:4
+                                 //     IT66121_AUD_CHSTFS 3:0
+#define IT66121_AUDCHST_OFS_WL  0x99 // 199 IT66121_AUD_CHSTOFS 7:4
+                                 //     IT66121_AUD_CHSTWL 3:0
+
+#define IT66121_PKT_SINGLE_CTRL 0xC5
+    #define B_TX_SINGLE_PKT    1
+    #define B_TX_BURST_PKT
+    #define B_TX_SW_CTS    (1<<1)
+
+#define IT66121_NULL_CTRL 0xC9
+#define IT66121_ACP_CTRL 0xCA
+#define IT66121_ISRC1_CTRL 0xCB
+#define IT66121_ISRC2_CTRL 0xCC
+#define IT66121_AVI_INFOFRM_CTRL 0xCD
+#define IT66121_AUD_INFOFRM_CTRL 0xCE
+#define IT66121_SPD_INFOFRM_CTRL 0xCF
+#define IT66121_MPG_INFOFRM_CTRL 0xD0
+    #define B_TX_ENABLE_PKT    1
+    #define B_TX_REPEAT_PKT    (1<<1)
+
+#define IT66121_3D_INFO_CTRL 0xD2
+
+//////////////////////////////////////////
+// COMMON PACKET for NULL,ISRC1,ISRC2,SPD
+//////////////////////////////////////////
+
+#define	IT66121_PKT_HB00 0x38
+#define	IT66121_PKT_HB01 0x39
+#define	IT66121_PKT_HB02 0x3A
+
+#define	IT66121_PKT_PB00 0x3B
+#define	IT66121_PKT_PB01 0x3C
+#define	IT66121_PKT_PB02 0x3D
+#define	IT66121_PKT_PB03 0x3E
+#define	IT66121_PKT_PB04 0x3F
+#define	IT66121_PKT_PB05 0x40
+#define	IT66121_PKT_PB06 0x41
+#define	IT66121_PKT_PB07 0x42
+#define	IT66121_PKT_PB08 0x43
+#define	IT66121_PKT_PB09 0x44
+#define	IT66121_PKT_PB10 0x45
+#define	IT66121_PKT_PB11 0x46
+#define	IT66121_PKT_PB12 0x47
+#define	IT66121_PKT_PB13 0x48
+#define	IT66121_PKT_PB14 0x49
+#define	IT66121_PKT_PB15 0x4A
+#define	IT66121_PKT_PB16 0x4B
+#define	IT66121_PKT_PB17 0x4C
+#define	IT66121_PKT_PB18 0x4D
+#define	IT66121_PKT_PB19 0x4E
+#define	IT66121_PKT_PB20 0x4F
+#define	IT66121_PKT_PB21 0x50
+#define	IT66121_PKT_PB22 0x51
+#define	IT66121_PKT_PB23 0x52
+#define	IT66121_PKT_PB24 0x53
+#define	IT66121_PKT_PB25 0x54
+#define	IT66121_PKT_PB26 0x55
+#define	IT66121_PKT_PB27 0x56
+
+#define IT66121_AVIINFO_DB1 0x58
+#define IT66121_AVIINFO_DB2 0x59
+#define IT66121_AVIINFO_DB3 0x5A
+#define IT66121_AVIINFO_DB4 0x5B
+#define IT66121_AVIINFO_DB5 0x5C
+#define IT66121_AVIINFO_DB6 0x5E
+#define IT66121_AVIINFO_DB7 0x5F
+#define IT66121_AVIINFO_DB8 0x60
+#define IT66121_AVIINFO_DB9 0x61
+#define IT66121_AVIINFO_DB10 0x62
+#define IT66121_AVIINFO_DB11 0x63
+#define IT66121_AVIINFO_DB12 0x64
+#define IT66121_AVIINFO_DB13 0x65
+#define IT66121_AVIINFO_SUM 0x5D
+
+#define IT66121_PKT_AUDINFO_CC 0x68 // [2:0]
+#define IT66121_PKT_AUDINFO_SF 0x69 // [4:2]
+#define IT66121_PKT_AUDINFO_CA 0x6B // [7:0]
+
+#define IT66121_PKT_AUDINFO_DM_LSV 0x6C // [7][6:3]
+#define IT66121_PKT_AUDINFO_SUM 0x6D // [7:0]
+
+// Source Product Description Info Frame
+#define IT66121_PKT_SPDINFO_SUM 0x70
+#define IT66121_PKT_SPDINFO_PB1 0x71
+#define IT66121_PKT_SPDINFO_PB2 0x72
+#define IT66121_PKT_SPDINFO_PB3 0x73
+#define IT66121_PKT_SPDINFO_PB4 0x74
+#define IT66121_PKT_SPDINFO_PB5 0x75
+#define IT66121_PKT_SPDINFO_PB6 0x76
+#define IT66121_PKT_SPDINFO_PB7 0x77
+#define IT66121_PKT_SPDINFO_PB8 0x78
+#define IT66121_PKT_SPDINFO_PB9 0x79
+#define IT66121_PKT_SPDINFO_PB10 0x7A
+#define IT66121_PKT_SPDINFO_PB11 0x7B
+#define IT66121_PKT_SPDINFO_PB12 0x7C
+#define IT66121_PKT_SPDINFO_PB13 0x7D
+#define IT66121_PKT_SPDINFO_PB14 0x7E
+#define IT66121_PKT_SPDINFO_PB15 0x7F
+#define IT66121_PKT_SPDINFO_PB16 0x80
+#define IT66121_PKT_SPDINFO_PB17 0x81
+#define IT66121_PKT_SPDINFO_PB18 0x82
+#define IT66121_PKT_SPDINFO_PB19 0x83
+#define IT66121_PKT_SPDINFO_PB20 0x84
+#define IT66121_PKT_SPDINFO_PB21 0x85
+#define IT66121_PKT_SPDINFO_PB22 0x86
+#define IT66121_PKT_SPDINFO_PB23 0x87
+#define IT66121_PKT_SPDINFO_PB24 0x88
+#define IT66121_PKT_SPDINFO_PB25 0x89
+
+#define IT66121_PKT_MPGINFO_FMT 0x8A
+#define B_TX_MPG_FR 1
+#define B_TX_MPG_MF_I  (1<<1)
+#define B_TX_MPG_MF_B  (2<<1)
+#define B_TX_MPG_MF_P  (3<<1)
+#define B_TX_MPG_MF_MASK (3<<1)
+#define IT66121_PKG_MPGINFO_DB0 0x8B
+#define IT66121_PKG_MPGINFO_DB1 0x8C
+#define IT66121_PKG_MPGINFO_DB2 0x8D
+#define IT66121_PKG_MPGINFO_DB3 0x8E
+#define IT66121_PKG_MPGINFO_SUM 0x8F
+
+#define Frame_Pcaking 0
+#define Top_and_Botton 6
+#define Side_by_Side 8
+
+////////////////////////////////////////////////////
+// Function Prototype
+////////////////////////////////////////////////////
+#define hdmitx_ENABLE_NULL_PKT()         { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_ACP_PKT()          { HDMITX_WriteI2C_Byte(IT66121_ACP_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_ISRC1_PKT()        { HDMITX_WriteI2C_Byte(IT66121_ISRC1_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_ISRC2_PKT()        { HDMITX_WriteI2C_Byte(IT66121_ISRC2_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_AVI_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_AVI_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_AUD_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_AUD_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_SPD_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_SPD_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_MPG_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_MPG_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_ENABLE_GeneralPurpose_PKT() { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
+#define hdmitx_DISABLE_VSDB_PKT()        { HDMITX_WriteI2C_Byte(IT66121_3D_INFO_CTRL,0); }
+#define hdmitx_DISABLE_NULL_PKT()        { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,0); }
+#define hdmitx_DISABLE_ACP_PKT()         { HDMITX_WriteI2C_Byte(IT66121_ACP_CTRL,0); }
+#define hdmitx_DISABLE_ISRC1_PKT()       { HDMITX_WriteI2C_Byte(IT66121_ISRC1_CTRL,0); }
+#define hdmitx_DISABLE_ISRC2_PKT()       { HDMITX_WriteI2C_Byte(IT66121_ISRC2_CTRL,0); }
+#define hdmitx_DISABLE_AVI_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_AVI_INFOFRM_CTRL,0); }
+#define hdmitx_DISABLE_AUD_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_AUD_INFOFRM_CTRL,0); }
+#define hdmitx_DISABLE_SPD_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_SPD_INFOFRM_CTRL,0); }
+#define hdmitx_DISABLE_MPG_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_MPG_INFOFRM_CTRL,0); }
+#define hdmitx_DISABLE_GeneralPurpose_PKT() { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,0); }
+
+
+#ifdef EXTERN_HDCPROM
+#pragma message("Defined EXTERN_HDCPROM")
+#endif // EXTERN_HDCPROM
+
+#define SUPPORT_EDID
+//#define SUPPORT_AUDIO_MONITOR
+#define AudioOutDelayCnt 250
+
+#ifdef CONFIG_SUPPORT_HDCP
+#define SUPPORT_HDCP
+#define SUPPORT_SHA
+#endif
+
+
+/*
+ *Video Configuration
+ */
+
+#define SUPPORT_OUTPUTYUV
+#define SUPPORT_OUTPUTRGB
+#define DISABLE_HDMITX_CSC
+
+#define SUPPORT_INPUTRGB
+#define SUPPORT_INPUTYUV444
+#define SUPPORT_INPUTYUV422
+// #define SUPPORT_SYNCEMBEDDED
+// #define SUPPORT_DEGEN
+#define NON_SEQUENTIAL_YCBCR422
+
+
+
+#define INPUT_COLOR_MODE F_MODE_RGB444
+//#define INPUT_COLOR_MODE F_MODE_YUV422
+//#define INPUT_COLOR_MODE F_MODE_YUV444
+
+#define INPUT_COLOR_DEPTH 24
+// #define INPUT_COLOR_DEPTH 30
+// #define INPUT_COLOR_DEPTH 36
+
+//#define OUTPUT_COLOR_MODE F_MODE_YUV422
+//#define OUTPUT_COLOR_MODE F_MODE_YUV444
+#define OUTPUT_COLOR_MODE F_MODE_RGB444
+
+//#define OUTPUT_3D_MODE Frame_Pcaking
+//#define OUTPUT_3D_MODE Top_and_Botton
+//#define OUTPUT_3D_MODE Side_by_Side
+
+// #define INV_INPUT_ACLK
+#define INV_INPUT_PCLK
+
+#ifdef SUPPORT_SYNCEMBEDDED
+// #define INPUT_SIGNAL_TYPE (T_MODE_SYNCEMB)                 // 16 bit sync embedded
+// #define INPUT_SIGNAL_TYPE (T_MODE_SYNCEMB | T_MODE_CCIR656) // 8 bit sync embedded
+#define INPUT_SIGNAL_TYPE (T_MODE_SYNCEMB|T_MODE_INDDR|T_MODE_PCLKDIV2) // 16 bit sync embedded DDR
+// #define INPUT_SIGNAL_TYPE (T_MODE_SYNCEMB|T_MODE_INDDR)      // 8  bit sync embedded DDR
+
+#define SUPPORT_INPUTYUV422
+#ifdef INPUT_COLOR_MODE
+#undef INPUT_COLOR_MODE
+#endif // INPUT_COLOR_MODE
+#define INPUT_COLOR_MODE F_MODE_YUV422
+#else
+//    #pragma message ("Defined seperated sync.")
+#define INPUT_SIGNAL_TYPE 0 // 24 bit sync seperate
+//#define INPUT_SIGNAL_TYPE ( T_MODE_DEGEN )
+//#define INPUT_SIGNAL_TYPE ( T_MODE_INDDR)
+//#define INPUT_SIGNAL_TYPE ( T_MODE_SYNCEMB)
+//#define INPUT_SIGNAL_TYPE ( T_MODE_CCIR656 | T_MODE_SYNCEMB )
+#endif
+
+
+#if defined(SUPPORT_INPUTYUV444) || defined(SUPPORT_INPUTYUV422)
+#define SUPPORT_INPUTYUV
+#endif
+
+#ifdef SUPPORT_SYNCEMBEDDED
+#pragma message("defined SUPPORT_SYNCEMBEDDED for Sync Embedded timing input or CCIR656 input.")
+#endif
+
+
+
+/*
+ *Audio Configuration
+ */
+
+// #define SUPPORT_HBR_AUDIO
+#define USE_SPDIF_CHSTAT
+#ifndef SUPPORT_HBR_AUDIO
+#define INPUT_SAMPLE_FREQ AUDFS_48KHz
+#define INPUT_SAMPLE_FREQ_HZ 44100L
+#define OUTPUT_CHANNEL 2 // 3 // 4 // 5//6 //7 //8
+
+#define CNOFIG_INPUT_AUDIO_TYPE T_AUDIO_LPCM
+// #define CNOFIG_INPUT_AUDIO_TYPE T_AUDIO_NLPCM
+#define CONFIG_INPUT_AUDIO_SPDIF 0 // I2S
+// #define CONFIG_INPUT_AUDIO_SPDIF 1 // SPDIF
+
+// #define I2S_FORMAT 0x00 // 24bit I2S audio
+#define I2S_FORMAT 0x01 // 32bit I2S audio
+// #define I2S_FORMAT 0x02 // 24bit I2S audio, right justify
+// #define I2S_FORMAT 0x03 // 32bit I2S audio, right justify
+
+#else // SUPPORT_HBR_AUDIO
+
+#define INPUT_SAMPLE_FREQ AUDFS_768KHz
+#define INPUT_SAMPLE_FREQ_HZ 768000L
+#define OUTPUT_CHANNEL 8
+#define CNOFIG_INPUT_AUDIO_TYPE T_AUDIO_HBR
+#define CONFIG_INPUT_AUDIO_SPDIF 0 // I2S
+// #define CONFIG_INPUT_AUDIO_SPDIF 1 // SPDIF
+#define I2S_FORMAT 0x47 // 32bit audio
+#endif
+
+
+/*
+ *Audio Monitor Configuration
+ */
+
+// #define HDMITX_AUTO_MONITOR_INPUT
+// #define HDMITX_INPUT_INFO
+
+#ifdef  HDMITX_AUTO_MONITOR_INPUT
+#define HDMITX_INPUT_INFO
+#endif
+
+
+#ifndef INV_INPUT_PCLK
+#define PCLKINV 0
+#else
+#define PCLKINV IT66121_CLK_CTRL1_VDO_LATCH_EDGE
+#endif
+
+#ifndef INV_INPUT_ACLK
+#define InvAudCLK 0
+#else
+#define InvAudCLK B_TX_AUDFMT_FALL_EDGE_SAMPLE_WS
+#endif
+
+//#define INIT_CLK_HIGH
+// #define INIT_CLK_LOW
+
+// Video Data Type
+#define F_MODE_RGB444  0
+#define F_MODE_YUV422 1
+#define F_MODE_YUV444 2
+#define F_MODE_CLRMOD_MASK 3
+
+
+#define F_MODE_INTERLACE  1
+
+#define F_VIDMODE_ITU709  (1<<4)
+#define F_VIDMODE_ITU601  0
+
+#define F_VIDMODE_0_255   0
+#define F_VIDMODE_16_235  (1<<5)
+
+#define F_VIDMODE_EN_UDFILT (1<<6)
+#define F_VIDMODE_EN_DITHER (1<<7)
+
+#define T_MODE_CCIR656 (1<<0)
+#define T_MODE_SYNCEMB (1<<1)
+#define T_MODE_INDDR   (1<<2)
+#define T_MODE_PCLKDIV2 (1<<3)
+#define T_MODE_DEGEN (1<<4)
+#define T_MODE_SYNCGEN (1<<5)
+
+/* Packet and Info Frame definition and datastructure.
+ */
+#define VENDORSPEC_INFOFRAME_TYPE 0x81
+#define AVI_INFOFRAME_TYPE  0x82
+#define SPD_INFOFRAME_TYPE 0x83
+#define AUDIO_INFOFRAME_TYPE 0x84
+#define MPEG_INFOFRAME_TYPE 0x85
+
+#define VENDORSPEC_INFOFRAME_VER 0x01
+#define AVI_INFOFRAME_VER  0x02
+#define SPD_INFOFRAME_VER 0x01
+#define AUDIO_INFOFRAME_VER 0x01
+#define MPEG_INFOFRAME_VER 0x01
+
+#define VENDORSPEC_INFOFRAME_LEN 5
+#define AVI_INFOFRAME_LEN 13
+#define SPD_INFOFRAME_LEN 25
+#define AUDIO_INFOFRAME_LEN 10
+#define MPEG_INFOFRAME_LEN 10
+
+#define ACP_PKT_LEN 9
+#define ISRC1_PKT_LEN 16
+#define ISRC2_PKT_LEN 16
+
+
+// Audio relate definition and macro.
+// 2008/08/15 added by jj_tseng@chipadvanced
+#define F_AUDIO_ON  (1<<7)
+#define F_AUDIO_HBR (1<<6)
+#define F_AUDIO_DSD (1<<5)
+#define F_AUDIO_NLPCM (1<<4)
+#define F_AUDIO_LAYOUT_1 (1<<3)
+#define F_AUDIO_LAYOUT_0 (0<<3)
+
+// HBR - 1100
+// DSD - 1010
+// NLPCM - 1001
+// LPCM - 1000
+
+#define T_AUDIO_MASK 0xF0
+#define T_AUDIO_OFF 0
+#define T_AUDIO_HBR (F_AUDIO_ON|F_AUDIO_HBR)
+#define T_AUDIO_DSD (F_AUDIO_ON|F_AUDIO_DSD)
+#define T_AUDIO_NLPCM (F_AUDIO_ON|F_AUDIO_NLPCM)
+#define T_AUDIO_LPCM (F_AUDIO_ON)
+
+// for sample clock
+#define AUDFS_22p05KHz  4
+#define AUDFS_44p1KHz 0
+#define AUDFS_88p2KHz 8
+#define AUDFS_176p4KHz    12
+
+#define AUDFS_24KHz  6
+#define AUDFS_48KHz  2
+#define AUDFS_96KHz  10
+#define AUDFS_192KHz 14
+
+#define AUDFS_768KHz 9
+
+#define AUDFS_32KHz  3
+#define AUDFS_OTHER    1
+
+// Audio Enable
+#define ENABLE_SPDIF    (1<<4)
+#define ENABLE_I2S_SRC3  (1<<3)
+#define ENABLE_I2S_SRC2  (1<<2)
+#define ENABLE_I2S_SRC1  (1<<1)
+#define ENABLE_I2S_SRC0  (1<<0)
+
+#define AUD_SWL_NOINDICATE  0x0
+#define AUD_SWL_16          0x2
+#define AUD_SWL_17          0xC
+#define AUD_SWL_18          0x4
+#define AUD_SWL_20          0xA // for maximum 20 bit
+#define AUD_SWL_21          0xD
+#define AUD_SWL_22          0x5
+#define AUD_SWL_23          0x9
+#define AUD_SWL_24          0xB
+
+
+#define    HDMI_4x3  0x00
+#define    HDMI_16x9 0x01
+
+#define     HDMI_ITU601 0x00
+#define     HDMI_ITU709 0x01
+
+#define M_TX_AUD_BIT M_TX_AUD_16BIT
+#define SUPPORT_AUDI_AudSWL 16
+#if(SUPPORT_AUDI_AudSWL==16)
+    #define CHTSTS_SWCODE 0x02
+#elif(SUPPORT_AUDI_AudSWL==18)
+    #define CHTSTS_SWCODE 0x04
+#elif(SUPPORT_AUDI_AudSWL==20)
+    #define CHTSTS_SWCODE 0x03
+#else
+    #define CHTSTS_SWCODE 0x0B
+#endif
+
+
+
+
+/////////////////////////////////////////
+// DDC Address
+/////////////////////////////////////////
+#define DDC_HDCP_ADDRESS 0x74
+#define DDC_EDID_ADDRESS 0xA0
+#define DDC_FIFO_MAXREQ 0x20
+
+// I2C address
+
+#define _80MHz 80000000
+#define HDMI_TX_I2C_SLAVE_ADDR 0x98
+#define CEC_I2C_SLAVE_ADDR 0x9C
+
+
+#endif
