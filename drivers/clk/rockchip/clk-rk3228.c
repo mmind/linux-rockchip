@@ -686,6 +686,7 @@ static const char *const rk3228_critical_clocks[] __initconst = {
 	"pclk_ddrmon",
 	"pclk_msch_noc",
 	"pclk_stimer",
+	"pclk_timer",
 	"pclk_ddrphy",
 	"pclk_acodecphy",
 	"pclk_phy_noc",

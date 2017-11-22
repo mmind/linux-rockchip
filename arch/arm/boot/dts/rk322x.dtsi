@@ -264,7 +264,6 @@
 		compatible = "snps,dw-apb-uart";
 		reg = <0x11010000 0x100>;
 		interrupts = <GIC_SPI 55 IRQ_TYPE_LEVEL_HIGH>;
-		clock-frequency = <24000000>;
 		clocks = <&cru SCLK_UART0>, <&cru PCLK_UART0>;
 		clock-names = "baudclk", "apb_pclk";
 		pinctrl-names = "default";
@@ -278,7 +277,6 @@
 		compatible = "snps,dw-apb-uart";
 		reg = <0x11020000 0x100>;
 		interrupts = <GIC_SPI 56 IRQ_TYPE_LEVEL_HIGH>;
-		clock-frequency = <24000000>;
 		clocks = <&cru SCLK_UART1>, <&cru PCLK_UART1>;
 		clock-names = "baudclk", "apb_pclk";
 		pinctrl-names = "default";
@@ -292,7 +290,6 @@
 		compatible = "snps,dw-apb-uart";
 		reg = <0x11030000 0x100>;
 		interrupts = <GIC_SPI 57 IRQ_TYPE_LEVEL_HIGH>;
-		clock-frequency = <24000000>;
 		clocks = <&cru SCLK_UART2>, <&cru PCLK_UART2>;
 		clock-names = "baudclk", "apb_pclk";
 		pinctrl-names = "default";
@@ -450,7 +447,7 @@
 		rockchip,grf = <&grf>;
 		#clock-cells = <1>;
 		#reset-cells = <1>;
-		assigned-clocks =
+/*		assigned-clocks =
 			<&cru PLL_GPLL>, <&cru ARMCLK>,
 			<&cru PLL_CPLL>, <&cru ACLK_PERI>,
 			<&cru HCLK_PERI>, <&cru PCLK_PERI>,
@@ -461,7 +458,7 @@
 			<500000000>, <150000000>,
 			<150000000>, <75000000>,
 			<150000000>, <150000000>,
-			<75000000>;
+			<75000000>; */
 	};
 
 	thermal-zones {
@@ -1066,8 +1063,8 @@
 
 		uart2 {
 			uart2_xfer: uart2-xfer {
-				rockchip,pins = <1 18 RK_FUNC_2 &pcfg_pull_up>,
-						<1 19 RK_FUNC_2 &pcfg_pull_none>;
+				rockchip,pins = <1 19 RK_FUNC_2 &pcfg_pull_up>,
+						<1 18 RK_FUNC_2 &pcfg_pull_none>;
 			};
 
 			uart21_xfer: uart21-xfer {
