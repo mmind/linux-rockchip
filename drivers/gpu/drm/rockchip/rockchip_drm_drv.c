@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/of_graph.h>
 #include <linux/of_platform.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/component.h>
 #include <linux/console.h>
 #include <linux/iommu.h>
@@ -141,6 +142,12 @@ static int rockchip_drm_bind(struct device *dev)
 	if (ret)
 		goto err_free;
 
+	ret = of_reserved_mem_device_init(drm_dev->dev);
+	if (ret && ret != -ENODEV) {
+		dev_err(drm_dev->dev, "Couldn't claim our memory region\n");
+		goto err_iommu_cleanup;
+	}
+
 	drm_mode_config_init(drm_dev);
 
 	rockchip_drm_mode_config_init(drm_dev);
@@ -181,11 +188,13 @@ err_unbind_all:
 	component_unbind_all(dev, drm_dev);
 err_mode_config_cleanup:
 	drm_mode_config_cleanup(drm_dev);
+err_iommu_cleanup:
 	rockchip_iommu_cleanup(drm_dev);
 err_free:
 	drm_dev->dev_private = NULL;
 	dev_set_drvdata(dev, NULL);
 	drm_dev_put(drm_dev);
+	of_reserved_mem_device_release(drm_dev->dev);
 	return ret;
 }
 
@@ -206,6 +215,7 @@ static void rockchip_drm_unbind(struct device *dev)
 	drm_dev->dev_private = NULL;
 	dev_set_drvdata(dev, NULL);
 	drm_dev_put(drm_dev);
+	of_reserved_mem_device_release(drm_dev->dev);
 }
 
 static const struct file_operations rockchip_drm_driver_fops = {
