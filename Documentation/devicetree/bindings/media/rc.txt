@@ -115,3 +115,4 @@ The following properties are common to the infrared remote controllers:
   * "rc-winfast"
   * "rc-winfast-usbii-deluxe"
   * "rc-su3000"
+  * "rc-z28"
