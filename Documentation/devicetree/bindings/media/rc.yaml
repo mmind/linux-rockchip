@@ -156,6 +156,7 @@ properties:
       - rc-x96max
       - rc-xbox-360
       - rc-xbox-dvd
+      - rc-z28
       - rc-zx-irdec
 
 additionalProperties: true

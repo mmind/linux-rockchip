@@ -343,6 +343,7 @@ struct rc_map *rc_map_get(const char *name);
 #define RC_MAP_X96MAX                    "rc-x96max"
 #define RC_MAP_XBOX_360                  "rc-xbox-360"
 #define RC_MAP_XBOX_DVD                  "rc-xbox-dvd"
+#define RC_MAP_Z28                       "rc-z28"
 #define RC_MAP_ZX_IRDEC                  "rc-zx-irdec"
 
 /*
