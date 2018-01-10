@@ -775,6 +775,55 @@
 		};
 	};
 
+	usb3phy_grf: syscon@ff460000 {
+		compatible = "rockchip,usb3phy-grf", "syscon",
+			     "simple-mfd";
+		reg = <0x0 0xff460000 0x0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		u3phy: usb3-phy@0 {
+			compatible = "rockchip,rk3328-usb3phy";
+			reg = <0x0 0x100>;
+			ports = <&u3phy_utmi>, <&u3phy_pipe>;
+			rockchip,grf = <&grf>;
+			status = "disabled";
+		};
+	};
+
+	u3phy_utmi: phy@ff470000 {
+		compatible = "rockchip,rk3328-usb3phy-utmi";
+		reg = <0x0 0xff470000 0x0 0x8000>;
+		interrupts = <GIC_SPI 76 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 78 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 77 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "otg-bvalid", "otg-id",
+				  "linestate";
+		#phy-cells = <0>;
+		clocks = <&cru PCLK_USB3PHY_OTG>;
+		clock-names = "apb_pclk";
+		resets = <&cru SRST_USB3PHY_U2>,
+			 <&cru SRST_USB3OTG_UTMI>,
+			 <&cru SRST_USB3PHY_OTG_P>;
+		reset-names = "por", "mac", "apb";
+		status = "disabled";
+	};
+
+	u3phy_pipe: phy@ff478000 {
+		compatible = "rockchip,rk3328-usb3phy-pipe";
+		reg = <0x0 0xff478000 0x0 0x8000>;
+		interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "rx-detect";
+		#phy-cells = <0>;
+		clocks = <&cru PCLK_USB3PHY_PIPE>;
+		clock-names = "apb_pclk";
+		resets = <&cru SRST_USB3PHY_U3>,
+			 <&cru SRST_USB3PHY_PIPE>,
+			 <&cru SRST_USB3PHY_PIPE_P>;
+		reset-names = "por", "mac", "apb";
+		status = "disabled";
+	};
+
 	sdmmc: dwmmc@ff500000 {
 		compatible = "rockchip,rk3328-dw-mshc", "rockchip,rk3288-dw-mshc";
 		reg = <0x0 0xff500000 0x0 0x4000>;
@@ -919,6 +968,8 @@
 			reg = <0x0 0xff600000 0x0 0x100000>;
 			interrupts = <GIC_SPI 67 IRQ_TYPE_LEVEL_HIGH>;
 			dr_mode = "otg";
+			phys = <&u3phy_utmi>, <&u3phy_pipe>;
+			phy-names = "usb2-phy", "usb3-phy";
 			phy_type = "utmi_wide";
 			snps,dis_enblslpm_quirk;
 			snps,dis-u2-freeclk-exists-quirk;
