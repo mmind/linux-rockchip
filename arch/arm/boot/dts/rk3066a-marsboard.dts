@@ -157,6 +157,10 @@
 	};
 };
 
+&hdmi {
+	status = "okay";
+};
+
 &mmc0 {
 	status = "okay";
 
@@ -202,6 +206,14 @@
 };
 
 &usb_otg {
+	status = "okay";
+};
+
+&vop0 {
+	status = "okay";
+};
+
+&vop1 {
 	status = "okay";
 };
 
