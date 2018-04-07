@@ -416,7 +416,6 @@ static void rockchip_usb3phy_port_cleanup(void *data)
 {
 	struct rockchip_usb3phy_port *usb3phy_port = data;
 
-printk("%s\n", __func__);
 	if (usb3phy_port->provider)
 		of_phy_provider_unregister(usb3phy_port->provider);
 
@@ -486,15 +485,15 @@ static int rockchip_usb3phy_port_init(struct rockchip_usb3phy *usb3phy,
 		return PTR_ERR(usb3phy_port->clk);
 	}
 
-	usb3phy_port->rst_por = reset_control_get_optional(dev, "por");
+	usb3phy_port->rst_por = reset_control_get_optional_exclusive(dev, "por");
 	if (IS_ERR(usb3phy_port->rst_por))
 		return PTR_ERR(usb3phy_port->rst_por);
 
-	usb3phy_port->rst_apb = reset_control_get_optional(dev, "apb");
+	usb3phy_port->rst_apb = reset_control_get_optional_exclusive(dev, "apb");
 	if (IS_ERR(usb3phy_port->rst_apb))
 		return PTR_ERR(usb3phy_port->rst_apb);
 
-	usb3phy_port->rst_mac = reset_control_get_optional(dev, "mac");
+	usb3phy_port->rst_mac = reset_control_get_optional_exclusive(dev, "mac");
 	if (IS_ERR(usb3phy_port->rst_mac))
 		return PTR_ERR(usb3phy_port->rst_mac);
 
