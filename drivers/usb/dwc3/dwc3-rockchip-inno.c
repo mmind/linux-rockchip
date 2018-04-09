@@ -20,10 +20,10 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/clk.h>
-#include <linux/clk-provider.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include <linux/notifier.h>
@@ -36,10 +36,12 @@ struct dwc3_rockchip {
 	struct device		*dev;
 	struct clk		**clks;
 	int			num_clocks;
-	struct dwc3		*dwc;
+	struct reset_control	*resets;
+
+	struct platform_device	*dwc_pdev;
 	struct usb_phy		*phy;
 	struct notifier_block	u3phy_nb;
-	struct work_struct      u3_work;
+	struct work_struct	u3_work;
 	struct mutex		lock;
 };
 
@@ -58,12 +60,32 @@ static void u3phy_disconnect_det_work(struct work_struct *work)
 {
 	struct dwc3_rockchip *rockchip =
 		container_of(work, struct dwc3_rockchip, u3_work);
-	struct usb_hcd	*hcd = dev_get_drvdata(&rockchip->dwc->xhci->dev);
-	struct usb_hcd	*shared_hcd = hcd->shared_hcd;
-	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
-	u32		count = 0;
+	struct dwc3 *dwc;
+	struct usb_hcd	*hcd;
+	struct usb_hcd	*shared_hcd;
+	struct xhci_hcd	*xhci;
+	u32 count = 0;
 
 	mutex_lock(&rockchip->lock);
+
+	dwc = platform_get_drvdata(rockchip->dwc_pdev);
+	if (!dwc || !dwc->xhci) {
+		dev_err(rockchip->dev,
+			"failed to get dwc3 drvdata handling disconnect\n");
+		mutex_unlock(&rockchip->lock);
+		return;
+	}
+
+	hcd = dev_get_drvdata(&dwc->xhci->dev);
+	if (!hcd) {
+		dev_err(rockchip->dev,
+			"failed to get hcd drvdata handling disconnect\n");
+		mutex_unlock(&rockchip->lock);
+		return;
+	}
+
+	shared_hcd = hcd->shared_hcd;
+	xhci = hcd_to_xhci(hcd);
 
 	if (hcd->state != HC_STATE_HALT) {
 		usb_remove_hcd(shared_hcd);
@@ -92,6 +114,52 @@ static void u3phy_disconnect_det_work(struct work_struct *work)
 	mutex_unlock(&rockchip->lock);
 }
 
+static int dwc3_rockchip_clk_init(struct dwc3_rockchip *rockchip, int count)
+{
+	struct device		*dev = rockchip->dev;
+	struct device_node	*np = dev->of_node;
+	int			i;
+
+	rockchip->num_clocks = count;
+
+	if (!count)
+		return 0;
+
+	rockchip->clks = devm_kcalloc(dev, rockchip->num_clocks,
+			sizeof(struct clk *), GFP_KERNEL);
+	if (!rockchip->clks)
+		return -ENOMEM;
+
+	for (i = 0; i < rockchip->num_clocks; i++) {
+		struct clk	*clk;
+		int		ret;
+
+		clk = of_clk_get(np, i);
+		if (IS_ERR(clk)) {
+			while (--i >= 0) {
+				clk_disable_unprepare(rockchip->clks[i]);
+				clk_put(rockchip->clks[i]);
+			}
+			return PTR_ERR(clk);
+		}
+
+		ret = clk_prepare_enable(clk);
+		if (ret < 0) {
+			while (--i >= 0) {
+				clk_disable_unprepare(rockchip->clks[i]);
+				clk_put(rockchip->clks[i]);
+			}
+			clk_put(clk);
+
+			return ret;
+		}
+
+		rockchip->clks[i] = clk;
+	}
+
+	return 0;
+}
+
 static int dwc3_rockchip_probe(struct platform_device *pdev)
 {
 	struct dwc3_rockchip	*rockchip;
@@ -99,7 +167,6 @@ static int dwc3_rockchip_probe(struct platform_device *pdev)
 	struct device_node	*np = dev->of_node, *child;
 	struct platform_device	*child_pdev;
 
-	unsigned int		count;
 	int			ret;
 	int			i;
 
@@ -107,71 +174,8 @@ static int dwc3_rockchip_probe(struct platform_device *pdev)
 	if (!rockchip)
 		return -ENOMEM;
 
-	child = of_get_child_by_name(np, "dwc3");
-	if (!child) {
-		dev_err(dev, "failed to find dwc3 core node\n");
-		return -ENODEV;
-	}
-
-	count = of_clk_get_parent_count(np);
-	if (!count)
-		return -ENOENT;
-
-	rockchip->num_clocks = count;
-
-	rockchip->clks = devm_kcalloc(dev, rockchip->num_clocks,
-			sizeof(struct clk *), GFP_KERNEL);
-	if (!rockchip->clks)
-		return -ENOMEM;
-
 	platform_set_drvdata(pdev, rockchip);
 	rockchip->dev = dev;
-
-	for (i = 0; i < rockchip->num_clocks; i++) {
-		struct clk	*clk;
-
-		clk = of_clk_get(np, i);
-		if (IS_ERR(clk)) {
-			ret = PTR_ERR(clk);
-			goto err0;
-		}
-
-		ret = clk_prepare_enable(clk);
-		if (ret < 0) {
-			clk_put(clk);
-			goto err0;
-		}
-
-		rockchip->clks[i] = clk;
-	}
-
-	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
-	ret = pm_runtime_get_sync(dev);
-	if (ret < 0) {
-		dev_err(dev, "get_sync failed with err %d\n", ret);
-		goto err1;
-	}
-
-	ret = of_platform_populate(np, NULL, NULL, dev);
-	if (ret)
-		goto err1;
-
-	child_pdev = of_find_device_by_node(child);
-	if (!child_pdev) {
-		dev_err(dev, "failed to find dwc3 core device\n");
-		ret = -ENODEV;
-		goto err2;
-	}
-
-	rockchip->dwc = platform_get_drvdata(child_pdev);
-	if (!rockchip->dwc || !rockchip->dwc->xhci) {
-		dev_dbg(dev, "failed to get drvdata dwc3\n");
-		ret = -EPROBE_DEFER;
-		goto err2;
-	}
-
-	mutex_init(&rockchip->lock);
 
 	rockchip->phy = devm_usb_get_phy(dev, USB_PHY_TYPE_USB3);
 	if (IS_ERR(rockchip->phy)) {
@@ -181,28 +185,66 @@ static int dwc3_rockchip_probe(struct platform_device *pdev)
 			return PTR_ERR(rockchip->phy);
 	}
 
+	rockchip->resets = of_reset_control_array_get(np, false, true);
+	if (IS_ERR(rockchip->resets)) {
+		ret = PTR_ERR(rockchip->resets);
+		dev_err(dev, "failed to get device resets, err=%d\n", ret);
+		return ret;
+	}
+
+	ret = reset_control_deassert(rockchip->resets);
+	if (ret)
+		goto err_resetc_put;
+
+	ret = dwc3_rockchip_clk_init(rockchip, of_count_phandle_with_args(np,
+						"clocks", "#clock-cells"));
+	if (ret)
+		goto err_resetc_assert;
+
+	ret = of_platform_populate(np, NULL, NULL, dev);
+	if (ret)
+		goto err_disable_clk;
+
+	child = of_get_child_by_name(np, "dwc3");
+	if (!child) {
+		dev_err(dev, "failed to find dwc3 core node\n");
+		ret = -ENODEV;
+		goto err_depopulate;
+	}
+
+	rockchip->dwc_pdev = of_find_device_by_node(child);
+	of_node_put(child);
+	if (!rockchip->dwc_pdev) {
+		dev_err(dev, "failed to find dwc3 core device\n");
+		ret = -ENODEV;
+		goto err_depopulate;
+	}
+
 	if (rockchip->phy) {
+		mutex_init(&rockchip->lock);
 		INIT_WORK(&rockchip->u3_work, u3phy_disconnect_det_work);
 		rockchip->u3phy_nb.notifier_call =
 			u3phy_disconnect_det_notifier;
 		usb_register_notifier(rockchip->phy, &rockchip->u3phy_nb);
 	}
 
+	pm_runtime_set_active(dev);
+	pm_runtime_enable(dev);
+	pm_runtime_get_sync(dev);
+
 	return 0;
 
-err2:
+err_depopulate:
 	of_platform_depopulate(dev);
-err1:
-	pm_runtime_put_sync(dev);
-	pm_runtime_disable(dev);
-err0:
+err_disable_clk:
 	for (i = 0; i < rockchip->num_clocks && rockchip->clks[i]; i++) {
-		if (!pm_runtime_status_suspended(dev))
-			clk_disable(rockchip->clks[i]);
-		clk_unprepare(rockchip->clks[i]);
+		clk_disable_unprepare(rockchip->clks[i]);
 		clk_put(rockchip->clks[i]);
 	}
-
+err_resetc_assert:
+	reset_control_assert(rockchip->resets);
+err_resetc_put:
+	reset_control_put(rockchip->resets);
 	return ret;
 }
 
@@ -214,15 +256,17 @@ static int dwc3_rockchip_remove(struct platform_device *pdev)
 
 	of_platform_depopulate(dev);
 
-	pm_runtime_put_sync(dev);
-	pm_runtime_disable(dev);
-
 	for (i = 0; i < rockchip->num_clocks; i++) {
-		if (!pm_runtime_status_suspended(dev))
-			clk_disable(rockchip->clks[i]);
-		clk_unprepare(rockchip->clks[i]);
+		clk_disable_unprepare(rockchip->clks[i]);
 		clk_put(rockchip->clks[i]);
 	}
+	rockchip->num_clocks = 0;
+
+	reset_control_assert(rockchip->resets);
+	reset_control_put(rockchip->resets);
+
+	pm_runtime_put_sync(dev);
+	pm_runtime_disable(dev);
 
 	return 0;
 }
@@ -281,7 +325,6 @@ static struct platform_driver dwc3_rockchip_driver = {
 
 module_platform_driver(dwc3_rockchip_driver);
 
-MODULE_ALIAS("platform:rockchip-inno-dwc3");
-MODULE_AUTHOR("William Wu <william.wu@rock-chips.com>");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 rockchip-inno Glue Layer");
+MODULE_AUTHOR("William Wu <william.wu@rock-chips.com>");
