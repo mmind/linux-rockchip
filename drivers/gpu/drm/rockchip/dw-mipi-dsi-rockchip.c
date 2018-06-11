@@ -218,6 +218,10 @@ struct dw_mipi_dsi_rockchip {
 	struct clk *grf_clk;
 	struct clk *phy_cfg_clk;
 
+	/* dual-channel */
+	bool is_slave;
+	struct dw_mipi_dsi_rockchip *slave;
+
 	unsigned int lane_mbps; /* per lane */
 	u16 input_div;
 	u16 feedback_div;
@@ -226,6 +230,7 @@ struct dw_mipi_dsi_rockchip {
 	struct dw_mipi_dsi *dmd;
 	const struct rockchip_dw_dsi_chip_data *cdata;
 	struct dw_mipi_dsi_plat_data pdata;
+	int devcnt;
 };
 
 struct dphy_pll_parameter_map {
@@ -602,6 +607,8 @@ dw_mipi_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 	}
 
 	s->output_type = DRM_MODE_CONNECTOR_DSI;
+	if (dsi->slave)
+		s->output_flags = ROCKCHIP_OUTPUT_DSI_DUAL;
 
 	return 0;
 }
@@ -617,6 +624,8 @@ static void dw_mipi_dsi_encoder_enable(struct drm_encoder *encoder)
 		return;
 
 	pm_runtime_get_sync(dsi->dev);
+	if (dsi->slave)
+		pm_runtime_get_sync(dsi->slave->dev);
 
 	/*
 	 * For the RK3399, the clk of grf must be enabled before writing grf
@@ -630,6 +639,8 @@ static void dw_mipi_dsi_encoder_enable(struct drm_encoder *encoder)
 	}
 
 	dw_mipi_dsi_rockchip_config(dsi, mux);
+	if (dsi->slave)
+		dw_mipi_dsi_rockchip_config(dsi->slave, mux);
 
 	clk_disable_unprepare(dsi->grf_clk);
 }
@@ -638,6 +649,8 @@ static void dw_mipi_dsi_encoder_disable(struct drm_encoder *encoder)
 {
 	struct dw_mipi_dsi_rockchip *dsi = to_dsi(encoder);
 
+	if (dsi->slave)
+		pm_runtime_put(dsi->slave->dev);
 	pm_runtime_put(dsi->dev);
 }
 
@@ -673,13 +686,75 @@ static int rockchip_dsi_drm_create_encoder(struct dw_mipi_dsi_rockchip *dsi,
 	return 0;
 }
 
+static int dw_mipi_dsi_rockchip_match_second(struct device *dev, void *data)
+{
+	struct dw_mipi_dsi_rockchip *dsi = data;
+	struct drm_bridge *bridge1, *bridge2;
+	struct drm_panel *panel1, *panel2;
+	int ret;
+
+	if (dsi->dev->of_node == dev->of_node)
+		return 0;
+
+	ret = drm_of_find_panel_or_bridge(dsi->dev->of_node, 1, 0,
+					  &panel1, &bridge1);
+	if (ret)
+		return ret;
+
+	ret = drm_of_find_panel_or_bridge(dev->of_node, 1, 0,
+					  &panel2, &bridge2);
+	if (ret)
+		return ret;
+
+	return (panel1 == panel2) && (bridge1 == bridge2);
+}
+
 static int dw_mipi_dsi_rockchip_bind(struct device *dev,
 				     struct device *master,
 				     void *data)
 {
 	struct dw_mipi_dsi_rockchip *dsi = dev_get_drvdata(dev);
 	struct drm_device *drm_dev = data;
+	struct device *second;
+	bool master1, master2;
 	int ret;
+
+	second = driver_find_device(dsi->dev->driver, NULL, dsi,
+					dw_mipi_dsi_rockchip_match_second);
+	if (IS_ERR(second))
+		return PTR_ERR(second);
+
+	if (second) {
+		master1 = of_property_read_bool(dsi->dev->of_node,
+						"clock-master");
+		master2 = of_property_read_bool(second->of_node,
+						"clock-master");
+
+		if (master1 && master2) {
+			DRM_DEV_ERROR(dsi->dev, "only one clock-master allowed\n");
+			return -EINVAL;
+		}
+
+		if (!master1 && !master2) {
+			DRM_DEV_ERROR(dsi->dev, "no clock-master defined\n");
+			return -EINVAL;
+		}
+
+		/* we are the slave in dual-DSI */
+		if (!master1) {
+			dsi->is_slave = true;
+			return 0;
+		}
+
+		dsi->slave = dev_get_drvdata(second);
+		if (!dsi->slave) {
+			DRM_DEV_ERROR(dev, "could not get slaves data\n");
+			return -ENODEV;
+		}
+
+		dsi->slave->is_slave = true;
+		dw_mipi_dsi_set_slave(dsi->dmd, dsi->slave->dmd);
+	}
 
 	ret = clk_prepare_enable(dsi->pllref_clk);
 	if (ret) {
@@ -707,6 +782,9 @@ static void dw_mipi_dsi_rockchip_unbind(struct device *dev,
 					void *data)
 {
 	struct dw_mipi_dsi_rockchip *dsi = dev_get_drvdata(dev);
+
+	if (dsi->is_slave)
+		return;
 
 	dw_mipi_dsi_unbind(dsi->dmd);
 
@@ -748,6 +826,14 @@ static const struct dw_mipi_dsi_host_ops dw_mipi_dsi_rockchip_host_ops = {
 	.attach = dw_mipi_dsi_rockchip_host_attach,
 	.detach = dw_mipi_dsi_rockchip_host_detach,
 };
+
+static int dw_mipi_dsi_rockchip_cnt_dev(struct device *dev, void *data)
+{
+	struct dw_mipi_dsi_rockchip *dsi = data;
+
+	dsi->devcnt++;
+	return 0;
+}
 
 static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 {
@@ -835,6 +921,22 @@ static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 		goto err_clkdisable;
 	}
 
+	/*
+	 * All dsi child devices will have been created, so we can check
+	 * their number and add the component here if there will be no
+	 * host-attach call.
+	 */
+	device_for_each_child(dsi->dev, dsi, dw_mipi_dsi_rockchip_cnt_dev);
+	if (dsi->devcnt == 0) {
+		ret = component_add(dsi->dev, &dw_mipi_dsi_rockchip_ops);
+		if (ret) {
+			DRM_DEV_ERROR(dsi->dev, "Failed to register component: %d\n",
+						ret);
+			dw_mipi_dsi_remove(dsi->dmd);
+			goto err_clkdisable;
+		}
+	}
+
 	return 0;
 
 err_clkdisable:
@@ -845,6 +947,9 @@ err_clkdisable:
 static int dw_mipi_dsi_rockchip_remove(struct platform_device *pdev)
 {
 	struct dw_mipi_dsi_rockchip *dsi = platform_get_drvdata(pdev);
+
+	if (dsi->devcnt == 0)
+		component_del(dsi->dev, &dw_mipi_dsi_rockchip_ops);
 
 	dw_mipi_dsi_remove(dsi->dmd);
 
