@@ -21,6 +21,12 @@ Required properties:
 	0xc0389481 that resides in the topmost 8 bytes of the area.
 	See coreboot's src/include/imd.h for details.
 
+Board variant properties determined via strapping measures (like gpios):
+ - board-id: board-specific id indicating the board-revision
+ - ram-code: board-specific id identifying the used ram-module
+ - sku-id: board-specific id indicating a variant (using different
+           display panels for example)
+
 Example:
 	firmware {
 		ranges;
