@@ -255,6 +255,9 @@ ap_i2c_dig: &i2c2 {
 		hid-descr-addr = <0x1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pen_int_odl &pen_reset_l>;
+		reset-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+		assert-reset-us = <1000>;
+		deassert-reset-us = <30000>;
 	};
 };
 
