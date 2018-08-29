@@ -754,6 +754,7 @@ static int dw_mipi_dsi_rockchip_bind(struct device *dev,
 
 		dsi->slave->is_slave = true;
 		dw_mipi_dsi_set_slave(dsi->dmd, dsi->slave->dmd);
+		put_device(second);
 	}
 
 	ret = clk_prepare_enable(dsi->pllref_clk);
