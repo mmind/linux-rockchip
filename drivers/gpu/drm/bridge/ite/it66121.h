@@ -1,5 +1,41 @@
-#ifndef _ITE_IT66121_H_
-#define _ITE_IT66121_H_
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2018 Heiko Stuebner <heiko@sntech.de>
+ *
+ * based on beagleboard it66121 i2c encoder driver
+ * Copyright (C) 2017 Baozhu Zuo <zuobaozhu@gmail.com>
+ */
+#ifndef _DRM_ITE_IT66121_H_
+#define _DRM_ITE_IT66121_H_
+
+#include <linux/hdmi.h>
+#include <linux/i2c.h>
+#include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
+
+#include <drm/drm_crtc_helper.h>
+
+
+struct it66121 {
+	struct i2c_client *i2c;
+	struct regmap *regmap;
+	int cur_bank;
+	struct mutex reg_mutex;
+
+	struct gpio_desc *reset_gpio;
+	struct regulator_bulk_data *supplies;
+	unsigned int num_supplies;
+	struct work_struct hpd_work;
+
+	struct drm_bridge bridge;
+	struct drm_connector connector;
+
+
+	int powerstatus;
+	int plug_status;
+	u8 AudioChannelEnable;
+	struct platform_device *audio_pdev;
+};
 
 #define IT66121_VENDOR_ID0			0x00
 #define IT66121_VENDOR_ID1			0x01
@@ -636,6 +672,9 @@ typedef enum _mode_id {
 #define B_TX_HBR   (1<<3)
 #define B_TX_DSD   (1<<1)
 
+
+//#define IT66121_INT_STAT
+
 /*
  * Bank 1
  */
@@ -1057,9 +1096,6 @@ typedef enum _mode_id {
     #define CHTSTS_SWCODE 0x0B
 #endif
 
-
-
-
 /////////////////////////////////////////
 // DDC Address
 /////////////////////////////////////////
@@ -1074,4 +1110,40 @@ typedef enum _mode_id {
 #define CEC_I2C_SLAVE_ADDR 0x9C
 
 
+int it66121_reg_read(struct it66121 *priv, int reg);
+int it66121_reg_write(struct it66121 *priv, int reg, u8 val);
+int it66121_reg_update_bits(struct it66121 *priv, unsigned int reg,
+			    u8 mask, u8 val);
+int it66121_reg_bulk_write(struct it66121 *priv, unsigned int reg,
+			   const void *val, size_t val_count);
+
+
+#ifdef CONFIG_DRM_IT66121_CEC
+int it66121_cec_init(struct device *dev, struct it66121 *priv);
+void it66121_cec_irq_process(struct it66121 *priv, unsigned int irq1);
+#else
+static inline int it66121_cec_init(struct device *dev, struct it66121 *priv)
+{
+//	unsigned int offset = adv7511->type == ADV7533 ?
+//						ADV7533_REG_CEC_OFFSET : 0;
+
+//	regmap_write(adv7511->regmap, ADV7511_REG_CEC_CTRL + offset,
+//		     ADV7511_CEC_CTRL_POWER_DOWN);
+	return 0;
+}
 #endif
+
+#ifdef CONFIG_DRM_IT66121_AUDIO
+int it66121_audio_init(struct device *dev, struct it66121 *priv);
+void it66121_audio_exit(struct it66121 *priv);
+#else
+static inline int it66121_audio_init(struct device *dev, struct it66121 *priv)
+{
+	return 0;
+}
+static inline void it66121_audio_exit(struct it66121 *priv)
+{
+}
+#endif
+
+#endif /* __DRM_ITE_IT66121_H__ */

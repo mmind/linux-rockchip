@@ -1,0 +1,23 @@
+config DRM_IT66121
+	tristate "ITE it66121 RGB/HDMI bridge"
+	depends on OF
+	select DRM_KMS_HELPER
+	select REGMAP_I2C
+	help
+	  ITE IT66121 HDMI encoder bridge.
+
+config DRM_IT66121_AUDIO
+	bool "IT66121 HDMI Audio driver"
+	depends on DRM_IT66121 && SND_SOC
+	select SND_SOC_HDMI_CODEC
+	help
+	  Support the IT66121 HDMI Audio interface. This is used in
+	  conjunction with the IT66121 HDMI driver.
+
+config DRM_IT66121_CEC
+	bool "IT66121 HDMI CEC driver"
+	depends on DRM_IT66121
+	select CEC_CORE
+	default y
+	help
+	  When selected the HDMI transmitter will support the CEC feature.
