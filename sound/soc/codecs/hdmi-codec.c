@@ -26,6 +26,7 @@
 #include <drm/drm_crtc.h> /* This is only to get MAX_ELD_BYTES */
 
 #define HDMI_CODEC_CHMAP_IDX_UNKNOWN  -1
+#define dev_dbg dev_err
 
 struct hdmi_codec_channel_map_table {
 	unsigned char map;	/* ALSA API channel map position */
@@ -369,6 +370,7 @@ static int hdmi_codec_get_ch_alloc_table_idx(struct hdmi_codec_priv *hcp,
 			continue;
 		return i;
 	}
+printk("%s\n", __func__);
 
 	return -EINVAL;
 }
@@ -440,7 +442,10 @@ static int hdmi_codec_startup(struct snd_pcm_substream *substream,
 			ret = snd_pcm_hw_constraint_eld(substream->runtime,
 							hcp->eld);
 			if (ret)
+{
+printk("%s: %d\n", __func__, ret);
 				return ret;
+}
 		}
 		/* Select chmap supported */
 		hdmi_codec_eld_chmap(hcp);
@@ -550,6 +555,7 @@ static int hdmi_codec_set_fmt(struct snd_soc_dai *dai,
 		case SND_SOC_DAIFMT_CBS_CFS:
 			break;
 		default:
+printk("%s\n", __func__);
 			return -EINVAL;
 		}
 
