@@ -18,9 +18,11 @@
 
 struct it66121 {
 	struct i2c_client *i2c;
+	struct i2c_client *i2c_cec;
 	struct regmap *regmap;
+	struct regmap *regmap_cec;
 	int cur_bank;
-	struct mutex reg_mutex;
+	struct mutex bank_mutex;
 
 	struct gpio_desc *reset_gpio;
 	struct regulator_bulk_data *supplies;
@@ -30,6 +32,7 @@ struct it66121 {
 	struct drm_bridge bridge;
 	struct drm_connector connector;
 
+	int dvi_mode;
 
 	int powerstatus;
 	int plug_status;
@@ -70,61 +73,61 @@ enum {
 #define IT66121_INT_CTRL_REFCLK_REDUCE		BIT(1)
 #define IT66121_INT_CTRL_TXCLK_POWERDN		BIT(0)
 
-#define IT66121_INT_STAT1			0x06
-#define IT66121_INT_STAT1_AUDIO_OVERFLOW	BIT(7)
-//#define IT66121_INT_STAT1_ROMACQ_NOACK		BIT(6)
-#define IT66121_INT_STAT1_DDC_NOACK		BIT(5)
-#define IT66121_INT_STAT1_DDC_FIFO_ERR		BIT(4)
-//#define IT66121_INT_STAT1_ROMACQ_BUS_HANG	BIT(3)
-#define IT66121_INT_STAT1_DDC_BUS_HANG		BIT(2)
-#define IT66121_INT_STAT1_RX_SENSE		BIT(1)
-#define IT66121_INT_STAT1_HPD			BIT(0)
+#define IT66121_INT_STAT0			0x06
+#define IT66121_INT_STAT0_AUDIO_OVERFLOW	BIT(7)
+//#define IT66121_INT_STAT0_ROMACQ_NOACK		BIT(6)
+#define IT66121_INT_STAT0_DDC_NOACK		BIT(5)
+#define IT66121_INT_STAT0_DDC_FIFO_ERR		BIT(4)
+//#define IT66121_INT_STAT0_ROMACQ_BUS_HANG	BIT(3)
+#define IT66121_INT_STAT0_DDC_BUS_HANG		BIT(2)
+#define IT66121_INT_STAT0_RX_SENSE		BIT(1)
+#define IT66121_INT_STAT0_HPD			BIT(0)
 
-#define IT66121_INT_STAT2			0x07
-//#define IT66121_INT_STAT2_HDCP_SYNC_DET_FAIL	BIT(7) //PKT_3D_STATUS?
-#define IT66121_INT_STAT2_VID_UNSTABLE		BIT(6)
-#define IT66121_INT_STAT2_PKT_ACP		BIT(5)
-#define IT66121_INT_STAT2_PKT_NULL		BIT(4)
-#define IT66121_INT_STAT2_PKT_GEN		BIT(3)
-#define IT66121_INT_STAT2_KSVLIST_CHK		BIT(2)
-#define IT66121_INT_STAT2_AUTH_DONE		BIT(1)
-#define IT66121_INT_STAT2_AUTH_FAIL		BIT(0)
+#define IT66121_INT_STAT1			0x07
+//#define IT66121_INT_STAT1_HDCP_SYNC_DET_FAIL	BIT(7) //PKT_3D_STATUS?
+#define IT66121_INT_STAT1_VID_UNSTABLE		BIT(6)
+#define IT66121_INT_STAT1_PKT_ACP		BIT(5)
+#define IT66121_INT_STAT1_PKT_NULL		BIT(4)
+#define IT66121_INT_STAT1_PKT_GEN		BIT(3)
+#define IT66121_INT_STAT1_KSVLIST_CHK		BIT(2)
+#define IT66121_INT_STAT1_AUTH_DONE		BIT(1)
+#define IT66121_INT_STAT1_AUTH_FAIL		BIT(0)
 
-#define IT66121_INT_STAT3			0x08
-#define IT66121_INT_STAT3_AUD_CTS		BIT(6)
-#define IT66121_INT_STAT3_VSYNC			BIT(5)
-#define IT66121_INT_STAT3_VID_STABLE		BIT(4)
-#define IT66121_INT_STAT3_PKT_MPG		BIT(3)
-//#define IT66121_INT_STAT3_PKT_SPD		BIT(2)
-#define IT66121_INT_STAT3_PKT_AUD		BIT(1)
-#define IT66121_INT_STAT3_PKT_AVI		BIT(0)
+#define IT66121_INT_STAT2			0x08
+#define IT66121_INT_STAT2_AUD_CTS		BIT(6)
+#define IT66121_INT_STAT2_VSYNC			BIT(5)
+#define IT66121_INT_STAT2_VID_STABLE		BIT(4)
+#define IT66121_INT_STAT2_PKT_MPG		BIT(3)
+//#define IT66121_INT_STAT2_PKT_SPD		BIT(2)
+#define IT66121_INT_STAT2_PKT_AUD		BIT(1)
+#define IT66121_INT_STAT2_PKT_AVI		BIT(0)
 
-#define IT66121_INT_MASK1			0x09
-#define IT66121_INT_MASK1_AUDIO_OVERFLOW	BIT(7)
-#define IT66121_INT_MASK1_DDC_NOACK		BIT(5)
-#define IT66121_INT_MASK1_DDC_FIFO_ERR		BIT(4)
-#define IT66121_INT_MASK1_DDC_BUS_HANG		BIT(2)
-#define IT66121_INT_MASK1_RX_SENSE		BIT(1)
-#define IT66121_INT_MASK1_HPD			BIT(0)
+#define IT66121_INT_MASK0			0x09
+#define IT66121_INT_MASK0_AUDIO_OVERFLOW	BIT(7)
+#define IT66121_INT_MASK0_DDC_NOACK		BIT(5)
+#define IT66121_INT_MASK0_DDC_FIFO_ERR		BIT(4)
+#define IT66121_INT_MASK0_DDC_BUS_HANG		BIT(2)
+#define IT66121_INT_MASK0_RX_SENSE		BIT(1)
+#define IT66121_INT_MASK0_HPD			BIT(0)
 
-#define IT66121_INT_MASK2			0x0a
-#define IT66121_INT_MASK2_PKT_AVI		BIT(7)
-#define IT66121_INT_MASK2_VID_UNSTABLE		BIT(6)
-#define IT66121_INT_MASK2_PKT_ACP		BIT(5)
-#define IT66121_INT_MASK2_PKT_NULL		BIT(4)
-#define IT66121_INT_MASK2_PKT_GEN		BIT(3)
-#define IT66121_INT_MASK2_KSVLIST_CHK		BIT(2)
-#define IT66121_INT_MASK2_AUTH_DONE		BIT(1)
-#define IT66121_INT_MASK2_AUTH_FAIL		BIT(0)
+#define IT66121_INT_MASK1			0x0a
+#define IT66121_INT_MASK1_PKT_AVI		BIT(7)
+#define IT66121_INT_MASK1_VID_UNSTABLE		BIT(6)
+#define IT66121_INT_MASK1_PKT_ACP		BIT(5)
+#define IT66121_INT_MASK1_PKT_NULL		BIT(4)
+#define IT66121_INT_MASK1_PKT_GEN		BIT(3)
+#define IT66121_INT_MASK1_KSVLIST_CHK		BIT(2)
+#define IT66121_INT_MASK1_AUTH_DONE		BIT(1)
+#define IT66121_INT_MASK1_AUTH_FAIL		BIT(0)
 
-#define IT66121_INT_MASK3			0x0b
-// #define IT66121_INT_MASK3_HDCP_SYNC_DET_FAIL	BIT(6) PKT_3D_MASK?
-#define IT66121_INT_MASK3_AUD_CTS		BIT(5)
-#define IT66121_INT_MASK3_VSYNC			BIT(4)
-#define IT66121_INT_MASK3_VID_STABLE		BIT(3)
-#define IT66121_INT_MASK3_PKT_MPG		BIT(2)
-//#define IT66121_INT_MASK3_PKT_SPD		BIT(1)
-#define IT66121_INT_MASK3_PKT_AUD		BIT(0)
+#define IT66121_INT_MASK2			0x0b
+// #define IT66121_INT_MASK2_HDCP_SYNC_DET_FAIL	BIT(6) PKT_3D_MASK?
+#define IT66121_INT_MASK2_AUD_CTS		BIT(5)
+#define IT66121_INT_MASK2_VSYNC			BIT(4)
+#define IT66121_INT_MASK2_VID_STABLE		BIT(3)
+#define IT66121_INT_MASK2_PKT_MPG		BIT(2)
+//#define IT66121_INT_MASK2_PKT_SPD		BIT(1)
+#define IT66121_INT_MASK2_PKT_AUD		BIT(0)
 
 #define IT66121_INT_CLR0			0x0c
 #define IT66121_INT_CLR0_PKT_ACP		BIT(7)
@@ -410,41 +413,41 @@ enum {
 #define IT66121_TXFIFO_CTRL_ENAVMUTE_RST	BIT(0)
 
 #define IT66121_CSC_CTRL			0x72
-    #define B_HDMITX_CSC_BYPASS    0
-    #define B_HDMITX_CSC_RGB2YUV   2
-    #define B_HDMITX_CSC_YUV2RGB   3
-    #define M_TX_CSC_SEL       3
-    #define B_TX_EN_DITHER      (1<<7)
-    #define B_TX_EN_UDFILTER    (1<<6)
-    #define B_TX_DNFREE_GO      (1<<5)
+#define IT66121_CSC_CTRL_DITHER			BIT(7)
+#define IT66121_CSC_CTRL_UDFILTER		BIT(6)
+#define IT66121_CSC_CTRL_DNFREE_GO		BIT(5)
+#define IT66121_CSC_CTRL_BTA			BIT(2)
+#define IT66121_CSC_CTRL_CSC_MASK		(0x3 << 0)
+#define IT66121_CSC_CTRL_CSC_YUV2RGB		(0x3 << 0)
+#define IT66121_CSC_CTRL_CSC_RGB2YUV		(0x2 << 0)
+#define IT66121_CSC_CTRL_CSC_BYPASS		0
 
 #define SIZEOF_CSCMTX 21
 #define SIZEOF_CSCGAIN 6
 #define SIZEOF_CSCOFFSET 3
 
 
-#define IT66121_CSC_YOFF 0x73
-#define IT66121_CSC_COFF 0x74
-#define IT66121_CSC_RGBOFF 0x75
-
-#define IT66121_CSC_MTX11_L 0x76
-#define IT66121_CSC_MTX11_H 0x77
-#define IT66121_CSC_MTX12_L 0x78
-#define IT66121_CSC_MTX12_H 0x79
-#define IT66121_CSC_MTX13_L 0x7A
-#define IT66121_CSC_MTX13_H 0x7B
-#define IT66121_CSC_MTX21_L 0x7C
-#define IT66121_CSC_MTX21_H 0x7D
-#define IT66121_CSC_MTX22_L 0x7E
-#define IT66121_CSC_MTX22_H 0x7F
-#define IT66121_CSC_MTX23_L 0x80
-#define IT66121_CSC_MTX23_H 0x81
-#define IT66121_CSC_MTX31_L 0x82
-#define IT66121_CSC_MTX31_H 0x83
-#define IT66121_CSC_MTX32_L 0x84
-#define IT66121_CSC_MTX32_H 0x85
-#define IT66121_CSC_MTX33_L 0x86
-#define IT66121_CSC_MTX33_H 0x87
+#define IT66121_CSC_Y_OFFSET			0x73
+#define IT66121_CSC_C_OFFSET			0x74
+#define IT66121_CSC_RGB_OFFSET			0x75
+#define IT66121_CSC_MTX11_L			0x76
+#define IT66121_CSC_MTX11_H			0x77
+#define IT66121_CSC_MTX12_L			0x78
+#define IT66121_CSC_MTX12_H			0x79
+#define IT66121_CSC_MTX13_L			0x7a
+#define IT66121_CSC_MTX13_H			0x7b
+#define IT66121_CSC_MTX21_L			0x7c
+#define IT66121_CSC_MTX21_H			0x7d
+#define IT66121_CSC_MTX22_L			0x7e
+#define IT66121_CSC_MTX22_H			0x7f
+#define IT66121_CSC_MTX23_L			0x80
+#define IT66121_CSC_MTX23_H			0x81
+#define IT66121_CSC_MTX31_L			0x82
+#define IT66121_CSC_MTX31_H			0x83
+#define IT66121_CSC_MTX32_L			0x84
+#define IT66121_CSC_MTX32_H			0x85
+#define IT66121_CSC_MTX33_L			0x86
+#define IT66121_CSC_MTX33_H			0x87
 
 /*#define IT66121_CSC_GAIN1V_L 0x88
 #define IT66121_CSC_GAIN1V_H 0x89
@@ -455,7 +458,7 @@ enum {
 #define IT66121_CEC_SLAVE_ADDRESS		0x8d
 #define IT66121_CEC_SLAVE_ADDRESS_MASK		0xff
 
-#define IT66121_HVPol 0x90
+/*#define IT66121_HVPol 0x90
 #define IT66121_HfPixel 0x91
 #define IT66121_HSSL 0x95
 #define IT66121_HSEL 0x96
@@ -463,22 +466,17 @@ enum {
 #define IT66121_VSS1 0xA0
 #define IT66121_VSE1 0xA1
 #define IT66121_VSS2 0xA2
-#define IT66121_VSE2 0xA3
+#define IT66121_VSE2 0xA3 */
 
-// HDMI General Control Registers
+#define IT66121_HDMI_MODE			0xc0
+#define IT66121_HDMI_MODE_HDMI			BIT(0)
+#define IT66121_HDMI_MODE_DVI			0
 
-#define IT66121_HDMI_MODE   0xC0
-    #define B_TX_HDMI_MODE 1
-    #define B_TX_DVI_MODE  0
-#define IT66121_AV_MUTE 0xC1
-#define IT66121_GCP     0xC1
-    #define B_TX_CLR_AVMUTE    0
-    #define B_TX_SET_AVMUTE    1
-    #define B_TX_SETAVMUTE        (1<<0)
-    #define B_TX_BLUE_SCR_MUTE   (1<<1)
-    #define B_TX_NODEF_PHASE    (1<<2)
+#define IT66121_AV_MUTE				0xc1
+#define IT66121_AV_MUTE_BLUE_SCR		BIT(1)
+#define IT66121_AV_MUTE_MUTE			BIT(0)
+/*    #define B_TX_NODEF_PHASE    (1<<2)
     #define B_TX_PHASE_RESYNC   (1<<3)
-
     #define O_TX_COLOR_DEPTH     4
     #define M_TX_COLOR_DEPTH     7
     #define B_TX_COLOR_DEPTH_MASK (M_TX_COLOR_DEPTH<<O_TX_COLOR_DEPTH)
@@ -486,7 +484,7 @@ enum {
     #define B_TX_CD_24     (4<<4)
     #define B_TX_CD_30     (5<<4)
     #define B_TX_CD_36     (6<<4)
-    #define B_TX_CD_48     (7<<4)
+    #define B_TX_CD_48     (7<<4) */
 
 #define IT66121_OESS_CYCLES			0xc3
 
@@ -511,102 +509,6 @@ enum {
 #define IT66121_VIDEOPARAM_STATUS		0xd1
 #define IT66121_3D_INFOFRM_CTRL			0xd2
 
-
-
-/////////////////////////////////////////////////////////////////////
-// Macro
-/////////////////////////////////////////////////////////////////////
-#define Switch_HDMITX_Bank(x)   HDMITX_SetI2C_Byte(0x0f,1, (x)&1)
-#define HDMITX_OrReg_Byte(reg,ormask) HDMITX_SetI2C_Byte(reg,(ormask),(ormask))
-#define HDMITX_AndReg_Byte(reg,andmask) HDMITX_WriteI2C_Byte(reg,(HDMITX_ReadI2C_Byte(reg) & (andmask)))
-
-// 2008/02/27 added by jj_tseng@chipadvanced.com
-typedef enum _mode_id {
-    UNKNOWN_MODE=0,
-    CEA_640x480p60,
-    CEA_720x480p60,
-    CEA_1280x720p60,
-    CEA_1920x1080i60,
-    CEA_720x480i60,
-    CEA_720x240p60,
-    CEA_1440x480i60,
-    CEA_1440x240p60,
-    CEA_2880x480i60,
-    CEA_2880x240p60,
-    CEA_1440x480p60,
-    CEA_1920x1080p60,
-    CEA_720x576p50,
-    CEA_1280x720p50,
-    CEA_1920x1080i50,
-    CEA_720x576i50,
-    CEA_1440x576i50,
-    CEA_720x288p50,
-    CEA_1440x288p50,
-    CEA_2880x576i50,
-    CEA_2880x288p50,
-    CEA_1440x576p50,
-    CEA_1920x1080p50,
-    CEA_1920x1080p24,
-    CEA_1920x1080p25,
-    CEA_1920x1080p30,
-    VESA_640x350p85,
-    VESA_640x400p85,
-    VESA_720x400p85,
-    VESA_640x480p60,
-    VESA_640x480p72,
-    VESA_640x480p75,
-    VESA_640x480p85,
-    VESA_800x600p56,
-    VESA_800x600p60,
-    VESA_800x600p72,
-    VESA_800x600p75,
-    VESA_800X600p85,
-    VESA_840X480p60,
-    VESA_1024x768p60,
-    VESA_1024x768p70,
-    VESA_1024x768p75,
-    VESA_1024x768p85,
-    VESA_1152x864p75,
-    VESA_1280x768p60R,
-    VESA_1280x768p60,
-    VESA_1280x768p75,
-    VESA_1280x768p85,
-    VESA_1280x960p60,
-    VESA_1280x960p85,
-    VESA_1280x1024p60,
-    VESA_1280x1024p75,
-    VESA_1280X1024p85,
-    VESA_1360X768p60,
-    VESA_1400x768p60R,
-    VESA_1400x768p60,
-    VESA_1400x1050p75,
-    VESA_1400x1050p85,
-    VESA_1440x900p60R,
-    VESA_1440x900p60,
-    VESA_1440x900p75,
-    VESA_1440x900p85,
-    VESA_1600x1200p60,
-    VESA_1600x1200p65,
-    VESA_1600x1200p70,
-    VESA_1600x1200p75,
-    VESA_1600x1200p85,
-    VESA_1680x1050p60R,
-    VESA_1680x1050p60,
-    VESA_1680x1050p75,
-    VESA_1680x1050p85,
-    VESA_1792x1344p60,
-    VESA_1792x1344p75,
-    VESA_1856x1392p60,
-    VESA_1856x1392p75,
-    VESA_1920x1200p60R,
-    VESA_1920x1200p60,
-    VESA_1920x1200p75,
-    VESA_1920x1200p85,
-    VESA_1920x1440p60,
-    VESA_1920x1440p75,
-} MODE_ID ;
-
-// Audio Channel Control
 #define IT66121_AUDIO_CTRL0			0xe0
 	#define M_TX_AUD_SWL (3<<6)
 	#define M_TX_AUD_16BIT (0<<6)
@@ -639,7 +541,7 @@ typedef enum _mode_id {
 	#define B_TX_AUDFMT_STD_I2S (0<<0)
 	#define B_TX_AUDFMT_32BIT_I2S (1<<0)
 
-#define IT66121_AUDIO_FIFOMAP 0xE2
+#define IT66121_AUDIO_FIFOMAP 0xe2
 	#define O_TX_FIFO3SEL 6
 	#define O_TX_FIFO2SEL 4
 	#define O_TX_FIFO1SEL 2
@@ -649,7 +551,7 @@ typedef enum _mode_id {
 	#define B_TX_SELSRC1  1
 	#define B_TX_SELSRC0  0
 
-#define IT66121_AUDIO_CTRL3 0xE3
+#define IT66121_AUDIO_CTRL3 0xe3
 	#define B_TX_AUD_MULCH (1<<7)
 	#define B_TX_EN_ZERO_CTS (1<<6)
 	#define B_TX_CHSTSEL (1<<4)
@@ -658,22 +560,54 @@ typedef enum _mode_id {
 	#define B_TX_S1RLCHG (1<<1)
 	#define B_TX_S0RLCHG (1<<0)
 
-#define IT66121_AUD_SRCVALID_FLAT 0xE4
-	#define B_TX_AUD_SPXFLAT_SRC3 (1<<7)
-	#define B_TX_AUD_SPXFLAT_SRC2 (1<<6)
-	#define B_TX_AUD_SPXFLAT_SRC1 (1<<5)
-	#define B_TX_AUD_SPXFLAT_SRC0 (1<<4)
-	#define B_TX_AUD_ERR2FLAT (1<<3)
-	#define B_TX_AUD_S3VALID (1<<2)
-	#define B_TX_AUD_S2VALID (1<<1)
-	#define B_TX_AUD_S1VALID (1<<0)
+#define IT66121_AUD_SRCVALID_FLAT 0xe4
+	#define B_TX_AUD_SPXFLAT_SRC3 BIT(7)
+	#define B_TX_AUD_SPXFLAT_SRC2 BIT(6)
+	#define B_TX_AUD_SPXFLAT_SRC1 BIT(5)
+	#define B_TX_AUD_SPXFLAT_SRC0 BIT(4)
+	#define B_TX_AUD_ERR2FLAT BIT(3)
+	#define B_TX_AUD_S3VALID BIT(2)
+	#define B_TX_AUD_S2VALID BIT(1)
+	#define B_TX_AUD_S1VALID BIT(0)
 
-#define IT66121_AUD_HDAUDIO 0xE5
-#define B_TX_HBR   (1<<3)
-#define B_TX_DSD   (1<<1)
+#define IT66121_AUD_HD				0xe5
+#define IT66121_AUD_HD_FORCE_ASCLKDIV		BIT(7)
+#define IT66121_AUD_HD_SPDIF_COMP_FIT		BIT(4)
+#define IT66121_AUD_HD_HBR			BIT(3)
+#define IT66121_AUD_HD_DSD			BIT(1)
 
+#define IT66121_AUD_SCHMITT			0xe6
+#define IT66121_AUD_SCHMITT_PCLK		BIT(5)
+#define IT66121_AUD_SCHMITT_SPDIF		BIT(3)
+#define IT66121_AUD_SCHMITT_MCLK		BIT(2)
+#define IT66121_AUD_SCHMITT_SCK			BIT(1)
+/* compat: same value as IT66121_AUD_CH_STAT_NLPCM */
+#define IT66121_AUD_SCHMITT_CH_STAT_NLPCM	BIT(0)
 
-//#define IT66121_INT_STAT
+#define IT66121_AUD_CH_STAT			0xe7
+#define IT66121_AUD_CH_STAT_DEC_ERR_INT		BIT(5)
+#define IT66121_AUD_CH_STAT_NLPCM		BIT(4)
+#define IT66121_AUD_CH_STAT_FS_MASK		0xf
+
+#define IT66121_I2C_SCHMITT			0xe8
+#define IT66121_I2C_SCHMITT_EXTINT_ENABLE	BIT(4)
+#define IT66121_I2C_SCHMITT_DDCSDA		BIT(1)
+#define IT66121_I2C_SCHMITT_PCSDA		BIT(0)
+
+#define IT66121_INT_MASK_EXT			0xec
+#define IT66121_INT_STAT_EXT			0xee
+#define IT66121_INT_EXT_VID_PARAM_CHANGE	BIT(6)
+#define IT66121_INT_EXT_HDCP_PJ_DONE		BIT(5)
+#define IT66121_INT_EXT_HDCP_RJ_DONE		BIT(4)
+#define IT66121_INT_EXT_DDC_BUS_HANG		BIT(3)
+#define IT66121_INT_EXT_VIDEO_FIFO_AUTO_RESET	BIT(2)
+#define IT66121_INT_EXT_NO_AUDIO_INPUT		BIT(1)
+#define IT66121_INT_EXT_AUDIO_DECODE_ERROR	BIT(0)
+
+#define IT66121_INT_CORE_STAT			0xf0
+#define IT66121_INT_CORE_STAT_CEC		BIT(2)
+#define IT66121_INT_CORE_STAT_EXT		BIT(1)
+#define IT66121_INT_CORE_STAT_HDMI		BIT(0)
 
 /*
  * Bank 1
@@ -810,6 +744,99 @@ typedef enum _mode_id {
 #define Top_and_Botton 6
 #define Side_by_Side 8
 */
+
+/////////////////////////////////////////////////////////////////////
+// Macro
+/////////////////////////////////////////////////////////////////////
+#define Switch_HDMITX_Bank(x)   HDMITX_SetI2C_Byte(0x0f,1, (x)&1)
+#define HDMITX_OrReg_Byte(reg,ormask) HDMITX_SetI2C_Byte(reg,(ormask),(ormask))
+#define HDMITX_AndReg_Byte(reg,andmask) HDMITX_WriteI2C_Byte(reg,(HDMITX_ReadI2C_Byte(reg) & (andmask)))
+
+// 2008/02/27 added by jj_tseng@chipadvanced.com
+typedef enum _mode_id {
+    UNKNOWN_MODE=0,
+    CEA_640x480p60,
+    CEA_720x480p60,
+    CEA_1280x720p60,
+    CEA_1920x1080i60,
+    CEA_720x480i60,
+    CEA_720x240p60,
+    CEA_1440x480i60,
+    CEA_1440x240p60,
+    CEA_2880x480i60,
+    CEA_2880x240p60,
+    CEA_1440x480p60,
+    CEA_1920x1080p60,
+    CEA_720x576p50,
+    CEA_1280x720p50,
+    CEA_1920x1080i50,
+    CEA_720x576i50,
+    CEA_1440x576i50,
+    CEA_720x288p50,
+    CEA_1440x288p50,
+    CEA_2880x576i50,
+    CEA_2880x288p50,
+    CEA_1440x576p50,
+    CEA_1920x1080p50,
+    CEA_1920x1080p24,
+    CEA_1920x1080p25,
+    CEA_1920x1080p30,
+    VESA_640x350p85,
+    VESA_640x400p85,
+    VESA_720x400p85,
+    VESA_640x480p60,
+    VESA_640x480p72,
+    VESA_640x480p75,
+    VESA_640x480p85,
+    VESA_800x600p56,
+    VESA_800x600p60,
+    VESA_800x600p72,
+    VESA_800x600p75,
+    VESA_800X600p85,
+    VESA_840X480p60,
+    VESA_1024x768p60,
+    VESA_1024x768p70,
+    VESA_1024x768p75,
+    VESA_1024x768p85,
+    VESA_1152x864p75,
+    VESA_1280x768p60R,
+    VESA_1280x768p60,
+    VESA_1280x768p75,
+    VESA_1280x768p85,
+    VESA_1280x960p60,
+    VESA_1280x960p85,
+    VESA_1280x1024p60,
+    VESA_1280x1024p75,
+    VESA_1280X1024p85,
+    VESA_1360X768p60,
+    VESA_1400x768p60R,
+    VESA_1400x768p60,
+    VESA_1400x1050p75,
+    VESA_1400x1050p85,
+    VESA_1440x900p60R,
+    VESA_1440x900p60,
+    VESA_1440x900p75,
+    VESA_1440x900p85,
+    VESA_1600x1200p60,
+    VESA_1600x1200p65,
+    VESA_1600x1200p70,
+    VESA_1600x1200p75,
+    VESA_1600x1200p85,
+    VESA_1680x1050p60R,
+    VESA_1680x1050p60,
+    VESA_1680x1050p75,
+    VESA_1680x1050p85,
+    VESA_1792x1344p60,
+    VESA_1792x1344p75,
+    VESA_1856x1392p60,
+    VESA_1856x1392p75,
+    VESA_1920x1200p60R,
+    VESA_1920x1200p60,
+    VESA_1920x1200p75,
+    VESA_1920x1200p85,
+    VESA_1920x1440p60,
+    VESA_1920x1440p75,
+} MODE_ID ;
 
 ////////////////////////////////////////////////////
 // Function Prototype
@@ -1103,11 +1130,10 @@ typedef enum _mode_id {
 #define DDC_EDID_ADDRESS 0xA0
 #define DDC_FIFO_MAXREQ 0x20
 
-// I2C address
 
-#define _80MHz 80000000
-#define HDMI_TX_I2C_SLAVE_ADDR 0x98
-#define CEC_I2C_SLAVE_ADDR 0x9C
+/* temporarily until rk-i2c is fixed for 10bit */
+//#define IT66121_CEC_I2C_ADDR_DEFAULT 0x9c
+#define IT66121_CEC_I2C_ADDR_DEFAULT 0x4e
 
 
 int it66121_reg_read(struct it66121 *priv, int reg);
@@ -1120,15 +1146,10 @@ int it66121_reg_bulk_write(struct it66121 *priv, unsigned int reg,
 
 #ifdef CONFIG_DRM_IT66121_CEC
 int it66121_cec_init(struct device *dev, struct it66121 *priv);
-void it66121_cec_irq_process(struct it66121 *priv, unsigned int irq1);
+void it66121_cec_irq_process(struct it66121 *priv, unsigned int irq);
 #else
 static inline int it66121_cec_init(struct device *dev, struct it66121 *priv)
 {
-//	unsigned int offset = adv7511->type == ADV7533 ?
-//						ADV7533_REG_CEC_OFFSET : 0;
-
-//	regmap_write(adv7511->regmap, ADV7511_REG_CEC_CTRL + offset,
-//		     ADV7511_CEC_CTRL_POWER_DOWN);
 	return 0;
 }
 #endif

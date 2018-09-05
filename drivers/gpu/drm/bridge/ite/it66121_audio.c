@@ -52,7 +52,7 @@ static void it66121_aud_set_fs(struct it66121 *priv, u8 fs)
 	u8 HBR_mode;
 	u8 udata;
 
-	if (B_TX_HBR & it66121_reg_read(priv, IT66121_AUD_HDAUDIO))
+	if (IT66121_AUD_HD_HBR & it66121_reg_read(priv, IT66121_AUD_HD))
 		HBR_mode = 1;
 	else
 		HBR_mode = 0;
@@ -134,7 +134,7 @@ static void it66121_set_HBRAudio(struct it66121 *priv)
 		it66121_reg_write(priv, IT66121_AUDIO_CTRL3, 0);
 	}
 	it66121_reg_write(priv, IT66121_AUD_SRCVALID_FLAT, 0x08);
-	it66121_reg_write(priv, IT66121_AUD_HDAUDIO, B_TX_HBR); // regE5 = 0 ;
+	it66121_reg_write(priv, IT66121_AUD_HD, IT66121_AUD_HD_HBR); // regE5 = 0 ;
 
 	//uc = HDMITX_ReadI2C_Byte(client,IT66121_CLK_CTRL1);
 	//uc &= ~M_TX_AUD_DIV ;
@@ -179,7 +179,7 @@ static void it66121_set_DSDAudio(struct it66121 *priv)
 	it66121_reg_write(priv, IT66121_AUDIO_CTRL3, 0);
 
 	it66121_reg_write(priv, IT66121_AUD_SRCVALID_FLAT, 0x00);
-	it66121_reg_write(priv, IT66121_AUD_HDAUDIO, B_TX_DSD); // regE5 = 0 ;
+	it66121_reg_write(priv, IT66121_AUD_HD, IT66121_AUD_HD_DSD); // regE5 = 0 ;
 													 //red_write(client,IT66121_SW_RST, rst & ~(B_HDMITX_AUD_RST|B_TX_AREF_RST) );
 
 	//uc = it66121_reg_read(priv,IT66121_CLK_CTRL1);
@@ -218,7 +218,7 @@ static void it66121_set_NLPCMAudio(struct it66121 *priv)
 #endif // USE_SPDIF_CHSTAT
 
 	it66121_reg_write(priv, IT66121_AUD_SRCVALID_FLAT, 0x00);
-	it66121_reg_write(priv, IT66121_AUD_HDAUDIO, 0x00); // regE5 = 0 ;
+	it66121_reg_write(priv, IT66121_AUD_HD, 0x00); // regE5 = 0 ;
 
 	if (CONFIG_INPUT_AUDIO_SPDIF) {
 		for (i = 0; i < 100; i++) {
@@ -306,7 +306,7 @@ static void it66121_set_LPCMAudio(struct it66121 *priv,
 #endif // USE_SPDIF_CHSTAT
 
 	it66121_reg_write(priv, IT66121_AUD_SRCVALID_FLAT, 0x00);
-	it66121_reg_write(priv, IT66121_AUD_HDAUDIO, 0x00); // regE5 = 0 ;
+	it66121_reg_write(priv, IT66121_AUD_HD, 0x00); // regE5 = 0 ;
 	priv->AudioChannelEnable = AudioEnable;
 	if (CONFIG_INPUT_AUDIO_SPDIF) {
 		u8 i;
@@ -404,9 +404,9 @@ static int it66121_aud_output_config(struct it66121 *priv,
 		// can add auto adjust
 		break;
 	}
-	udata = it66121_reg_read(priv, IT66121_INT_MASK1);
-	udata &= ~IT66121_INT_MASK1_AUDIO_OVERFLOW;
-	it66121_reg_write(priv, IT66121_INT_MASK1, udata);
+	udata = it66121_reg_read(priv, IT66121_INT_MASK0);
+	udata &= ~IT66121_INT_MASK0_AUDIO_OVERFLOW;
+	it66121_reg_write(priv, IT66121_INT_MASK0, udata);
 	it66121_reg_write(priv, IT66121_AUDIO_CTRL0, priv->AudioChannelEnable);
 
 	it66121_reg_update_bits(priv, IT66121_SW_RST, (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD), 0);

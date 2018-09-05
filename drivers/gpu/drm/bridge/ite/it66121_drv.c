@@ -128,7 +128,7 @@ static struct a_reg_entry it66121_init_table[] = {
 	{ IT66121_TXFIFO_CTRL, IT66121_TXFIFO_CTRL_XP_STABLETIME_MASK | IT66121_TXFIFO_CTRL_XP_LOCK_CHK | IT66121_TXFIFO_CTRL_PLL_BUF_RST | IT66121_TXFIFO_CTRL_AUTO_RST | IT66121_TXFIFO_CTRL_IO_NONSEQ, IT66121_TXFIFO_CTRL_XP_STABLETIME_75US | IT66121_TXFIFO_CTRL_PLL_BUF_RST | IT66121_TXFIFO_CTRL_AUTO_RST },
 #endif
 
-	{ IT66121_CEC_SLAVE_ADDRESS, IT66121_CEC_SLAVE_ADDRESS_MASK, CEC_I2C_SLAVE_ADDR },
+	{ IT66121_CEC_SLAVE_ADDRESS, IT66121_CEC_SLAVE_ADDRESS_MASK, IT66121_CEC_I2C_ADDR_DEFAULT },
 	{ IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_CRCLK, IT66121_SYS_STATUS1_GATE_CRCLK },
 
 /* strange undocumented hdcp stuff */
@@ -143,13 +143,13 @@ static struct a_reg_entry it66121_init_table[] = {
 
 	{ IT66121_CLK_CTRL1, IT66121_CLK_CTRL1_PLL_MANUAL_MASK | IT66121_CLK_CTRL1_LOCK_DISABLE | IT66121_CLK_CTRL1_VDO_LATCH_EDGE, IT66121_CLK_CTRL1_PLL_MANUAL(1) | PCLKINV },
 
-	{ 0xE1, 0x20, InvAudCLK },
+	{ IT66121_AUDIO_CTRL1, 0x20, InvAudCLK },
 
 	{ IT66121_INT_CTRL, IT66121_INT_CTRL_POL_ACT_HIGH | IT66121_INT_CTRL_OPENDRAIN, IT66121_INT_CTRL_OPENDRAIN },
 
-	{ IT66121_INT_MASK1, 0xFF, ~(IT66121_INT_MASK1_RX_SENSE | IT66121_INT_MASK1_HPD) },
-	{ IT66121_INT_MASK2, 0xFF, ~(IT66121_INT_MASK2_KSVLIST_CHK | IT66121_INT_MASK2_AUTH_DONE | IT66121_INT_MASK2_AUTH_FAIL) },
-	{ IT66121_INT_MASK3, 0xFF, ~(0x0) },
+	{ IT66121_INT_MASK0, 0xFF, ~(IT66121_INT_MASK0_RX_SENSE | IT66121_INT_MASK0_HPD) },
+	{ IT66121_INT_MASK1, 0xFF, ~(IT66121_INT_MASK1_KSVLIST_CHK | IT66121_INT_MASK1_AUTH_DONE | IT66121_INT_MASK1_AUTH_FAIL) },
+	{ IT66121_INT_MASK2, 0xFF, ~(0x0) },
 
 	{ IT66121_INT_CLR0, 0xFF, 0xFF },
 	{ IT66121_INT_CLR1, 0xFF, 0xFF },
@@ -159,7 +159,7 @@ static struct a_reg_entry it66121_init_table[] = {
 	{ IT66121_INT_CLR1, 0xFF, 0x00 },
 	{ IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_CLEAR_AUD_CTS, 0 },
 
-	{ IT66121_INT_MASK1, IT66121_INT_MASK1_RX_SENSE | IT66121_INT_MASK1_HPD, 0 },
+	{ IT66121_INT_MASK0, IT66121_INT_MASK0_RX_SENSE | IT66121_INT_MASK0_HPD, 0 },
 	{ 0, 0, 0 }
 };
 
@@ -222,20 +222,21 @@ static struct a_reg_entry it66121_default_video_table[] = {
 	{ 0x04, 0x08, 0x00 },
 	{ 0, 0, 0 }
 };
+
 static struct a_reg_entry  it66121_setHDMI_table[] = {
 	/* Config default HDMI Mode */
-	{ 0xC0, 0x01, 0x01 },
-	{ 0xC1, 0x03, 0x03 },
-	{ 0xC6, 0x03, 0x03 },
+	{ IT66121_HDMI_MODE, IT66121_HDMI_MODE_HDMI, IT66121_HDMI_MODE_HDMI },
+	{ IT66121_AV_MUTE, IT66121_AV_MUTE_BLUE_SCR | IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_BLUE_SCR | IT66121_AV_MUTE_MUTE },
+	{ IT66121_GENERAL_CTRL, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET },
 	{ 0, 0, 0 }
 };
 
 static struct a_reg_entry  it66121_setDVI_table[] = {
 	/* Config default DVI Mode */
-	{ 0x158, 0xFF, 0x00 },
-	{ 0xC0, 0x01, 0x00 },
-	{ 0xC1, 0x03, 0x02 },
-	{ 0xC6, 0x03, 0x00 },
+	{ IT66121_AVIINFO_DB1, 0xFF, 0x00 },
+	{ IT66121_HDMI_MODE, IT66121_HDMI_MODE_HDMI, 0 },
+	{ IT66121_AV_MUTE, IT66121_AV_MUTE_BLUE_SCR | IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_BLUE_SCR },
+	{ IT66121_GENERAL_CTRL, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET, 0 },
 	{ 0, 0, 0 }
 };
 
@@ -333,7 +334,10 @@ static struct a_reg_entry  it66121_default_audio_table[] = {
 	{ 0, 0, 0 }
 };
 
-
+/*
+ * Switch bank and update the bank information.
+ * This should be run with the bank_mutex already held.
+ */
 static int it66121_set_bank(struct it66121 *priv, int bank)
 {
 	int ret;
@@ -351,12 +355,13 @@ static int it66121_set_bank(struct it66121 *priv, int bank)
 /*
  * Select the correct bank for a register operation
  *
- * The registers are separated into three register banks:
+ * The registers are separated into three register areas:
  * Reg_000 - Reg_02F are accessible in any register bank.
  * Reg_030 - Reg_0FF are accessible in register bank0
  * Reg_130 - Reg_1BF are accessible in register bank1.
  *
  * Select the correct bank and return an adapted register number.
+ * This should be run with the bank_mutex already held.
  *
  * returns new register index for regmap operation
  */
@@ -399,7 +404,7 @@ int it66121_reg_read(struct it66121 *priv, int reg)
 	unsigned int val;
 	int ret;
 
-	mutex_lock(&priv->reg_mutex);
+	mutex_lock(&priv->bank_mutex);
 
 	ret = it66121_prepare_bank(priv, &reg);
 	if (ret < 0)
@@ -411,7 +416,7 @@ printk("it66121: read 0x%x from 0x%x, ret %d\n", val, reg, ret);
 		goto out;
 	ret = val;
 out:
-	mutex_unlock(&priv->reg_mutex);
+	mutex_unlock(&priv->bank_mutex);
 	return ret;
 }
 
@@ -419,7 +424,7 @@ int it66121_reg_write(struct it66121 *priv, int reg, u8 val)
 {
 	int ret;
 
-	mutex_lock(&priv->reg_mutex);
+	mutex_lock(&priv->bank_mutex);
 
 	ret = it66121_prepare_bank(priv, &reg);
 	if (ret < 0)
@@ -428,7 +433,7 @@ int it66121_reg_write(struct it66121 *priv, int reg, u8 val)
 	ret = regmap_write(priv->regmap, reg, val);
 printk("it66121: wrote 0x%x to 0x%x, ret %d\n", val, reg, ret);
 out:
-	mutex_unlock(&priv->reg_mutex);
+	mutex_unlock(&priv->bank_mutex);
 	return ret;
 }
 
@@ -437,7 +442,7 @@ int it66121_reg_update_bits(struct it66121 *priv, unsigned int reg,
 {
 	int ret;
 
-	mutex_lock(&priv->reg_mutex);
+	mutex_lock(&priv->bank_mutex);
 
 	ret = it66121_prepare_bank(priv, &reg);
 	if (ret < 0)
@@ -446,7 +451,7 @@ int it66121_reg_update_bits(struct it66121 *priv, unsigned int reg,
 	ret = regmap_update_bits(priv->regmap, reg, mask, val);
 printk("it66121: update 0x%x/0x%x in 0x%x, ret %d\n", val, mask, reg, ret);
 out:
-	mutex_unlock(&priv->reg_mutex);
+	mutex_unlock(&priv->bank_mutex);
 	return ret;
 }
 
@@ -461,7 +466,7 @@ int it66121_reg_bulk_write(struct it66121 *priv, unsigned int reg,
 		return -EINVAL;
 	}
 
-	mutex_lock(&priv->reg_mutex);
+	mutex_lock(&priv->bank_mutex);
 
 	ret = it66121_prepare_bank(priv, &reg);
 	if (ret < 0)
@@ -470,7 +475,7 @@ int it66121_reg_bulk_write(struct it66121 *priv, unsigned int reg,
 	ret = regmap_bulk_write(priv->regmap, reg, val, val_count);
 printk("it66121: writing to %d registers at 0x%x, ret %d\n", val_count, reg, ret);
 out:
-	mutex_unlock(&priv->reg_mutex);
+	mutex_unlock(&priv->bank_mutex);
 	return ret;
 }
 
@@ -631,9 +636,10 @@ static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t
 	u8 ucdata;
 	u8 bSegment;
 
-	if (!buf) return -1;
+	if (!buf)
+		return -EINVAL;
 
-	if (it66121_reg_read(priv, IT66121_INT_STAT1) & IT66121_INT_STAT1_DDC_BUS_HANG) {
+	if (it66121_reg_read(priv, IT66121_INT_STAT0) & IT66121_INT_STAT0_DDC_BUS_HANG) {
 		dev_err(&priv->i2c->dev, "Sorry, ddc bus is hang\n");
 		it66121_abort_DDC(priv);
 	}
@@ -657,14 +663,15 @@ static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t
 			if (ucdata & IT66121_DDC_STATUS_DONE)
 				break;
 
-			if ((ucdata & IT66121_DDC_STATUS_ERROR) || (it66121_reg_read(priv, IT66121_INT_STAT1) & IT66121_INT_STAT1_DDC_BUS_HANG)) {
+			if ((ucdata & IT66121_DDC_STATUS_ERROR) || (it66121_reg_read(priv, IT66121_INT_STAT0) & IT66121_INT_STAT0_DDC_BUS_HANG)) {
 				dev_err(&priv->i2c->dev, "it66121_read_edid_block(): DDC_STATUS = %02X,fail.\n", (int)ucdata);
 				/*clear the DDC FIFO*/
 				it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
 				it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_FIFO_CLEAR);
-				return -1;
+				return -ENXIO;
 			}
 		}
+
 		it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
 		it66121_reg_write(priv, IT66121_DDC_HEADER, DDC_EDID_ADDRESS);
 		it66121_reg_write(priv, IT66121_DDC_REQOFFSET, bCurrOffset);
@@ -709,17 +716,17 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 	int num = 0;
 
 	edid = drm_do_get_edid(connector, it66121_read_edid_block, priv);
-	if (!edid) {
-		dev_warn(&priv->i2c->dev, "failed to read EDID\n");
-		return 0;
-	}
+	if (!edid)
+		return -ENODEV;
+
+	priv->dvi_mode = !drm_detect_hdmi_monitor(edid);
 
 	drm_connector_update_edid_property(connector, edid);
-	if (edid) {
-		num = drm_add_edid_modes(connector, edid);
-		kfree(edid);
-	}
+//	cec_notifier_set_phys_addr_from_edid(hdata->notifier, edid);
 
+	num = drm_add_edid_modes(connector, edid);
+
+	kfree(edid);
 	return num;
 }
 
@@ -769,115 +776,115 @@ static void it66121_set_CSC_scale(struct it66121 *priv,
 	case F_MODE_YUV444:
 		switch (OUTPUT_COLOR_MODE & F_MODE_CLRMOD_MASK) {
 		case F_MODE_YUV444:
-			csc = B_HDMITX_CSC_BYPASS;
+			csc = IT66121_CSC_CTRL_CSC_BYPASS;
 			break;
 		case F_MODE_YUV422:
-			csc = B_HDMITX_CSC_BYPASS;
+			csc = IT66121_CSC_CTRL_CSC_BYPASS;
 			if (input_color_mode & F_VIDMODE_EN_UDFILT) // YUV444 to YUV422 need up/down filter for processing.
-				filter |= B_TX_EN_UDFILTER;
+				filter |= IT66121_CSC_CTRL_UDFILTER;
 			break;
 		case F_MODE_RGB444:
-			csc = B_HDMITX_CSC_YUV2RGB;
+			csc = IT66121_CSC_CTRL_CSC_YUV2RGB;
 			if (input_color_mode & F_VIDMODE_EN_DITHER) // YUV444 to RGB24 need dither
-				filter |= B_TX_EN_DITHER | B_TX_DNFREE_GO;
+				filter |= IT66121_CSC_CTRL_DITHER | IT66121_CSC_CTRL_DNFREE_GO;
 			break;
 		}
 		break;
 	case F_MODE_YUV422:
 		switch (OUTPUT_COLOR_MODE & F_MODE_CLRMOD_MASK) {
 		case F_MODE_YUV444:
-			csc = B_HDMITX_CSC_BYPASS;
+			csc = IT66121_CSC_CTRL_CSC_BYPASS;
 			if (input_color_mode & F_VIDMODE_EN_UDFILT) // YUV422 to YUV444 need up filter
-				filter |= B_TX_EN_UDFILTER;
+				filter |= IT66121_CSC_CTRL_UDFILTER;
 			if (input_color_mode & F_VIDMODE_EN_DITHER) // YUV422 to YUV444 need dither
-				filter |= B_TX_EN_DITHER | B_TX_DNFREE_GO;
+				filter |= IT66121_CSC_CTRL_DITHER | IT66121_CSC_CTRL_DNFREE_GO;
 			break;
 		case F_MODE_YUV422:
-			csc = B_HDMITX_CSC_BYPASS;
+			csc = IT66121_CSC_CTRL_CSC_BYPASS;
 			break;
 		case F_MODE_RGB444:
-			csc = B_HDMITX_CSC_YUV2RGB;
+			csc = IT66121_CSC_CTRL_CSC_YUV2RGB;
 			if (input_color_mode & F_VIDMODE_EN_UDFILT) // YUV422 to RGB24 need up/dn filter.
-				filter |= B_TX_EN_UDFILTER;
+				filter |= IT66121_CSC_CTRL_UDFILTER;
 			if (input_color_mode & F_VIDMODE_EN_DITHER) // YUV422 to RGB24 need dither
-				filter |= B_TX_EN_DITHER | B_TX_DNFREE_GO;
+				filter |= IT66121_CSC_CTRL_DITHER | IT66121_CSC_CTRL_DNFREE_GO;
 			break;
 		}
 		break;
 	case F_MODE_RGB444:
 		switch (OUTPUT_COLOR_MODE & F_MODE_CLRMOD_MASK) {
 		case F_MODE_YUV444:
-			csc = B_HDMITX_CSC_RGB2YUV;
+			csc = IT66121_CSC_CTRL_CSC_RGB2YUV;
 			if (INPUT_COLOR_MODE & F_VIDMODE_EN_DITHER) // RGB24 to YUV444 need dither
-				filter |= B_TX_EN_DITHER | B_TX_DNFREE_GO;
+				filter |= IT66121_CSC_CTRL_DITHER | IT66121_CSC_CTRL_DNFREE_GO;
 			break;
 		case F_MODE_YUV422:
 			if (input_color_mode & F_VIDMODE_EN_UDFILT) // RGB24 to YUV422 need down filter.
-				filter |= B_TX_EN_UDFILTER;
+				filter |= IT66121_CSC_CTRL_UDFILTER;
 			if (input_color_mode & F_VIDMODE_EN_DITHER) // RGB24 to YUV422 need dither
-				filter |= B_TX_EN_DITHER | B_TX_DNFREE_GO;
-			csc = B_HDMITX_CSC_RGB2YUV;
+				filter |= IT66121_CSC_CTRL_DITHER | IT66121_CSC_CTRL_DNFREE_GO;
+			csc = IT66121_CSC_CTRL_CSC_RGB2YUV;
 			break;
 		case F_MODE_RGB444:
-			csc = B_HDMITX_CSC_BYPASS;
+			csc = IT66121_CSC_CTRL_CSC_BYPASS;
 			break;
 		}
 		break;
 	}
 
-	if (csc == B_HDMITX_CSC_RGB2YUV) {
+	if (csc == IT66121_CSC_CTRL_CSC_RGB2YUV) {
 		switch (input_color_mode & (F_VIDMODE_ITU709 | F_VIDMODE_16_235)) {
 		case F_VIDMODE_ITU709 | F_VIDMODE_16_235:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_RGB2YUV_ITU709_16_235[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_RGB2YUV_ITU709_16_235[i]);
 			break;
 		case F_VIDMODE_ITU709 | F_VIDMODE_0_255:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_RGB2YUV_ITU709_0_255[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_RGB2YUV_ITU709_0_255[i]);
 			break;
 		case F_VIDMODE_ITU601 | F_VIDMODE_16_235:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_RGB2YUV_ITU601_16_235[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_RGB2YUV_ITU601_16_235[i]);
 			break;
 		case F_VIDMODE_ITU601 | F_VIDMODE_0_255:
 		default:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_RGB2YUV_ITU601_0_255[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_RGB2YUV_ITU601_0_255[i]);
 			break;
 		}
 	}
 
-	if (csc == B_HDMITX_CSC_YUV2RGB) {
+	if (csc == IT66121_CSC_CTRL_CSC_YUV2RGB) {
 		switch (input_color_mode & (F_VIDMODE_ITU709 | F_VIDMODE_16_235)) {
 		case F_VIDMODE_ITU709 | F_VIDMODE_16_235:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_YUV2RGB_ITU709_16_235[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_YUV2RGB_ITU709_16_235[i]);
 			break;
 		case F_VIDMODE_ITU709 | F_VIDMODE_0_255:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_YUV2RGB_ITU709_0_255[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_YUV2RGB_ITU709_0_255[i]);
 			break;
 		case F_VIDMODE_ITU601 | F_VIDMODE_16_235:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_YUV2RGB_ITU601_16_235[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_YUV2RGB_ITU601_16_235[i]);
 			break;
 		case F_VIDMODE_ITU601 | F_VIDMODE_0_255:
 		default:
 			for (i = 0; i < SIZEOF_CSCMTX; i++)
-				it66121_reg_write(priv, IT66121_CSC_YOFF + i, bCSCMtx_YUV2RGB_ITU601_0_255[i]);
+				it66121_reg_write(priv, IT66121_CSC_Y_OFFSET + i, bCSCMtx_YUV2RGB_ITU601_0_255[i]);
 			break;
 		}
 	}
 
-	if (csc == B_HDMITX_CSC_BYPASS)
-		it66121_reg_update_bits(priv, 0xF, 0x10, 0x10);
+	if (csc == IT66121_CSC_CTRL_CSC_BYPASS)
+		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, IT66121_SYS_STATUS1_GATE_TXCLK);
 	else
-		it66121_reg_update_bits(priv, 0xF, 0x10, 0x00);
+		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, 0);
 
-	udata = it66121_reg_read(priv, IT66121_CSC_CTRL) & ~(M_TX_CSC_SEL | B_TX_DNFREE_GO | B_TX_EN_DITHER | B_TX_EN_UDFILTER);
+	it66121_reg_update_bits(priv, IT66121_CSC_CTRL, IT66121_CSC_CTRL_CSC_MASK | IT66121_CSC_CTRL_DNFREE_GO | IT66121_CSC_CTRL_DITHER | IT66121_CSC_CTRL_UDFILTER, filter | csc);
+/*	udata = it66121_reg_read(priv, IT66121_CSC_CTRL) & ~(IT66121_CSC_CTRL_CSC_MASK | IT66121_CSC_CTRL_DNFREE_GO | IT66121_CSC_CTRL_DITHER | IT66121_CSC_CTRL_UDFILTER);
 	udata |= filter | csc;
-
-	it66121_reg_write(priv, IT66121_CSC_CTRL, udata);
+	it66121_reg_write(priv, IT66121_CSC_CTRL, udata); */
 }
 
 static void it66121_setup_AFE(struct it66121 *priv, u8 level)
@@ -970,8 +977,8 @@ static void it66121_enable_video_output(struct it66121 *priv,
 	//~jau-chih.tseng@ite.com.tw
 
 	/*Set regC1[0] = '1' for AVMUTE the output, only support hdmi mode now*/
-	//it66121_reg_update_bits(priv, IT66121_GCP, B_TX_SETAVMUTE,  B_TX_SETAVMUTE);
-	it66121_reg_update_bits(priv, IT66121_GCP, B_TX_SETAVMUTE,  0);
+	//it66121_reg_update_bits(priv, IT66121_AV_MUTE, IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_MUTE);
+	it66121_reg_update_bits(priv, IT66121_AV_MUTE, IT66121_AV_MUTE_MUTE,  0);
 	it66121_reg_write(priv, IT66121_GENERAL_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
 
 	/* Programming Input Signal Type
@@ -996,9 +1003,9 @@ static void it66121_enable_video_output(struct it66121 *priv,
 	*/
 	it66121_set_CSC_scale(priv, input_color_mode);
 	/*hdmi mode*/
-	it66121_reg_write(priv, IT66121_HDMI_MODE, B_TX_HDMI_MODE);
+	it66121_reg_write(priv, IT66121_HDMI_MODE, IT66121_HDMI_MODE_HDMI);
 	/*dvi mode*/
-	//it66121_reg_write(priv,IT66121_HDMI_MODE, B_TX_DVI_MODE);
+	//it66121_reg_write(priv,IT66121_HDMI_MODE, IT66121_HDMI_MODE_DVI);
 #ifdef INVERT_VID_LATCHEDGE
 	udata = it66121_reg_read(priv, IT66121_CLK_CTRL1);
 	udata |= IT66121_CLK_CTRL1_VDO_LATCH_EDGE;
@@ -1010,7 +1017,7 @@ static void it66121_enable_video_output(struct it66121 *priv,
 			  IT66121_SW_RST_SOFT_AUD |
 			  IT66121_SW_RST_HDCP);
 
-	/*fire APFE*/
+	/* fire APFE */
 	it66121_reg_write(priv, IT66121_AFE_DRV_CTRL, 0);
 }
 
@@ -1133,42 +1140,42 @@ static void it66121_hpd_work(struct work_struct *work)
 }
 
 struct it66121_int_clr {
-	u8 int;
+	u8 irq;
 	u16 reg;
 	u8 bit;
 };
 
 static const struct it66121_int_clr it66121_int_stat1_clr[] = {
-	{ IT66121_INT_STAT1_RX_SENSE, IT66121_INT_CLR0, IT66121_INT_CLR0_RX_SENSE },
-	{ IT66121_INT_STAT1_HPD, IT66121_INT_CLR0, IT66121_INT_CLR0_HPD },
+	{ IT66121_INT_STAT0_RX_SENSE, IT66121_INT_CLR0, IT66121_INT_CLR0_RX_SENSE },
+	{ IT66121_INT_STAT0_HPD, IT66121_INT_CLR0, IT66121_INT_CLR0_HPD },
 };
 
 static const struct it66121_int_clr it66121_int_stat2_clr[] = {
-	{ IT66121_INT_STAT2_VID_UNSTABLE, IT66121_INT_CLR1, IT66121_INT_CLR1_VID_UNSTABLE },
-	{ IT66121_INT_STAT2_PKT_ACP, IT66121_INT_CLR0, IT66121_INT_CLR0_PKT_ACP },
-	{ IT66121_INT_STAT2_PKT_NULL, IT66121_INT_CLR0, IT66121_INT_CLR0_PKT_NULL },
-	{ IT66121_INT_STAT2_PKT_GEN, IT66121_INT_CLR0, IT66121_INT_CLR0_PKT_GEN },
-	{ IT66121_INT_STAT2_KSVLIST_CHK, IT66121_INT_CLR0, IT66121_INT_CLR0_KSVLIST_CHK },
-	{ IT66121_INT_STAT2_AUTH_DONE, IT66121_INT_CLR0, IT66121_INT_CLR0_AUTH_DONE },
-	{ IT66121_INT_STAT2_AUTH_FAIL, IT66121_INT_CLR0, IT66121_INT_CLR0_AUTH_FAIL },
+	{ IT66121_INT_STAT1_VID_UNSTABLE, IT66121_INT_CLR1, IT66121_INT_CLR1_VID_UNSTABLE },
+	{ IT66121_INT_STAT1_PKT_ACP, IT66121_INT_CLR0, IT66121_INT_CLR0_PKT_ACP },
+	{ IT66121_INT_STAT1_PKT_NULL, IT66121_INT_CLR0, IT66121_INT_CLR0_PKT_NULL },
+	{ IT66121_INT_STAT1_PKT_GEN, IT66121_INT_CLR0, IT66121_INT_CLR0_PKT_GEN },
+	{ IT66121_INT_STAT1_KSVLIST_CHK, IT66121_INT_CLR0, IT66121_INT_CLR0_KSVLIST_CHK },
+	{ IT66121_INT_STAT1_AUTH_DONE, IT66121_INT_CLR0, IT66121_INT_CLR0_AUTH_DONE },
+	{ IT66121_INT_STAT1_AUTH_FAIL, IT66121_INT_CLR0, IT66121_INT_CLR0_AUTH_FAIL },
 };
 
 static const struct it66121_int_clr it66121_int_stat3_clr[] = {
-	{ IT66121_INT_STAT3_AUD_CTS, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_CLEAR_AUD_CTS },
-	{ IT66121_INT_STAT3_VSYNC, IT66121_INT_CLR1, IT66121_INT_CLR1_VSYNC },
-	{ IT66121_INT_STAT3_VID_STABLE, IT66121_INT_CLR1, IT66121_INT_CLR1_VID_STABLE },
-	{ IT66121_INT_STAT3_PKT_MPG, IT66121_INT_CLR1, IT66121_INT_CLR1_PKT_MPG },
-	{ IT66121_INT_STAT3_PKT_AUD, IT66121_INT_CLR1, IT66121_INT_CLR1_PKT_AUD },
-	{ IT66121_INT_STAT3_PKT_AVI, IT66121_INT_CLR1, IT66121_INT_CLR1_PKT_AVI },
+	{ IT66121_INT_STAT2_AUD_CTS, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_CLEAR_AUD_CTS },
+	{ IT66121_INT_STAT2_VSYNC, IT66121_INT_CLR1, IT66121_INT_CLR1_VSYNC },
+	{ IT66121_INT_STAT2_VID_STABLE, IT66121_INT_CLR1, IT66121_INT_CLR1_VID_STABLE },
+	{ IT66121_INT_STAT2_PKT_MPG, IT66121_INT_CLR1, IT66121_INT_CLR1_PKT_MPG },
+	{ IT66121_INT_STAT2_PKT_AUD, IT66121_INT_CLR1, IT66121_INT_CLR1_PKT_AUD },
+	{ IT66121_INT_STAT2_PKT_AVI, IT66121_INT_CLR1, IT66121_INT_CLR1_PKT_AVI },
 };
 
-static int it66121_clear_interrupt(it66121 *priv, u8 intreg,
-				   struct it66121_int_clr *clr, int clrnum)
+static int it66121_clear_interrupt(struct it66121 *priv, u8 intreg,
+				   const struct it66121_int_clr *clr, int clrnum)
 {
 	int i, ret;
 
-	for (i == 0; i < clrnum; i++) {
-		if (intreg & clr[i].int) {
+	for (i = 0; i < clrnum; i++) {
+		if (intreg & clr[i].irq) {
 			ret = it66121_reg_write(priv, clr[i].reg, clr[i].bit);
 			if (ret < 0) {
 				dev_err(&priv->i2c->dev,
@@ -1184,38 +1191,50 @@ static int it66121_clear_interrupt(it66121 *priv, u8 intreg,
 static irqreturn_t it66121_thread_interrupt(int irq, void *data)
 {
 	struct it66121 *priv = data;
+	int intcore;
+
 	u8 sysstat;
+	u8 intdata0;
 	u8 intdata1;
 	u8 intdata2;
 	u8 intdata3;
-	u8 udata;
-	char intclr3, intdata4;
 
-printk("%s: begin of interrupt\n", __func__);
-	sysstat = it66121_reg_read(priv, IT66121_SYS_STATUS0);
+	intcore = it66121_reg_read(priv, IT66121_INT_CORE_STAT);
+	if (intcore < 0) {
+		/* trying to recover by handling all interrupt states */
+		dev_warn(&priv->i2c->dev, "failed to read interrupt status\n");
+		intcore = IT66121_INT_CORE_STAT_CEC |
+			  IT66121_INT_CORE_STAT_EXT |
+			  IT66121_INT_CORE_STAT_HDMI;
+	}
+printk("%s: begin of interrupt, core status 0x%x\n", __func__, intcore);
 
+
+	intdata0 = it66121_reg_read(priv, IT66121_INT_STAT0);
 	intdata1 = it66121_reg_read(priv, IT66121_INT_STAT1);
 	intdata2 = it66121_reg_read(priv, IT66121_INT_STAT2);
-	intdata3 = it66121_reg_read(priv, IT66121_INT_STAT3);
-	intdata4 = it66121_reg_read(priv, 0xee);
-	intclr3 = it66121_reg_read(priv, IT66121_SYS_STATUS0);
-	intclr3 = intclr3 | IT66121_SYS_STATUS0_CLEAR_AUD_CTS | IT66121_SYS_STATUS0_INTACTDONE;
-	if (intdata4)
-		it66121_reg_write(priv, 0xEE, intdata4); // clear ext interrupt ;
+	intdata3 = it66121_reg_read(priv, IT66121_INT_STAT_EXT);
 
-	it66121_reg_write(priv, IT66121_INT_CLR0, 0xFF);
-	it66121_reg_write(priv, IT66121_INT_CLR1, 0xFF);
-	it66121_reg_write(priv, IT66121_SYS_STATUS0, intclr3); // clear interrupt.
-	intclr3 &= ~(IT66121_SYS_STATUS0_INTACTDONE);
-	it66121_reg_write(priv, IT66121_SYS_STATUS0, intclr3); // INTACTDONE reset to zero.
+	/* enable interrupt clearing */
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_INTACTDONE, IT66121_SYS_STATUS0_INTACTDONE);
 
-/*#define IT66121_INT_STAT1_AUDIO_OVERFLOW	BIT(7) -> Audio-Reset
-#define IT66121_INT_STAT1_DDC_NOACK		BIT(5)
-#define IT66121_INT_STAT1_DDC_FIFO_ERR		BIT(4) -> DDC-Reset
-#define IT66121_INT_STAT1_DDC_BUS_HANG		BIT(2) -> DDC-Reset */
+	it66121_clear_interrupt(priv, intdata0, it66121_int_stat1_clr, ARRAY_SIZE(it66121_int_stat1_clr));
+	it66121_clear_interrupt(priv, intdata1, it66121_int_stat2_clr, ARRAY_SIZE(it66121_int_stat2_clr));
+	it66121_clear_interrupt(priv, intdata2, it66121_int_stat3_clr, ARRAY_SIZE(it66121_int_stat2_clr));
 
+	/* ext-interrupt is write-1-to-clear */
+	if (intdata3)
+		it66121_reg_write(priv, IT66121_INT_STAT_EXT, intdata3);
 
-	if (intdata1 & IT66121_INT_STAT1_DDC_FIFO_ERR) {
+//	intclr3 = it66121_reg_read(priv, IT66121_SYS_STATUS0);
+//	intclr3 = intclr3 | IT66121_SYS_STATUS0_CLEAR_AUD_CTS;
+//	it66121_reg_write(priv, IT66121_INT_CLR0, 0xFF);
+//	it66121_reg_write(priv, IT66121_INT_CLR1, 0xFF);
+//	it66121_reg_write(priv, IT66121_SYS_STATUS0, intclr3); // clear interrupt.
+
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_INTACTDONE, 0);
+
+	if (intdata0 & IT66121_INT_STAT0_DDC_FIFO_ERR) {
 printk("%s: handling ddc_fifo_err\n", __func__);
 		//dev_err(&client->dev, "DDC FIFO Error.\n");
 		/*clear ddc fifo*/
@@ -1223,23 +1242,23 @@ printk("%s: handling ddc_fifo_err\n", __func__);
 		it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_FIFO_CLEAR);
 	}
 
-	if (intdata1 & IT66121_INT_STAT1_DDC_BUS_HANG) {
+	if (intdata0 & IT66121_INT_STAT0_DDC_BUS_HANG) {
 printk("%s: handling ddc_bus_hang\n", __func__);
 		//dev_err(&client->dev, "DDC BUS HANG.\n");
 		/*abort ddc*/
 		it66121_abort_DDC(priv);
 	}
 
-	if (intdata1 & IT66121_INT_STAT1_AUDIO_OVERFLOW) {
+	if (intdata0 & IT66121_INT_STAT0_AUDIO_OVERFLOW) {
 printk("%s: handling audio overflow\n", __func__);
 		//dev_err(&client->dev, "AUDIO FIFO OVERFLOW.\n");
-		it66121_reg_update_bits(priv, IT66121_SW_RST, (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD),
-					  (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD));
-		udata = it66121_reg_read(priv, IT66121_SW_RST);
-		it66121_reg_write(priv, IT66121_SW_RST, udata & (~(IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD)));
+		it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD,
+					  IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD);
+		it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD,
+					  0);
 	}
 
-	if (intdata3 & IT66121_INT_STAT3_VID_STABLE) {
+	if (intdata2 & IT66121_INT_STAT2_VID_STABLE) {
 printk("%s: handling vid_stable\n", __func__);
 		//dev_info(&client->dev, "it66121 interrupt video enabled\n");
 		sysstat = it66121_reg_read(priv, IT66121_SYS_STATUS0);
@@ -1249,18 +1268,11 @@ printk("%s: handling vid_stable\n", __func__);
 		}
 	}
 
-	if ((intdata1 & IT66121_INT_STAT1_HPD) && priv->bridge.dev)
+	if ((intdata0 & IT66121_INT_STAT0_HPD) && priv->bridge.dev)
 {
 printk("%s: handling hotplug\n", __func__);
 		schedule_work(&priv->hpd_work);
 }
-
-printk("%s: end of interrupt status:\n", __func__);
-	sysstat = it66121_reg_read(priv, IT66121_SYS_STATUS0);
-	intdata1 = it66121_reg_read(priv, IT66121_INT_STAT1);
-	intdata2 = it66121_reg_read(priv, IT66121_INT_STAT2);
-	intdata3 = it66121_reg_read(priv, IT66121_INT_STAT3);
-	intdata4 = it66121_reg_read(priv, 0xee);
 
 	return IRQ_HANDLED;
 }
@@ -1310,19 +1322,40 @@ err_device:
 	return -ENXIO;;
 }
 
-static const struct regmap_range it66121_volatile_ranges[] = {
-	{ .range_min = 0, .range_max = 0xff },
+static const struct regmap_config it66121_cec_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+
+	.max_register = 0xff,
+	.cache_type = REGCACHE_NONE,
 };
 
-static const struct regmap_access_table it66121_volatile_table = {
-	.yes_ranges = it66121_volatile_ranges,
-	.n_yes_ranges = ARRAY_SIZE(it66121_volatile_ranges),
-};
+static int adv7511_init_cec_regmap(struct it66121 *priv)
+{
+	int ret;
+
+	priv->i2c_cec = i2c_new_secondary_device(priv->i2c, "cec",
+						 IT66121_CEC_I2C_ADDR_DEFAULT);
+	if (!priv->i2c_cec)
+		return -EINVAL;
+	i2c_set_clientdata(priv->i2c_cec, priv);
+
+	priv->regmap_cec = devm_regmap_init_i2c(priv->i2c_cec,
+					&it66121_cec_regmap_config);
+	if (IS_ERR(priv->regmap_cec)) {
+		ret = PTR_ERR(priv->regmap_cec);
+		goto err;
+	}
+
+	return 0;
+err:
+	i2c_unregister_device(priv->i2c_cec);
+	return ret;
+}
 
 static const struct regmap_config it66121_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
-	.volatile_table = &it66121_volatile_table,
 	.cache_type = REGCACHE_NONE,
 };
 
@@ -1409,7 +1442,7 @@ static int it66121_probe(struct i2c_client *client,
 	INIT_WORK(&priv->hpd_work, it66121_hpd_work);
 
 	/* init bank to 0 */
-	mutex_init(&priv->reg_mutex);
+	mutex_init(&priv->bank_mutex);
 	it66121_set_bank(priv, 0);
 
 	ret = it66121_init(client, priv);
@@ -1448,6 +1481,8 @@ static int it66121_remove(struct i2c_client *client)
 	struct it66121 *priv = i2c_get_clientdata(client);
 
 	drm_bridge_remove(&priv->bridge);
+
+	i2c_unregister_device(priv->i2c_cec);
 
 	it66121_audio_exit(priv);
 
