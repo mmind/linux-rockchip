@@ -106,13 +106,10 @@ u8 bCSCMtx_YUV2RGB_ITU709_0_255[] = {
 };
 
 static struct a_reg_entry it66121_init_table[] = {
-	{ IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_RCLK, 0x00 },
-
 	{ IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, 0x00 },
 	{ IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_RESETB, 0x00 },
 	{ 0x01, 0x00, 0x00 }, //idle(100);
 
-	{ IT66121_SW_RST, IT66121_SW_RST_REF, IT66121_SW_RST_REF },  //Software RCLK reset.
 	{ IT66121_SW_RST, IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP, IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP },
 	{ 0x01, 0x00, 0x00 }, //idle(100);
 
@@ -128,8 +125,6 @@ static struct a_reg_entry it66121_init_table[] = {
 	{ IT66121_TXFIFO_CTRL, IT66121_TXFIFO_CTRL_XP_STABLETIME_MASK | IT66121_TXFIFO_CTRL_XP_LOCK_CHK | IT66121_TXFIFO_CTRL_PLL_BUF_RST | IT66121_TXFIFO_CTRL_AUTO_RST | IT66121_TXFIFO_CTRL_IO_NONSEQ, IT66121_TXFIFO_CTRL_XP_STABLETIME_75US | IT66121_TXFIFO_CTRL_PLL_BUF_RST | IT66121_TXFIFO_CTRL_AUTO_RST },
 #endif
 
-	{ IT66121_CEC_SLAVE_ADDRESS, IT66121_CEC_SLAVE_ADDRESS_MASK, IT66121_CEC_I2C_ADDR_DEFAULT },
-	{ IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_CRCLK, IT66121_SYS_STATUS1_GATE_CRCLK },
 
 /* strange undocumented hdcp stuff */
 	{ 0xF8, 0xFF, 0xC3 },
@@ -481,9 +476,6 @@ out:
 
 static int it66121_power_down(struct it66121 *priv)
 {
-	/* enable rclk */
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_RCLK, 0);
-
 	// PLL Reset
 	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_RST, IT66121_AFE_DRV_CTRL_RST);
 	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, 0);
@@ -497,17 +489,14 @@ static int it66121_power_down(struct it66121 *priv)
 	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_PWDPLL, IT66121_AFE_IP_CTRL_PWDPLL);
 
 	/* HDMITX power down */
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK, IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK);
 	it66121_reg_update_bits(priv, IT66121_INT_CTRL, IT66121_INT_CTRL_TXCLK_POWERDN, IT66121_INT_CTRL_TXCLK_POWERDN);
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_RCLK | IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK | IT66121_SYS_STATUS1_GATE_CRCLK, IT66121_SYS_STATUS1_GATE_RCLK | IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK | IT66121_SYS_STATUS1_GATE_CRCLK);
 
 	return 0;
 }
 
 static int it66121_power_up(struct it66121 *priv)
 {
-	/* enable rclk */
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_RCLK | IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK | IT66121_SYS_STATUS1_GATE_CRCLK, IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK | IT66121_SYS_STATUS1_GATE_CRCLK);
-
 	it66121_reg_update_bits(priv, IT66121_INT_CTRL, IT66121_INT_CTRL_TXCLK_POWERDN, 0);
 
 	// PLL PwrOn
@@ -522,7 +511,9 @@ static int it66121_power_up(struct it66121 *priv)
 	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, IT66121_AFE_XP_CTRL_RESETB);
 	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_RESETB, IT66121_AFE_IP_CTRL_RESETB);
 
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_RCLK | IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK | IT66121_SYS_STATUS1_GATE_CRCLK, IT66121_SYS_STATUS1_GATE_CRCLK);
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_IACLK | IT66121_SYS_STATUS1_GATE_TXCLK, 0);
+
+	return 0;
 }
 
 static int it66121_load_reg_table(struct it66121 *priv, struct a_reg_entry table[])
@@ -769,7 +760,6 @@ static void it66121_set_CSC_scale(struct it66121 *priv,
 {
 	u8 csc = 0;
 	u8 filter = 0;
-	u8 udata = 0;
 	int i;
 
 	switch (input_color_mode & F_MODE_CLRMOD_MASK) {
@@ -1330,27 +1320,53 @@ static const struct regmap_config it66121_cec_regmap_config = {
 	.cache_type = REGCACHE_NONE,
 };
 
-static int adv7511_init_cec_regmap(struct it66121 *priv)
+static void it66121_delete_cec_i2c(void *data)
+{
+	struct it66121 *priv = data;
+
+	i2c_unregister_device(priv->i2c_cec);
+}
+
+static int it66121_init_cec_regmap(struct it66121 *priv)
 {
 	int ret;
 
+	/* read and configure the cec i2c address */
+	priv->cec_addr = IT66121_CEC_SLAVE_ADDRESS_DEFAULT;
+	device_property_read_u32(&priv->i2c->dev,
+				"ite,cec-address", &priv->cec_addr);
+
+	ret = it66121_reg_write(priv,
+				IT66121_CEC_SLAVE_ADDRESS, priv->cec_addr);
+	if (ret < 0)
+		return ret;
+
+	/* now add the secondary i2c device */
 	priv->i2c_cec = i2c_new_secondary_device(priv->i2c, "cec",
-						 IT66121_CEC_I2C_ADDR_DEFAULT);
+						 priv->cec_addr);
 	if (!priv->i2c_cec)
 		return -EINVAL;
+
+	ret = devm_add_action_or_reset(&priv->i2c->dev,
+				       it66121_delete_cec_i2c, priv);
+	if (ret < 0)
+		return ret;
+
 	i2c_set_clientdata(priv->i2c_cec, priv);
 
 	priv->regmap_cec = devm_regmap_init_i2c(priv->i2c_cec,
 					&it66121_cec_regmap_config);
-	if (IS_ERR(priv->regmap_cec)) {
-		ret = PTR_ERR(priv->regmap_cec);
-		goto err;
-	}
+	if (IS_ERR(priv->regmap_cec))
+		return PTR_ERR(priv->regmap_cec);
+
+	/* start with the cec clock disabled */
+	ret = it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
+					    IT66121_SYS_STATUS1_GATE_CRCLK,
+					    IT66121_SYS_STATUS1_GATE_CRCLK);
+	if (ret < 0)
+		return ret;
 
 	return 0;
-err:
-	i2c_unregister_device(priv->i2c_cec);
-	return ret;
 }
 
 static const struct regmap_config it66121_regmap_config = {
@@ -1426,6 +1442,18 @@ static int it66121_probe(struct i2c_client *client,
 	if (IS_ERR(priv->regmap))
 		return PTR_ERR(priv->regmap);
 
+	/* ungate the rclk for i2c access - FIXME: or is it ddc-i2c? */
+	ret = regmap_update_bits(priv->regmap, IT66121_SYS_STATUS1,
+					IT66121_SYS_STATUS1_GATE_RCLK, 0);
+	if (ret < 0)
+		return ret;
+
+	/* put RCLK in reset */
+	ret = regmap_update_bits(priv->regmap, IT66121_SW_RST,
+				 IT66121_SW_RST_REF, IT66121_SW_RST_REF);
+	if (ret < 0)
+		return ret;
+
 	ret = regmap_bulk_read(priv->regmap, IT66121_VENDOR_ID0, &chipid, 4);
 	if (ret) {
 		dev_err(dev, "regmap_read failed %d\n", ret);
@@ -1457,6 +1485,12 @@ static int it66121_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	ret = it66121_init_cec_regmap(priv);
+	if (ret < 0) {
+		dev_err(&priv->i2c->dev, "fail to init cec device\n");
+		return ret;
+	}
+
 	if (client->irq > 0) {
 		ret = devm_request_threaded_irq(dev, client->irq, NULL,
 						it66121_thread_interrupt,
@@ -1481,8 +1515,6 @@ static int it66121_remove(struct i2c_client *client)
 	struct it66121 *priv = i2c_get_clientdata(client);
 
 	drm_bridge_remove(&priv->bridge);
-
-	i2c_unregister_device(priv->i2c_cec);
 
 	it66121_audio_exit(priv);
 

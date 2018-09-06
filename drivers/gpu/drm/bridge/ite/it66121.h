@@ -19,6 +19,7 @@
 struct it66121 {
 	struct i2c_client *i2c;
 	struct i2c_client *i2c_cec;
+	u32 cec_addr;
 	struct regmap *regmap;
 	struct regmap *regmap_cec;
 	int cur_bank;
@@ -457,6 +458,7 @@ enum {
 
 #define IT66121_CEC_SLAVE_ADDRESS		0x8d
 #define IT66121_CEC_SLAVE_ADDRESS_MASK		0xff
+#define IT66121_CEC_SLAVE_ADDRESS_DEFAULT	0xc8
 
 /*#define IT66121_HVPol 0x90
 #define IT66121_HfPixel 0x91
@@ -1131,9 +1133,6 @@ typedef enum _mode_id {
 #define DDC_FIFO_MAXREQ 0x20
 
 
-/* temporarily until rk-i2c is fixed for 10bit */
-//#define IT66121_CEC_I2C_ADDR_DEFAULT 0x9c
-#define IT66121_CEC_I2C_ADDR_DEFAULT 0x4e
 
 
 int it66121_reg_read(struct it66121 *priv, int reg);
