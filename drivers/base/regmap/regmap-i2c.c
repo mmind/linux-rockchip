@@ -155,12 +155,12 @@ static int regmap_i2c_gather_write(void *context,
 		return -ENOTSUPP;
 
 	xfer[0].addr = i2c->addr;
-	xfer[0].flags = 0;
+	xfer[0].flags = (i2c->flags & I2C_M_TEN);
 	xfer[0].len = reg_size;
 	xfer[0].buf = (void *)reg;
 
 	xfer[1].addr = i2c->addr;
-	xfer[1].flags = I2C_M_NOSTART;
+	xfer[1].flags = I2C_M_NOSTART | (i2c->flags & I2C_M_TEN);
 	xfer[1].len = val_size;
 	xfer[1].buf = (void *)val;
 
@@ -183,12 +183,12 @@ static int regmap_i2c_read(void *context,
 	int ret;
 
 	xfer[0].addr = i2c->addr;
-	xfer[0].flags = 0;
+	xfer[0].flags = (i2c->flags & I2C_M_TEN);
 	xfer[0].len = reg_size;
 	xfer[0].buf = (void *)reg;
 
 	xfer[1].addr = i2c->addr;
-	xfer[1].flags = I2C_M_RD;
+	xfer[1].flags = I2C_M_RD | (i2c->flags & I2C_M_TEN);
 	xfer[1].len = val_size;
 	xfer[1].buf = val;
 
