@@ -213,7 +213,9 @@ struct rk3x_i2c {
 
 	/* Current message */
 	struct i2c_msg *msg;
-	u8 addr;
+	u16 addr;
+	u8 addr_1st;
+	u8 addr_2nd;
 	unsigned int mode;
 	bool is_last_msg;
 
@@ -347,7 +349,9 @@ static void rk3x_i2c_fill_transmit_buf(struct rk3x_i2c *i2c)
 				break;
 
 			if (i2c->processed == 0 && cnt == 0)
-				byte = (i2c->addr & 0x7f) << 1;
+				byte = (i2c->addr_1st & 0x7f) << 1;
+			else if ((i2c->processed == 0) && (cnt == 1) && (i2c->msg->flags & I2C_M_TEN))
+				byte = i2c->addr_2nd;
 			else
 				byte = i2c->msg->buf[i2c->processed++];
 
@@ -973,17 +977,53 @@ static int rk3x_i2c_clk_notifier_cb(struct notifier_block *nb, unsigned long
  */
 static int rk3x_i2c_setup(struct rk3x_i2c *i2c, struct i2c_msg *msgs, int num)
 {
-	u32 addr = (msgs[0].addr & 0x7f) << 1;
+	u32 addr;
 	int ret = 0;
 
+	if (msgs[0].flags & I2C_M_TEN) {
+		/* The first slave address is '11110xx' + R/W bit */
+		i2c->addr_1st = ((msgs[0].addr & 0x0300) >> 8) | 0x78;
+		i2c->addr_2nd = msgs[0].addr & 0x00ff;
+	} else {
+		i2c->addr_1st = (msgs[0].addr & 0x7f);
+		i2c->addr_2nd = 0;
+	}
+
+	addr = (u32)i2c->addr_1st << 1;
+
 	/*
-	 * The I2C adapter can issue a small (len < 4) write packet before
-	 * reading. This speeds up SMBus-style register reads.
+	 * The I2C adapter can issue a small (len < 4) or (len < 3 && 10bit addr)
+	 * write packet before reading. This speeds up SMBus-style register reads.
 	 * The MRXADDR/MRXRADDR hold the slave address and the slave register
 	 * address in this case.
 	 */
 
-	if (num >= 2 && msgs[0].len < 4 &&
+	if (num >= 2 && msgs[0].len < 3 && (msgs[0].flags & I2C_M_TEN) &&
+	    !(msgs[0].flags & I2C_M_RD) && (msgs[1].flags & I2C_M_RD)) {
+		u32 reg_addr = 0;
+		int i;
+
+		dev_warn(i2c->dev, "Combined write/read from 10 bit first addr: 0x%x, second addr: 0x%x\n",
+			addr >> 1, i2c->addr_2nd);
+
+		/* Fill MRXRADDR with the 2nd_addr and register address(es) */
+		reg_addr |= i2c->addr_2nd;
+		reg_addr |= REG_MRXADDR_VALID(0);
+		for (i = 0; i < msgs[0].len; ++i) {
+			reg_addr |= msgs[0].buf[i] << (i * 8 + 8);
+			reg_addr |= REG_MRXADDR_VALID(i + 1);
+		}
+
+		/* msgs[0] is handled by hw. */
+		i2c->msg = &msgs[1];
+
+		i2c->mode = REG_CON_MOD_REGISTER_TX;
+
+		i2c_writel(i2c, addr | REG_MRXADDR_VALID(0), REG_MRXADDR);
+		i2c_writel(i2c, reg_addr, REG_MRXRADDR);
+
+		ret = 2;
+	} else if (num >= 2 && msgs[0].len < 4 &&
 	    !(msgs[0].flags & I2C_M_RD) && (msgs[1].flags & I2C_M_RD)) {
 		u32 reg_addr = 0;
 		int i;
@@ -1124,7 +1164,8 @@ static __maybe_unused int rk3x_i2c_resume(struct device *dev)
 
 static u32 rk3x_i2c_func(struct i2c_adapter *adap)
 {
-	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL | I2C_FUNC_PROTOCOL_MANGLING;
+	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL | I2C_FUNC_PROTOCOL_MANGLING |
+			      I2C_FUNC_10BIT_ADDR;
 }
 
 static const struct i2c_algorithm rk3x_i2c_algorithm = {
