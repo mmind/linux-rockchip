@@ -15,7 +15,6 @@
 
 #include <drm/drm_crtc_helper.h>
 
-
 struct it66121 {
 	struct i2c_client *i2c;
 	struct i2c_client *i2c_cec;
@@ -33,7 +32,8 @@ struct it66121 {
 	struct drm_bridge bridge;
 	struct drm_connector connector;
 
-	int dvi_mode;
+	bool dvi_mode;
+	bool need_csc;
 
 	int powerstatus;
 	int plug_status;
@@ -384,22 +384,29 @@ enum {
 #define IT66121_AFE_RING_CTRL_CK_SLOW		BIT(1)
 #define IT66121_AFE_RING_CTRL_CK_FAST		BIT(0)
 
+#define IT66121_AFE_XPIP_PARAM			0x68
+#define IT66121_AFE_XPIP_PARAM_XP_EC1		BIT(4)
+#define IT66121_AFE_XPIP_PARAM_XP_DEK		BIT(3)
+#define IT66121_AFE_XPIP_PARAM_IP_DEK		BIT(2)
+#define IT66121_AFE_XPIP_PARAM_IP_ER1		BIT(1)
+#define IT66121_AFE_XPIP_PARAM_IP_DISVC		BIT(0)
 
 
-#define IT66121_PLL_CTRL 0x6A
+#define IT66121_PLL_CTRL			0x6a
+
 
 // Input Data Format Register
-#define IT66121_INPUT_MODE  0x70
-    #define O_TX_INCLKDLY	0
-    #define M_TX_INCLKDLY	3
-    #define B_TX_INDDR	    (1<<2)
-    #define B_TX_SYNCEMB	(1<<3)
-    #define B_TX_2X656CLK	(1<<4)
-	#define B_TX_PCLKDIV2  (1<<5)
-    #define M_TX_INCOLMOD	(3<<6)
-    #define B_TX_IN_RGB    0
-    #define B_TX_IN_YUV422 (1<<6)
-    #define B_TX_IN_YUV444 (2<<6)
+#define IT66121_INPUT_MODE			0x70
+#define IT66121_INPUT_MODE_COLOR_MASK		(0x3 << 6)
+#define IT66121_INPUT_MODE_COLOR_YUV444		(0x2 << 6)
+#define IT66121_INPUT_MODE_COLOR_YUV422		(0x1 << 6)
+#define IT66121_INPUT_MODE_COLOR_RGB		(0x0 << 6)
+#define IT66121_INPUT_MODE_PCLKDIV2		BIT(5)
+#define IT66121_INPUT_MODE_CCIR656		BIT(4)
+#define IT66121_INPUT_MODE_SYNC_EMBEDDED	BIT(3)
+#define IT66121_INPUT_MODE_DDR			BIT(2)
+#define IT66121_INPUT_MODE_PCLK_DLY_MASK	0x3
+#define IT77121_INPUT_MODE_PCLK_DLY(x)		((x) << 0)
 
 #define IT66121_TXFIFO_CTRL			0x71
 #define IT66121_TXFIFO_CTRL_XP_STABLETIME_MASK	(0x3 << 6)
@@ -520,7 +527,7 @@ enum {
 
 	#define B_TX_SPDIFTC (1<<5)
 
-	#define B_TX_AUD_SPDIF (1<<4)
+	#define B_TX_AUD_SPDIF BIT(4)
 	#define B_TX_AUD_I2S (0<<4)
 	#define B_TX_AUD_EN_I2S3   (1<<3)
 	#define B_TX_AUD_EN_I2S2   (1<<2)
@@ -711,11 +718,11 @@ enum {
 */
 
 #define IT66121_MPGINFO_FMT			0x18a
-#define IT66121_MPGINFO_FMT_FRAME_MASK		(3 << 1)
-#define IT66121_MPGINFO_FMT_FRAME_P_PICTURE	(3 << 1)
-#define IT66121_MPGINFO_FMT_FRAME_B_PICTURE	(2 << 1)
-#define IT66121_MPGINFO_FMT_FRAME_I_PICTURE	(1 << 1)
-#define IT66121_MPGINFO_FMT_FRAME_NO_DATA	(0 << 1)
+#define IT66121_MPGINFO_FMT_FRAME_MASK		(0x3 << 1)
+#define IT66121_MPGINFO_FMT_FRAME_P_PICTURE	(0x3 << 1)
+#define IT66121_MPGINFO_FMT_FRAME_B_PICTURE	(0x2 << 1)
+#define IT66121_MPGINFO_FMT_FRAME_I_PICTURE	(0x1 << 1)
+#define IT66121_MPGINFO_FMT_FRAME_NO_DATA	(0x0 << 1)
 #define IT66121_MPGINFO_FMT_FIELD_REPEAT	BIT(0)
 #define IT66121_MPGINFO_DB0			0x18b
 #define IT66121_MPGINFO_DB1			0x18c
@@ -741,142 +748,6 @@ enum {
                                  //     IT66121_AUD_CHSTFS 3:0
 #define IT66121_AUDCHST_OFS_WL  0x199 // 199 IT66121_AUD_CHSTOFS 7:4
                                  //     IT66121_AUD_CHSTWL 3:0
-
-/*#define Frame_Pcaking 0
-#define Top_and_Botton 6
-#define Side_by_Side 8
-*/
-
-/////////////////////////////////////////////////////////////////////
-// Macro
-/////////////////////////////////////////////////////////////////////
-#define Switch_HDMITX_Bank(x)   HDMITX_SetI2C_Byte(0x0f,1, (x)&1)
-#define HDMITX_OrReg_Byte(reg,ormask) HDMITX_SetI2C_Byte(reg,(ormask),(ormask))
-#define HDMITX_AndReg_Byte(reg,andmask) HDMITX_WriteI2C_Byte(reg,(HDMITX_ReadI2C_Byte(reg) & (andmask)))
-
-// 2008/02/27 added by jj_tseng@chipadvanced.com
-typedef enum _mode_id {
-    UNKNOWN_MODE=0,
-    CEA_640x480p60,
-    CEA_720x480p60,
-    CEA_1280x720p60,
-    CEA_1920x1080i60,
-    CEA_720x480i60,
-    CEA_720x240p60,
-    CEA_1440x480i60,
-    CEA_1440x240p60,
-    CEA_2880x480i60,
-    CEA_2880x240p60,
-    CEA_1440x480p60,
-    CEA_1920x1080p60,
-    CEA_720x576p50,
-    CEA_1280x720p50,
-    CEA_1920x1080i50,
-    CEA_720x576i50,
-    CEA_1440x576i50,
-    CEA_720x288p50,
-    CEA_1440x288p50,
-    CEA_2880x576i50,
-    CEA_2880x288p50,
-    CEA_1440x576p50,
-    CEA_1920x1080p50,
-    CEA_1920x1080p24,
-    CEA_1920x1080p25,
-    CEA_1920x1080p30,
-    VESA_640x350p85,
-    VESA_640x400p85,
-    VESA_720x400p85,
-    VESA_640x480p60,
-    VESA_640x480p72,
-    VESA_640x480p75,
-    VESA_640x480p85,
-    VESA_800x600p56,
-    VESA_800x600p60,
-    VESA_800x600p72,
-    VESA_800x600p75,
-    VESA_800X600p85,
-    VESA_840X480p60,
-    VESA_1024x768p60,
-    VESA_1024x768p70,
-    VESA_1024x768p75,
-    VESA_1024x768p85,
-    VESA_1152x864p75,
-    VESA_1280x768p60R,
-    VESA_1280x768p60,
-    VESA_1280x768p75,
-    VESA_1280x768p85,
-    VESA_1280x960p60,
-    VESA_1280x960p85,
-    VESA_1280x1024p60,
-    VESA_1280x1024p75,
-    VESA_1280X1024p85,
-    VESA_1360X768p60,
-    VESA_1400x768p60R,
-    VESA_1400x768p60,
-    VESA_1400x1050p75,
-    VESA_1400x1050p85,
-    VESA_1440x900p60R,
-    VESA_1440x900p60,
-    VESA_1440x900p75,
-    VESA_1440x900p85,
-    VESA_1600x1200p60,
-    VESA_1600x1200p65,
-    VESA_1600x1200p70,
-    VESA_1600x1200p75,
-    VESA_1600x1200p85,
-    VESA_1680x1050p60R,
-    VESA_1680x1050p60,
-    VESA_1680x1050p75,
-    VESA_1680x1050p85,
-    VESA_1792x1344p60,
-    VESA_1792x1344p75,
-    VESA_1856x1392p60,
-    VESA_1856x1392p75,
-    VESA_1920x1200p60R,
-    VESA_1920x1200p60,
-    VESA_1920x1200p75,
-    VESA_1920x1200p85,
-    VESA_1920x1440p60,
-    VESA_1920x1440p75,
-} MODE_ID ;
-
-////////////////////////////////////////////////////
-// Function Prototype
-////////////////////////////////////////////////////
-#define hdmitx_ENABLE_NULL_PKT()         { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_ACP_PKT()          { HDMITX_WriteI2C_Byte(IT66121_ACP_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_ISRC1_PKT()        { HDMITX_WriteI2C_Byte(IT66121_ISRC1_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_ISRC2_PKT()        { HDMITX_WriteI2C_Byte(IT66121_ISRC2_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_AVI_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_AVI_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_AUD_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_AUD_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_SPD_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_SPD_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_MPG_INFOFRM_PKT()  { HDMITX_WriteI2C_Byte(IT66121_MPG_INFOFRM_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_ENABLE_GeneralPurpose_PKT() { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,B_TX_ENABLE_PKT|B_TX_REPEAT_PKT); }
-#define hdmitx_DISABLE_VSDB_PKT()        { HDMITX_WriteI2C_Byte(IT66121_3D_INFO_CTRL,0); }
-#define hdmitx_DISABLE_NULL_PKT()        { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,0); }
-#define hdmitx_DISABLE_ACP_PKT()         { HDMITX_WriteI2C_Byte(IT66121_ACP_CTRL,0); }
-#define hdmitx_DISABLE_ISRC1_PKT()       { HDMITX_WriteI2C_Byte(IT66121_ISRC1_CTRL,0); }
-#define hdmitx_DISABLE_ISRC2_PKT()       { HDMITX_WriteI2C_Byte(IT66121_ISRC2_CTRL,0); }
-#define hdmitx_DISABLE_AVI_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_AVI_INFOFRM_CTRL,0); }
-#define hdmitx_DISABLE_AUD_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_AUD_INFOFRM_CTRL,0); }
-#define hdmitx_DISABLE_SPD_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_SPD_INFOFRM_CTRL,0); }
-#define hdmitx_DISABLE_MPG_INFOFRM_PKT() { HDMITX_WriteI2C_Byte(IT66121_MPG_INFOFRM_CTRL,0); }
-#define hdmitx_DISABLE_GeneralPurpose_PKT() { HDMITX_WriteI2C_Byte(IT66121_NULL_CTRL,0); }
-
-
-#ifdef EXTERN_HDCPROM
-#pragma message("Defined EXTERN_HDCPROM")
-#endif // EXTERN_HDCPROM
-
-#define SUPPORT_EDID
-//#define SUPPORT_AUDIO_MONITOR
-#define AudioOutDelayCnt 250
-
-#ifdef CONFIG_SUPPORT_HDCP
-#define SUPPORT_HDCP
-#define SUPPORT_SHA
-#endif
-
 
 /*
  *Video Configuration
@@ -982,9 +853,6 @@ typedef enum _mode_id {
  *Audio Monitor Configuration
  */
 
-// #define HDMITX_AUTO_MONITOR_INPUT
-// #define HDMITX_INPUT_INFO
-
 #ifdef  HDMITX_AUTO_MONITOR_INPUT
 #define HDMITX_INPUT_INFO
 #endif
@@ -1020,37 +888,6 @@ typedef enum _mode_id {
 #define F_VIDMODE_EN_UDFILT (1<<6)
 #define F_VIDMODE_EN_DITHER (1<<7)
 
-#define T_MODE_CCIR656 (1<<0)
-#define T_MODE_SYNCEMB (1<<1)
-#define T_MODE_INDDR   (1<<2)
-#define T_MODE_PCLKDIV2 (1<<3)
-#define T_MODE_DEGEN (1<<4)
-#define T_MODE_SYNCGEN (1<<5)
-
-/* Packet and Info Frame definition and datastructure.
- */
-#define VENDORSPEC_INFOFRAME_TYPE 0x81
-#define AVI_INFOFRAME_TYPE  0x82
-#define SPD_INFOFRAME_TYPE 0x83
-#define AUDIO_INFOFRAME_TYPE 0x84
-#define MPEG_INFOFRAME_TYPE 0x85
-
-#define VENDORSPEC_INFOFRAME_VER 0x01
-#define AVI_INFOFRAME_VER  0x02
-#define SPD_INFOFRAME_VER 0x01
-#define AUDIO_INFOFRAME_VER 0x01
-#define MPEG_INFOFRAME_VER 0x01
-
-#define VENDORSPEC_INFOFRAME_LEN 5
-#define AVI_INFOFRAME_LEN 13
-#define SPD_INFOFRAME_LEN 25
-#define AUDIO_INFOFRAME_LEN 10
-#define MPEG_INFOFRAME_LEN 10
-
-#define ACP_PKT_LEN 9
-#define ISRC1_PKT_LEN 16
-#define ISRC2_PKT_LEN 16
-
 
 // Audio relate definition and macro.
 // 2008/08/15 added by jj_tseng@chipadvanced
@@ -1073,22 +910,6 @@ typedef enum _mode_id {
 #define T_AUDIO_NLPCM (F_AUDIO_ON|F_AUDIO_NLPCM)
 #define T_AUDIO_LPCM (F_AUDIO_ON)
 
-// for sample clock
-#define AUDFS_22p05KHz  4
-#define AUDFS_44p1KHz 0
-#define AUDFS_88p2KHz 8
-#define AUDFS_176p4KHz    12
-
-#define AUDFS_24KHz  6
-#define AUDFS_48KHz  2
-#define AUDFS_96KHz  10
-#define AUDFS_192KHz 14
-
-#define AUDFS_768KHz 9
-
-#define AUDFS_32KHz  3
-#define AUDFS_OTHER    1
-
 // Audio Enable
 #define ENABLE_SPDIF    (1<<4)
 #define ENABLE_I2S_SRC3  (1<<3)
@@ -1105,25 +926,6 @@ typedef enum _mode_id {
 #define AUD_SWL_22          0x5
 #define AUD_SWL_23          0x9
 #define AUD_SWL_24          0xB
-
-
-#define    HDMI_4x3  0x00
-#define    HDMI_16x9 0x01
-
-#define     HDMI_ITU601 0x00
-#define     HDMI_ITU709 0x01
-
-#define M_TX_AUD_BIT M_TX_AUD_16BIT
-#define SUPPORT_AUDI_AudSWL 16
-#if(SUPPORT_AUDI_AudSWL==16)
-    #define CHTSTS_SWCODE 0x02
-#elif(SUPPORT_AUDI_AudSWL==18)
-    #define CHTSTS_SWCODE 0x04
-#elif(SUPPORT_AUDI_AudSWL==20)
-    #define CHTSTS_SWCODE 0x03
-#else
-    #define CHTSTS_SWCODE 0x0B
-#endif
 
 /////////////////////////////////////////
 // DDC Address

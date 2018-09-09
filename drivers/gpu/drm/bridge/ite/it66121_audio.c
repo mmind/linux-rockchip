@@ -10,37 +10,43 @@
 
 #include "it66121.h"
 
-static void it66121_aud_config_aai(struct it66121 *priv)
+/* FIXME: handline in the driver */
+#define M_TX_AUD_BIT M_TX_AUD_16BIT
+
+#define SUPPORT_AUDI_AudSWL 16
+#if(SUPPORT_AUDI_AudSWL==16)
+    #define CHTSTS_SWCODE 0x02
+#elif(SUPPORT_AUDI_AudSWL==18)
+    #define CHTSTS_SWCODE 0x04
+#elif(SUPPORT_AUDI_AudSWL==20)
+    #define CHTSTS_SWCODE 0x03
+#else
+    #define CHTSTS_SWCODE 0x0B
+#endif
+
+
+static int it66121_aud_config_aai(struct it66121 *priv, struct hdmi_codec_params *params)
 {
-	u8 aud_db[AUDIO_INFOFRAME_LEN];
-	unsigned int checksum = 0;
-	u8 i;
+	struct hdmi_audio_infoframe *infoframe = &params->cea;
+	u8 buf[HDMI_INFOFRAME_SIZE(AUDIO)];
+	int ret;
 
-//FIXME check and use hdmi_audio_infoframe_pack
-	aud_db[0] = 1;
+	ret = hdmi_audio_infoframe_pack(infoframe, buf, sizeof(buf));
+	if (ret < 0)
+		return ret;
 
-	for (i = 1; i < AUDIO_INFOFRAME_LEN; i++) {
-		aud_db[i] = 0;
+	ret = it66121_reg_bulk_write(priv, IT66121_AUDINFO_CC,
+				     buf + HDMI_INFOFRAME_HEADER_SIZE, 5);
+	if (ret < 0) {
+		DRM_ERROR("failed to write AVI infoframe: %d\n", ret);
+		return;
 	}
 
-	checksum = 0x100 - (AUDIO_INFOFRAME_VER + AUDIO_INFOFRAME_TYPE + AUDIO_INFOFRAME_LEN);
-	it66121_reg_write(priv, IT66121_AUDINFO_CC, aud_db[0]);
-	checksum -= it66121_reg_read(priv, IT66121_AUDINFO_CC);
-	checksum &= 0xFF;
-
-	it66121_reg_write(priv, IT66121_AUDINFO_SF, aud_db[1]);
-	checksum -= it66121_reg_read(priv, IT66121_AUDINFO_SF);
-	checksum &= 0xFF;
-
-	it66121_reg_write(priv, IT66121_AUDINFO_CA, aud_db[3]);
-	checksum -= it66121_reg_read(priv, IT66121_AUDINFO_CA);
-	checksum &= 0xFF;
-
-	it66121_reg_write(priv, IT66121_AUDINFO_DM_LSV, aud_db[4]);
-	checksum -= it66121_reg_read(priv, IT66121_AUDINFO_DM_LSV);
-	checksum &= 0xFF;
-
-	it66121_reg_write(priv, IT66121_AUDINFO_SUM, checksum);
+	ret = it66121_reg_write(priv, IT66121_AUDINFO_SUM, buf[3]);
+	if (ret < 0) {
+		DRM_ERROR("failed to write AVI infoframe: %d\n", ret);
+		return;
+	}
 
 	it66121_reg_write(priv, IT66121_AUD_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
 }
@@ -59,21 +65,21 @@ static void it66121_aud_set_fs(struct it66121 *priv, u8 fs)
 
 	printk("HBR_mode:%d\n", HBR_mode);
 	switch (fs) {
-	case AUDFS_32KHz:
+	case IEC958_AES3_CON_FS_32000:
 		n = 4096; break;
-	case AUDFS_44p1KHz:
+	case IEC958_AES3_CON_FS_44100:
 		n = 6272; break;
-	case AUDFS_48KHz:
+	case IEC958_AES3_CON_FS_48000:
 		n = 6144; break;
-	case AUDFS_88p2KHz:
+	case IEC958_AES3_CON_FS_88200:
 		n = 12544; break;
-	case AUDFS_96KHz:
+	case IEC958_AES3_CON_FS_96000:
 		n = 12288; break;
-	case AUDFS_176p4KHz:
+	case IEC958_AES3_CON_FS_176400:
 		n = 25088; break;
-	case AUDFS_192KHz:
+	case IEC958_AES3_CON_FS_192000:
 		n = 24576; break;
-	case AUDFS_768KHz:
+	case IEC958_AES3_CON_FS_768000:
 		n = 24576; break;
 	default:
 		n = 6144;
@@ -98,7 +104,7 @@ static void it66121_aud_set_fs(struct it66121 *priv, u8 fs)
 	it66121_reg_write(priv, 0xF8, 0xFF);
 
 	if (0 == HBR_mode) { //LPCM
-		fs = AUDFS_768KHz;
+		fs = IEC958_AES3_CON_FS_768000;
 		it66121_reg_write(priv, IT66121_AUDCHST_CA_FS, 0x00 | fs);
 		fs = ~fs; // OFS is the one's complement of FS
 		udata = (0x0f & it66121_reg_read(priv, IT66121_AUDCHST_OFS_WL));
@@ -340,26 +346,33 @@ static int it66121_aud_output_config(struct it66121 *priv,
 
 	// one bit audio have no channel status.
 	switch (param->sample_rate) {
-	case  44100L:
-		fs =  AUDFS_44p1KHz; break;
-	case  88200L:
-		fs =  AUDFS_88p2KHz; break;
-	case 176400L:
-		fs = AUDFS_176p4KHz; break;
-	case  32000L:
-		fs =    AUDFS_32KHz; break;
-	case  48000L:
-		fs =    AUDFS_48KHz; break;
-	case  96000L:
-		fs =    AUDFS_96KHz; break;
-	case 192000L:
-		fs =   AUDFS_192KHz; break;
-	case 768000L:
-		fs =   AUDFS_768KHz; break;
+	case 32000:
+		fs = IEC958_AES3_CON_FS_32000;
+		break;
+	case 44100:
+		fs = IEC958_AES3_CON_FS_44100;
+		break;
+	case 48000:
+		fs = IEC958_AES3_CON_FS_48000;
+		break;
+	case 88200:
+		fs = IEC958_AES3_CON_FS_88200;
+		break;
+	case 96000:
+		fs = IEC958_AES3_CON_FS_96000;
+		break;
+	case 176400:
+		fs = IEC958_AES3_CON_FS_176400;
+		break;
+	case 192000:
+		fs = IEC958_AES3_CON_FS_192000;
+		break;
+	case 768000:
+		fs = IEC958_AES3_CON_FS_768000;
+		break;
 	default:
-		//SampleFreq = 48000L;
-		fs =    AUDFS_48KHz;
-		break; // default, set Fs = 48KHz.
+		fs = IEC958_AES3_CON_FS_48000;
+		break;
 	}
 	it66121_aud_set_fs(priv, fs);
 
@@ -382,8 +395,8 @@ static int it66121_aud_output_config(struct it66121 *priv,
 		ucIEC60958ChStat[0] |= 1 << 1;
 		ucIEC60958ChStat[2] = 0;
 		ucIEC60958ChStat[3] &= 0xF0;
-		ucIEC60958ChStat[3] |= AUDFS_768KHz;
-		ucIEC60958ChStat[4] |= (((~AUDFS_768KHz) << 4) & 0xF0) | 0xB;
+		ucIEC60958ChStat[3] |= IEC958_AES3_CON_FS_768000;
+		ucIEC60958ChStat[4] |= (((~IEC958_AES3_CON_FS_768000) << 4) & 0xF0) | 0xB;
 		it66121_set_ChStat(priv, ucIEC60958ChStat);
 		it66121_set_HBRAudio(priv);
 
@@ -404,11 +417,8 @@ static int it66121_aud_output_config(struct it66121 *priv,
 		// can add auto adjust
 		break;
 	}
-	udata = it66121_reg_read(priv, IT66121_INT_MASK0);
-	udata &= ~IT66121_INT_MASK0_AUDIO_OVERFLOW;
-	it66121_reg_write(priv, IT66121_INT_MASK0, udata);
+	it66121_reg_update_bits(priv, IT66121_INT_MASK0, IT66121_INT_MASK0_AUDIO_OVERFLOW, 0);
 	it66121_reg_write(priv, IT66121_AUDIO_CTRL0, priv->AudioChannelEnable);
-
 	it66121_reg_update_bits(priv, IT66121_SW_RST, (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD), 0);
 	return 0;
 }
@@ -422,7 +432,7 @@ static int it66121_audio_hw_params(struct device *dev, void *data,
 	dev_err(&priv->i2c->dev, "%s: %u Hz, %d bit, %d channels\n", __func__,
 			params->sample_rate, params->sample_width, params->channels);
 
-	it66121_aud_config_aai(priv);
+	it66121_aud_config_aai(priv, params);
 	it66121_aud_output_config(priv, params);
 	return 0;
 }
