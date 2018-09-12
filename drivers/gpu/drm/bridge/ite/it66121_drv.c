@@ -400,6 +400,7 @@ int it66121_reg_read(struct it66121 *priv, int reg)
 		goto out;
 
 	ret = regmap_read(priv->regmap, reg, &val);
+if (reg < 0x10 || reg >= 0x20)
 printk("it66121: read 0x%x from 0x%x, ret %d\n", val, reg, ret);
 	if (ret < 0)
 		goto out;
@@ -420,6 +421,7 @@ int it66121_reg_write(struct it66121 *priv, int reg, u8 val)
 		goto out;
 
 	ret = regmap_write(priv->regmap, reg, val);
+if (reg < 0x10 || reg >= 0x20)
 printk("it66121: wrote 0x%x to 0x%x, ret %d\n", val, reg, ret);
 out:
 	mutex_unlock(&priv->bank_mutex);
@@ -438,6 +440,7 @@ int it66121_reg_update_bits(struct it66121 *priv, unsigned int reg,
 		goto out;
 
 	ret = regmap_update_bits(priv->regmap, reg, mask, val);
+if (reg < 0x10 || reg >= 0x20)
 printk("it66121: update 0x%x/0x%x in 0x%x, ret %d\n", val, mask, reg, ret);
 out:
 	mutex_unlock(&priv->bank_mutex);
@@ -462,6 +465,7 @@ int it66121_reg_bulk_write(struct it66121 *priv, unsigned int reg,
 		goto out;
 
 	ret = regmap_bulk_write(priv->regmap, reg, val, val_count);
+if (reg < 0x10 || reg >= 0x20)
 printk("it66121: writing to %d registers at 0x%x, ret %d\n", val_count, reg, ret);
 out:
 	mutex_unlock(&priv->bank_mutex);
@@ -805,6 +809,7 @@ static int it66121_afe_enable(struct it66121 *priv)
 {
 	int ret;
 
+dev_err(&priv->i2c->dev, "%s", __func__);
 	/* power up AFE */
 	ret = it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL,
 				      IT66121_AFE_DRV_CTRL_PWD, 0);
@@ -825,10 +830,13 @@ static int it66121_afe_enable(struct it66121 *priv)
 	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_RST, 0);
 	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, IT66121_AFE_XP_CTRL_RESETB);
 	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_RESETB, IT66121_AFE_IP_CTRL_RESETB);
+
+	return 0;
 }
 
 static int it66121_afe_disable(struct it66121 *priv)
 {
+dev_err(&priv->i2c->dev, "%s", __func__);
 	/* put AFE in reset */
 	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_RST, IT66121_AFE_DRV_CTRL_RST);
 	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, 0);
@@ -840,6 +848,8 @@ static int it66121_afe_disable(struct it66121 *priv)
 	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_PWD, IT66121_AFE_DRV_CTRL_PWD);
 	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_PWDPLL | IT66121_AFE_XP_CTRL_PWDI, IT66121_AFE_XP_CTRL_PWDPLL | IT66121_AFE_XP_CTRL_PWDI);
 	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_PWDPLL, IT66121_AFE_IP_CTRL_PWDPLL);
+
+	return 0;
 }
 
 static void it66121_afe_setup(struct it66121 *priv, bool high_level)
@@ -847,6 +857,7 @@ static void it66121_afe_setup(struct it66121 *priv, bool high_level)
 	int ret;
 //	it66121_reg_write(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_RST);
 
+dev_err(&priv->i2c->dev, "%s", __func__);
 	ret = it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
 				      IT66121_AFE_XP_CTRL_GAIN |
 				      IT66121_AFE_XP_CTRL_ER0,
@@ -1034,6 +1045,8 @@ static void it66121_bridge_disable(struct drm_bridge *bridge)
 //FIXME: simply do avmute?
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, IT66121_SW_RST_SOFT_VID);
 
+	it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, 0);
+
 printk("%s: disabling bridge\n", __func__);
 	/* disable csc-clock */
 	ret = it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, IT66121_SYS_STATUS1_GATE_TXCLK);
@@ -1053,6 +1066,7 @@ static void it66121_bridge_enable(struct drm_bridge *bridge)
 {
 	struct it66121 *priv = bridge_to_it66121(bridge);
 
+printk("%s: enabling bridge\n", __func__);
 	it66121_afe_enable(priv);
 
 	if (priv->need_csc) {
@@ -1063,6 +1077,7 @@ static void it66121_bridge_enable(struct drm_bridge *bridge)
 	it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
 
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_REF | IT66121_SW_RST_SOFT_VID, 0);
+printk("%s: enabled bridge\n", __func__);
 }
 
 static int it66121_bridge_attach(struct drm_bridge *bridge)
@@ -1113,6 +1128,7 @@ static void it66121_hpd_work(struct work_struct *work)
 	unsigned int val;
 	int ret;
 
+printk("%s: start\n", __func__);
 	ret = regmap_read(priv->regmap, IT66121_SYS_STATUS0, &val);
 	if (ret < 0)
 		status = connector_status_disconnected;
@@ -1134,11 +1150,13 @@ static void it66121_hpd_work(struct work_struct *work)
 	}*/
 
 	if (priv->connector.status != status) {
+printk("%s: send event\n", __func__);
 		priv->connector.status = status;
 //		if (status == connector_status_disconnected)
 //			cec_phys_addr_invalidate(adv7511->cec_adap);
 		drm_kms_helper_hotplug_event(priv->connector.dev);
 	}
+printk("%s: end\n", __func__);
 }
 
 struct it66121_int_clr {
@@ -1200,6 +1218,7 @@ static irqreturn_t it66121_thread_interrupt(int irq, void *data)
 	u8 intdata1;
 	u8 intdata2;
 	u8 intdata3;
+//	u8 intclr3;
 
 	intcore = it66121_reg_read(priv, IT66121_INT_CORE_STAT);
 	if (intcore < 0) {
@@ -1217,9 +1236,6 @@ printk("%s: begin of interrupt, core status 0x%x\n", __func__, intcore);
 	intdata2 = it66121_reg_read(priv, IT66121_INT_STAT2);
 	intdata3 = it66121_reg_read(priv, IT66121_INT_STAT_EXT);
 
-	/* enable interrupt clearing */
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_INTACTDONE, IT66121_SYS_STATUS0_INTACTDONE);
-
 	it66121_clear_interrupt(priv, intdata0, it66121_int_stat1_clr, ARRAY_SIZE(it66121_int_stat1_clr));
 	it66121_clear_interrupt(priv, intdata1, it66121_int_stat2_clr, ARRAY_SIZE(it66121_int_stat2_clr));
 	it66121_clear_interrupt(priv, intdata2, it66121_int_stat3_clr, ARRAY_SIZE(it66121_int_stat2_clr));
@@ -1228,12 +1244,15 @@ printk("%s: begin of interrupt, core status 0x%x\n", __func__, intcore);
 	if (intdata3)
 		it66121_reg_write(priv, IT66121_INT_STAT_EXT, intdata3);
 
-//	intclr3 = it66121_reg_read(priv, IT66121_SYS_STATUS0);
-//	intclr3 = intclr3 | IT66121_SYS_STATUS0_CLEAR_AUD_CTS;
-//	it66121_reg_write(priv, IT66121_INT_CLR0, 0xFF);
-//	it66121_reg_write(priv, IT66121_INT_CLR1, 0xFF);
-//	it66121_reg_write(priv, IT66121_SYS_STATUS0, intclr3); // clear interrupt.
+/*	intclr3 = it66121_reg_read(priv, IT66121_SYS_STATUS0);
+	intclr3 = intclr3 | IT66121_SYS_STATUS0_CLEAR_AUD_CTS;
+	it66121_reg_write(priv, IT66121_INT_CLR0, 0xFF);
+	it66121_reg_write(priv, IT66121_INT_CLR1, 0xFF);
+	it66121_reg_write(priv, IT66121_SYS_STATUS0, intclr3); // clear interrupt.
+*/
 
+	/* mark interrupt as cleared */
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_INTACTDONE, IT66121_SYS_STATUS0_INTACTDONE);
 	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_INTACTDONE, 0);
 
 	if (intdata0 & IT66121_INT_STAT0_DDC_FIFO_ERR) {
