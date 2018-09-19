@@ -4899,6 +4899,11 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 	/* Trigger the LED (if available) */
 	ledtrig_disk_activity(!!(qc->tf.flags & ATA_TFLAG_WRITE));
 
+#define LIBATA_BLINK_DELAY 30 /* ms */
+	if (IS_ENABLED(CONFIG_ATA_LEDS))
+		led_trigger_blink_oneshot(ap->ledtrig, LIBATA_BLINK_DELAY,
+						       LIBATA_BLINK_DELAY, 0);
+
 	/*
 	 * In order to synchronize EH with the regular execution path, a qc that
 	 * is owned by EH is marked with ATA_QCFLAG_EH.
@@ -5550,6 +5555,10 @@ struct ata_port *ata_port_alloc(struct ata_host *host)
 	ap->stats.unhandled_irq = 1;
 	ap->stats.idle_irq = 1;
 #endif
+
+	if (IS_ENABLED(CONFIG_ATA_LEDS))
+		ap->ledtrig = kzalloc(sizeof(struct led_trigger), GFP_KERNEL);
+
 	ata_sff_port_init(ap);
 
 	ata_force_pflags(ap);
@@ -5566,6 +5575,12 @@ void ata_port_free(struct ata_port *ap)
 	kfree(ap->pmp_link);
 	kfree(ap->slave_link);
 	ida_free(&ata_ida, ap->print_id);
+
+	if (IS_ENABLED(CONFIG_ATA_LEDS) && ap->ledtrig) {
+		led_trigger_unregister(ap->ledtrig);
+		kfree(ap->ledtrig);
+	};
+
 	kfree(ap);
 }
 EXPORT_SYMBOL_GPL(ata_port_free);
@@ -5969,6 +5984,27 @@ int ata_host_register(struct ata_host *host, const struct scsi_host_template *sh
 		dev_err(host->dev, "BUG: trying to register unstarted host\n");
 		WARN_ON(1);
 		return -EINVAL;
+	}
+
+	if (IS_ENABLED(CONFIG_ATA_LEDS)) {
+		/* register LED triggers for all ports */
+		for (i = 0; i < host->n_ports; i++) {
+			struct ata_port *port = host->ports[i];
+
+			if (unlikely(!port->ledtrig))
+				continue;
+
+			snprintf(port->ledtrig_name,
+				 sizeof(port->ledtrig_name), "ata%u",
+				 port->print_id);
+
+			port->ledtrig->name = port->ledtrig_name;
+
+			if (led_trigger_register(port->ledtrig)) {
+				kfree(port->ledtrig);
+				port->ledtrig = NULL;
+			}
+		}
 	}
 
 	/* Create associated sysfs transport objects  */
