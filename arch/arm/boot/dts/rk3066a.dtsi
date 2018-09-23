@@ -596,6 +596,7 @@
 			  "ppmmu2",
 			  "pp3",
 			  "ppmmu3";
+	power-domains = <&power RK3066_PD_GPU>;
 };
 
 &i2c0 {
