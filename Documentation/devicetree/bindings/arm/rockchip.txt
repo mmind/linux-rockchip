@@ -17,6 +17,10 @@ Rockchip platforms device tree bindings
     Required root node properties:
       - compatible = "asus,rk3288-tinker", "rockchip,rk3288";
 
+- Asus Tinker board S
+    Required root node properties:
+      - compatible = "asus,rk3288-tinker-s", "rockchip,rk3288";
+
 - Kylin RK3036 board:
     Required root node properties:
       - compatible = "rockchip,kylin-rk3036", "rockchip,rk3036";
@@ -167,6 +171,10 @@ Rockchip platforms device tree bindings
 - Pine64 Rock64 board:
     Required root node properties:
     - compatible = "pine64,rock64", "rockchip,rk3328";
+
+- Pine64 RockPro64 board:
+    Required root node properties:
+    - compatible = "pine64,rockpro64", "rockchip,rk3399";
 
 - Rockchip PX3 Evaluation board:
     Required root node properties:
