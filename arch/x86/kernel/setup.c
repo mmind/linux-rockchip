@@ -1251,7 +1251,7 @@ void __init setup_arch(char **cmdline_p)
 	x86_init.hyper.guest_late_init();
 
 	e820__reserve_resources();
-	e820__register_nosave_regions(max_low_pfn);
+	e820__register_nosave_regions(max_pfn);
 
 	x86_init.resources.reserve_resources();
 
@@ -1279,6 +1279,23 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 	unwind_init();
+}
+
+/*
+ * From boot protocol 2.14 onwards we expect the bootloader to set the
+ * version to "0x8000 | <used version>". In case we find a version >= 2.14
+ * without the 0x8000 we assume the boot loader supports 2.13 only and
+ * reset the version accordingly. The 0x8000 flag is removed in any case.
+ */
+void __init x86_verify_bootdata_version(void)
+{
+	if (boot_params.hdr.version & VERSION_WRITTEN)
+		boot_params.hdr.version &= ~VERSION_WRITTEN;
+	else if (boot_params.hdr.version >= 0x020e)
+		boot_params.hdr.version = 0x020d;
+
+	if (boot_params.hdr.version < 0x020e)
+		boot_params.hdr.acpi_rsdp_addr = 0;
 }
 
 #ifdef CONFIG_X86_32
