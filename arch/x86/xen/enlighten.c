@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 #ifdef CONFIG_XEN_BALLOON_MEMORY_HOTPLUG
 #include <linux/bootmem.h>
 #endif
@@ -5,6 +7,7 @@
 #include <linux/kexec.h>
 #include <linux/slab.h>
 
+#include <xen/xen.h>
 #include <xen/features.h>
 #include <xen/page.h>
 #include <xen/interface/memory.h>

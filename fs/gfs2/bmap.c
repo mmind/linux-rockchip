@@ -975,10 +975,6 @@ static void gfs2_iomap_journaled_page_done(struct inode *inode, loff_t pos,
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
 
-	if (!page_has_buffers(page)) {
-		create_empty_buffers(page, inode->i_sb->s_blocksize,
-				     (1 << BH_Dirty)|(1 << BH_Uptodate));
-	}
 	gfs2_page_add_databufs(ip, page, offset_in_page(pos), copied);
 }
 
@@ -1061,7 +1057,7 @@ static int gfs2_iomap_begin_write(struct inode *inode, loff_t pos,
 		}
 	}
 	release_metapath(&mp);
-	if (gfs2_is_jdata(ip))
+	if (!gfs2_is_stuffed(ip) && gfs2_is_jdata(ip))
 		iomap->page_done = gfs2_iomap_journaled_page_done;
 	return 0;
 
@@ -1570,7 +1566,7 @@ more_rgrps:
 			continue;
 		}
 		if (bstart) {
-			__gfs2_free_blocks(ip, bstart, (u32)blen, meta);
+			__gfs2_free_blocks(ip, rgd, bstart, (u32)blen, meta);
 			(*btotal) += blen;
 			gfs2_add_inode_blocks(&ip->i_inode, -blen);
 		}
@@ -1578,7 +1574,7 @@ more_rgrps:
 		blen = 1;
 	}
 	if (bstart) {
-		__gfs2_free_blocks(ip, bstart, (u32)blen, meta);
+		__gfs2_free_blocks(ip, rgd, bstart, (u32)blen, meta);
 		(*btotal) += blen;
 		gfs2_add_inode_blocks(&ip->i_inode, -blen);
 	}
