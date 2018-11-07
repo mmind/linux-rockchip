@@ -353,9 +353,9 @@ void drm_lease_revoke(struct drm_master *top)
 }
 
 static int validate_lease(struct drm_device *dev,
-			  struct drm_file *lessor_priv,
 			  int object_count,
-			  struct drm_mode_object **objects)
+			  struct drm_mode_object **objects,
+			  bool universal_planes)
 {
 	int o;
 	int has_crtc = -1;
@@ -372,14 +372,14 @@ static int validate_lease(struct drm_device *dev,
 		if (objects[o]->type == DRM_MODE_OBJECT_CONNECTOR && has_connector == -1)
 			has_connector = o;
 
-		if (lessor_priv->universal_planes) {
+		if (universal_planes) {
 			if (objects[o]->type == DRM_MODE_OBJECT_PLANE && has_plane == -1)
 				has_plane = o;
 		}
 	}
 	if (has_crtc == -1 || has_connector == -1)
 		return -EINVAL;
-	if (lessor_priv->universal_planes && has_plane == -1)
+	if (universal_planes && has_plane == -1)
 		return -EINVAL;
 	return 0;
 }
@@ -393,6 +393,8 @@ static int fill_object_idr(struct drm_device *dev,
 	struct drm_mode_object **objects;
 	u32 o;
 	int ret;
+	bool universal_planes = READ_ONCE(lessor_priv->universal_planes);
+
 	objects = kcalloc(object_count, sizeof(struct drm_mode_object *),
 			  GFP_KERNEL);
 	if (!objects)
@@ -415,14 +417,17 @@ static int fill_object_idr(struct drm_device *dev,
 		}
 
 		if (!drm_mode_object_lease_required(objects[o]->type)) {
+			DRM_DEBUG_KMS("invalid object for lease\n");
 			ret = -EINVAL;
 			goto out_free_objects;
 		}
 	}
 
-	ret = validate_lease(dev, lessor_priv, object_count, objects);
-	if (ret)
+	ret = validate_lease(dev, object_count, objects, universal_planes);
+	if (ret) {
+		DRM_DEBUG_LEASE("lease validation failed\n");
 		goto out_free_objects;
+	}
 
 	/* add their IDs to the lease request - taking into account
 	   universal planes */
@@ -445,7 +450,7 @@ static int fill_object_idr(struct drm_device *dev,
 					object_id, ret);
 			goto out_free_objects;
 		}
-		if (obj->type == DRM_MODE_OBJECT_CRTC && !lessor_priv->universal_planes) {
+		if (obj->type == DRM_MODE_OBJECT_CRTC && !universal_planes) {
 			struct drm_crtc *crtc = obj_to_crtc(obj);
 			ret = idr_alloc(leases, &drm_lease_idr_object, crtc->primary->base.id, crtc->primary->base.id + 1, GFP_KERNEL);
 			if (ret < 0) {
@@ -505,15 +510,21 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 		return -EOPNOTSUPP;
 
 	/* Do not allow sub-leases */
-	if (lessor->lessor)
+	if (lessor->lessor) {
+		DRM_DEBUG_LEASE("recursive leasing not allowed\n");
 		return -EINVAL;
+	}
 
 	/* need some objects */
-	if (cl->object_count == 0)
+	if (cl->object_count == 0) {
+		DRM_DEBUG_LEASE("no objects in lease\n");
 		return -EINVAL;
+	}
 
-	if (cl->flags && (cl->flags & ~(O_CLOEXEC | O_NONBLOCK)))
+	if (cl->flags && (cl->flags & ~(O_CLOEXEC | O_NONBLOCK))) {
+		DRM_DEBUG_LEASE("invalid flags\n");
 		return -EINVAL;
+	}
 
 	object_count = cl->object_count;
 
@@ -528,6 +539,7 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 			      object_count, object_ids);
 	kfree(object_ids);
 	if (ret) {
+		DRM_DEBUG_LEASE("lease object lookup failed: %i\n", ret);
 		idr_destroy(&leases);
 		return ret;
 	}
