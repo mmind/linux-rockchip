@@ -118,6 +118,35 @@
 		reset-gpios = <&gpio3 RK_PD0 GPIO_ACTIVE_LOW>;
 	};
 
+	sound {
+		compatible = "audio-graph-card";
+		label = "mundoreader,bqedison2qc-sound";
+		dais = <&i2s0_p0>;
+
+		hp-det-gpio = <&gpio3 RK_PA0 GPIO_ACTIVE_LOW>;
+		pa-gpio = <&gpio2 RK_PD7 GPIO_ACTIVE_HIGH>;
+		mclk-fs = <512>;
+		routing =
+			"MIC1", "Mic Jack",
+			"MIC2", "Mic Jack",
+			"Mic Jack", "micbias1",
+			"Headphones", "HPOL",
+			"Headphones", "HPOR";
+		widgets =
+			"Microphone", "Mic Jack",
+			"Headphone", "Headphones";
+	};
+
+/*	sound-hdmi {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "HDMI";
+
+		simple-audio-card,dai-link@1 {
+			cpu { sound-dai = <&spdif>; };
+			codec { sound-dai = <&it66121>; };
+		};
+	}; */
+
 	avdd_cif: cif-avdd-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "avdd-cif";
@@ -423,11 +452,80 @@
 		touchscreen-size-x = <768>;
 		touchscreen-swapped-x-y;
 	};
+
+	it66121: hdmi@4c {
+		compatible = "ite,it66121";
+		reg = <0x4c>;
+		interrupt-parent = <&gpio2>;
+		interrupts = <RK_PD6 IRQ_TYPE_LEVEL_LOW>;
+		ite,cec-address = <0x4e>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hdmi_int &hdmi_rst>;
+		reset-gpios = <&gpio3 RK_PB2 GPIO_ACTIVE_LOW>;
+		#sound-dai-cells = <0>;
+
+		avcc12-supply = <&vdd_12>;
+		dvdd12-supply = <&vdd_12>;
+		ivdd12-supply = <&vdd_12>;
+		ovdd-supply = <&vcc_io>;
+		ovdd33-supply = <&vcc_io>;
+		pvcc12-supply = <&vdd_12>;
+		pvcc33-supply = <&vcc_io>;
+		vcc33-supply = <&vcc_io>;
+
+		port {
+			it66121_in_vop1: endpoint {
+				remote-endpoint = <&vop1_out_it66121>;
+			};
+		};
+	};
 };
 
 &i2c3 {
 	clock-frequency = <400000>;
 	status = "okay";
+
+	camera@3c {
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+		clocks = <&cru SCLK_CIF0>;
+		clock-names = "xclk";
+		pinctrl-names = "default";
+		pinctrl-0 = <&cif0_pdn>;
+		powerdown-gpios = <&gpio3 RK_PB4 GPIO_ACTIVE_HIGH>;
+		DOVDD-supply = <&vcc18_cif>;
+		AVDD-supply = <&avdd_cif>;
+		DVDD-supply = <&vcc18_cif>;
+
+		port {
+			camera0_to_parallel: endpoint {
+//				remote-endpoint = <&parallel_from_camera0>;
+				bus-width = <8>;
+				data-shift = <2>; /* lines 9:2 are used */
+				hsync-active = <0>;
+				vsync-active = <0>;
+				pclk-sample = <1>;
+			};
+		};
+	};
+
+	camera@1 {
+		compatible = "ovti,ov5640";
+		pinctrl-names = "default";
+		pinctrl-0 = <&cif1_pdn>;
+		powerdown-gpios = <&gpio3 RK_PB5 GPIO_ACTIVE_HIGH>;
+
+		port {
+			camera1_to_parallel: endpoint {
+//				remote-endpoint = <&parallel_from_camera1>;
+				bus-width = <8>;
+				data-shift = <2>; /* lines 9:2 are used */
+				hsync-active = <0>;
+				vsync-active = <0>;
+				pclk-sample = <1>;
+			};
+		};
+	};
 };
 
 &i2c4 {
@@ -440,11 +538,24 @@
 		clocks = <&cru SCLK_I2S0>;
 		clock-names = "mclk";
 		#sound-dai-cells = <0>;
+
+		port {
+			rt5616_p0_0: endpoint {
+				remote-endpoint = <&i2s0_p0_0>;
+			};
+		};
 	};
 };
 
 &i2s0 {
 	status = "okay";
+
+	i2s0_p0: port {
+		i2s0_p0_0: endpoint {
+			dai-format = "i2s";
+			remote-endpoint = <&rt5616_p0_0>;
+		};
+	};
 };
 
 &mmc0 {
@@ -660,6 +771,7 @@
 	status = "okay";
 };
 
+/* connected to it66121 spdif input */
 &spdif {
 	status = "okay";
 };
@@ -719,6 +831,12 @@
 	pinctrl-0 = <&lcdc1_dclk &lcdc1_den &lcdc1_hsync
 		     &lcdc1_vsync &lcdc1_rgb24>;
 	status = "okay";
+};
+
+&vop1_out {
+	vop1_out_it66121: endpoint {
+		remote-endpoint = <&it66121_in_vop1>;
+	};
 };
 
 &wdt {
