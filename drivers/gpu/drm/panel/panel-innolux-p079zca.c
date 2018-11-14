@@ -518,6 +518,9 @@ static int innolux_panel_probe(struct mipi_dsi_device *dsi)
 	dsi->mode_flags = desc->flags;
 	dsi->format = desc->format;
 	dsi->lanes = desc->lanes;
+	/* This is presumably the HS rate */
+	dsi->hs_rate = desc->mode->clock * 1000;
+	/* FIXME: LP rate not specified */
 
 	err = innolux_panel_add(dsi, desc);
 	if (err < 0)
