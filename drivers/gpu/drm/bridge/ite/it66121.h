@@ -27,7 +27,7 @@ struct it66121 {
 	struct gpio_desc *reset_gpio;
 	struct regulator_bulk_data *supplies;
 	unsigned int num_supplies;
-	struct delayed_work hpd_work;
+	struct work_struct hpd_work;
 
 	struct drm_bridge bridge;
 	struct drm_connector connector;

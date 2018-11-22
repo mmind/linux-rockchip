@@ -1123,7 +1123,7 @@ static const struct drm_bridge_funcs it66121_bridge_funcs = {
 
 static void it66121_hpd_work(struct work_struct *work)
 {
-	struct it66121 *priv = container_of(work, struct it66121, hpd_work.work);
+	struct it66121 *priv = container_of(work, struct it66121, hpd_work);
 	enum drm_connector_status status;
 	unsigned int val;
 	int ret;
@@ -1292,7 +1292,7 @@ printk("%s: handling vid_stable\n", __func__);
 	if ((intdata0 & IT66121_INT_STAT0_HPD) && priv->bridge.dev)
 {
 printk("%s: handling hotplug\n", __func__);
-		schedule_delayed_work(&priv->hpd_work, msecs_to_jiffies(50));
+		schedule_work(&priv->hpd_work);
 }
 
 	return IRQ_HANDLED;
@@ -1515,7 +1515,7 @@ static int it66121_probe(struct i2c_client *client,
 	dev_dbg(dev, "found %x%x:%x%x\n", chipid[0], chipid[1],
 					  chipid[2], chipid[3]);
 
-	INIT_DELAYED_WORK(&priv->hpd_work, it66121_hpd_work);
+	INIT_WORK(&priv->hpd_work, it66121_hpd_work);
 
 	/* init bank to 0 */
 	mutex_init(&priv->bank_mutex);
