@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/irq.h>
 #include <linux/delay.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/string.h>
@@ -110,7 +111,8 @@ static struct a_reg_entry it66121_init_table[] = {
 	{ IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_RESETB, 0x00 },
 	{ 0x01, 0x00, 0x00 }, //idle(100);
 
-	{ IT66121_SW_RST, IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP, IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP },
+	{ IT66121_SW_RST, IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP,
+			  IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP },
 	{ 0x01, 0x00, 0x00 }, //idle(100);
 
 	{ IT66121_VIDEOPARAM_STATUS, 0x0e, 0x0c }, /* undocumented bits */
@@ -501,8 +503,13 @@ it66121_connector_detect(struct drm_connector *connector, bool force)
 	struct it66121 *priv = connector_to_it66121(connector);
 	char isconnect;
 
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
+		return connector_status_unknown;
+
 	isconnect = it66121_reg_read(priv, IT66121_SYS_STATUS0);
 	isconnect &= IT66121_SYS_STATUS0_HP_DETECT;
+
+	pm_runtime_put(&priv->i2c->dev);
 	return isconnect ? connector_status_connected
 			 : connector_status_disconnected;
 }
@@ -660,21 +667,27 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 {
 	struct it66121 *priv = connector_to_it66121(connector);
 	struct edid *edid;
-	int num = 0;
+	int ret;
+
+	ret = pm_runtime_get_sync(&priv->i2c->dev);
+	if (WARN_ON(ret < 0))
+		return ret;
 
 	edid = drm_do_get_edid(connector, it66121_read_edid_block, priv);
-	if (!edid)
+	if (!edid) {
+		pm_runtime_put(&priv->i2c->dev);
 		return -ENODEV;
+	}
 
 	priv->dvi_mode = !drm_detect_hdmi_monitor(edid);
 
 	drm_connector_update_edid_property(connector, edid);
 //	cec_notifier_set_phys_addr_from_edid(hdata->notifier, edid);
 
-	num = drm_add_edid_modes(connector, edid);
-
+	ret = drm_add_edid_modes(connector, edid);
 	kfree(edid);
-	return num;
+	pm_runtime_put(&priv->i2c->dev);
+	return ret;
 }
 
 static int it66121_connector_mode_valid(struct drm_connector *connector,
@@ -1041,24 +1054,24 @@ static void it66121_bridge_disable(struct drm_bridge *bridge)
 	struct it66121 *priv = bridge_to_it66121(bridge);
 	int ret;
 
+printk("%s: disabling bridge\n", __func__);
 	/* disable video output */
 //FIXME: simply do avmute?
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, IT66121_SW_RST_SOFT_VID);
 
 	it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, 0);
 
-printk("%s: disabling bridge\n", __func__);
 	/* disable csc-clock */
-	ret = it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, IT66121_SYS_STATUS1_GATE_TXCLK);
+	ret = it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
+				      IT66121_SYS_STATUS1_GATE_TXCLK,
+				      IT66121_SYS_STATUS1_GATE_TXCLK);
 	if (ret < 0)
 		return;
-
-	ret = it66121_reg_update_bits(priv, IT66121_INT_CTRL, IT66121_INT_CTRL_TXCLK_POWERDN, IT66121_INT_CTRL_TXCLK_POWERDN);
 
 	/* disable audio output */
 //	it66121_reg_update_bits(priv, IT66121_SW_RST, (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD), (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD));
 
-	it66121_afe_disable(priv);
+	pm_runtime_put(&priv->i2c->dev);
 printk("%s: disabled bridge\n", __func__);
 }
 
@@ -1067,12 +1080,11 @@ static void it66121_bridge_enable(struct drm_bridge *bridge)
 	struct it66121 *priv = bridge_to_it66121(bridge);
 
 printk("%s: enabling bridge\n", __func__);
-	it66121_afe_enable(priv);
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
+		return;
 
-	if (priv->need_csc) {
-		it66121_reg_update_bits(priv, IT66121_INT_CTRL, IT66121_INT_CTRL_TXCLK_POWERDN, 0);
+	if (priv->need_csc)
 		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, 0);
-	}
 
 	it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
 
@@ -1129,6 +1141,9 @@ static void it66121_hpd_work(struct work_struct *work)
 	int ret;
 
 printk("%s: start\n", __func__);
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
+		return;
+
 	ret = regmap_read(priv->regmap, IT66121_SYS_STATUS0, &val);
 	if (ret < 0)
 		status = connector_status_disconnected;
@@ -1150,12 +1165,14 @@ printk("%s: start\n", __func__);
 	}*/
 
 	if (priv->connector.status != status) {
-printk("%s: send event\n", __func__);
+printk("%s: send event %d -> %d\n", __func__, priv->connector.status, status);
 		priv->connector.status = status;
 //		if (status == connector_status_disconnected)
 //			cec_phys_addr_invalidate(adv7511->cec_adap);
 		drm_kms_helper_hotplug_event(priv->connector.dev);
 	}
+
+	pm_runtime_put(&priv->i2c->dev);
 printk("%s: end\n", __func__);
 }
 
@@ -1219,6 +1236,9 @@ static irqreturn_t it66121_thread_interrupt(int irq, void *data)
 	u8 intdata2;
 	u8 intdata3;
 //	u8 intclr3;
+
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
+		return IRQ_NONE;
 
 	intcore = it66121_reg_read(priv, IT66121_INT_CORE_STAT);
 	if (intcore < 0) {
@@ -1295,8 +1315,46 @@ printk("%s: handling hotplug\n", __func__);
 		schedule_work(&priv->hpd_work);
 }
 
+	pm_runtime_put(&priv->i2c->dev);
 	return IRQ_HANDLED;
 }
+
+
+
+static int __maybe_unused it66121_runtime_resume(struct device *dev)
+{
+	struct it66121 *priv = dev_get_drvdata(dev);
+	int ret;
+
+	ret = it66121_reg_update_bits(priv, IT66121_INT_CTRL,
+				      IT66121_INT_CTRL_TXCLK_POWERDN, 0);
+	if (ret < 0)
+		return ret;
+
+	ret = it66121_afe_enable(priv);
+
+	return ret;
+}
+
+static int __maybe_unused it66121_runtime_suspend(struct device *dev)
+{
+	struct it66121 *priv = dev_get_drvdata(dev);
+	int ret;
+
+	ret = it66121_afe_disable(priv);
+	if (ret < 0)
+		return ret;
+
+	ret = it66121_reg_update_bits(priv, IT66121_INT_CTRL,
+				      IT66121_INT_CTRL_TXCLK_POWERDN,
+				      IT66121_INT_CTRL_TXCLK_POWERDN);
+
+	return ret;
+}
+
+static const struct dev_pm_ops it66121_pm_ops = {
+	SET_RUNTIME_PM_OPS(it66121_runtime_suspend, it66121_runtime_resume, NULL)
+};
 
 static int it66121_init(struct it66121 *priv)
 {
@@ -1549,6 +1607,8 @@ static int it66121_probe(struct i2c_client *client,
 			return ret;
 	}
 
+	pm_runtime_enable(&client->dev);
+
 	priv->bridge.funcs = &it66121_bridge_funcs;
 	priv->bridge.of_node = client->dev.of_node;
 	drm_bridge_add(&priv->bridge);
@@ -1566,7 +1626,7 @@ static int it66121_remove(struct i2c_client *client)
 	struct it66121 *priv = i2c_get_clientdata(client);
 
 	drm_bridge_remove(&priv->bridge);
-
+	pm_runtime_disable(&client->dev);
 	it66121_audio_exit(priv);
 
 	return 0;
@@ -1590,6 +1650,7 @@ static struct i2c_driver it66121_driver = {
 	.driver = {
 		.name = "it66121",
 		.of_match_table = of_match_ptr(it66121_dt_ids),
+		.pm = &it66121_pm_ops,
 	},
 	.id_table = it66121_ids,
 };
