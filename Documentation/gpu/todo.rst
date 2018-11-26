@@ -28,23 +28,6 @@ them, but also all the virtual ones used by KVM, so everyone qualifies).
 
 Contact: Daniel Vetter, Thierry Reding, respective driver maintainers
 
-Switch from reference/unreference to get/put
---------------------------------------------
-
-For some reason DRM core uses ``reference``/``unreference`` suffixes for
-refcounting functions, but kernel uses ``get``/``put`` (e.g.
-``kref_get``/``put()``). It would be good to switch over for consistency, and
-it's shorter. Needs to be done in 3 steps for each pair of functions:
-
-* Create new ``get``/``put`` functions, define the old names as compatibility
-  wrappers
-* Switch over each file/driver using a cocci-generated spatch.
-* Once all users of the old names are gone, remove them.
-
-This way drivers/patches in the progress of getting merged won't break.
-
-Contact: Daniel Vetter
-
 Convert existing KMS drivers to atomic modesetting
 --------------------------------------------------
 
@@ -233,6 +216,19 @@ is never used. Switching to idr_init_base() for these would make the idr more
 efficient.
 
 Contact: Daniel Vetter
+
+Defaults for .gem_prime_import and export
+-----------------------------------------
+
+Most drivers don't need to set drm_driver->gem_prime_import and
+->gem_prime_export now that drm_gem_prime_import() and drm_gem_prime_export()
+are the default.
+
+struct drm_gem_object_funcs
+---------------------------
+
+GEM objects can now have a function table instead of having the callbacks on the
+DRM driver struct. This is now the preferred way and drivers can be moved over.
 
 Core refactorings
 =================
