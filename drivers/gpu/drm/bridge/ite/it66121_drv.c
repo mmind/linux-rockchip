@@ -107,17 +107,8 @@ u8 bCSCMtx_YUV2RGB_ITU709_0_255[] = {
 };
 
 static struct a_reg_entry it66121_init_table[] = {
-	{ IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, 0x00 },
-	{ IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_RESETB, 0x00 },
-	{ 0x01, 0x00, 0x00 }, //idle(100);
-
-	{ IT66121_SW_RST, IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP,
-			  IT66121_SW_RST_SOFT_AUD | IT66121_SW_RST_SOFT_VID | IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_HDCP },
-	{ 0x01, 0x00, 0x00 }, //idle(100);
 
 	{ IT66121_VIDEOPARAM_STATUS, 0x0e, 0x0c }, /* undocumented bits */
-
-	{ IT66121_AFE_RING_CTRL, IT66121_AFE_RING_CTRL_CK_SLOW | IT66121_AFE_RING_CTRL_CK_FAST, 0 },
 
 #ifdef NON_SEQUENTIAL_YCBCR422 // for ITE HDMIRX
 	{ IT66121_TXFIFO_CTRL, IT66121_TXFIFO_CTRL_XP_STABLETIME_MASK | IT66121_TXFIFO_CTRL_XP_LOCK_CHK | IT66121_TXFIFO_CTRL_PLL_BUF_RST | IT66121_TXFIFO_CTRL_AUTO_RST | IT66121_TXFIFO_CTRL_IO_NONSEQ, IT66121_TXFIFO_CTRL_XP_STABLETIME_75US | IT66121_TXFIFO_CTRL_PLL_BUF_RST | IT66121_TXFIFO_CTRL_AUTO_RST | IT66121_TXFIFO_CTRL_IO_NONSEQ },
@@ -147,7 +138,6 @@ static struct a_reg_entry it66121_init_table[] = {
 	{ IT66121_INT_CLR0, 0xFF, 0x00 },
 	{ IT66121_INT_CLR1, 0xFF, 0x00 },
 	{ IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_CLEAR_AUD_CTS, 0 },
-
 
 	{ IT66121_AUDIO_CTRL1, 0x20, InvAudCLK },
 
@@ -1070,8 +1060,6 @@ printk("%s: disabling bridge\n", __func__);
 
 	/* disable audio output */
 //	it66121_reg_update_bits(priv, IT66121_SW_RST, (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD), (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD));
-
-	pm_runtime_put(&priv->i2c->dev);
 printk("%s: disabled bridge\n", __func__);
 }
 
@@ -1080,15 +1068,13 @@ static void it66121_bridge_enable(struct drm_bridge *bridge)
 	struct it66121 *priv = bridge_to_it66121(bridge);
 
 printk("%s: enabling bridge\n", __func__);
-	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
-		return;
 
 	if (priv->need_csc)
 		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, 0);
 
 	it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
 
-	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_REF | IT66121_SW_RST_SOFT_VID, 0);
+	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, 0);
 printk("%s: enabled bridge\n", __func__);
 }
 
@@ -1122,11 +1108,35 @@ static int it66121_bridge_attach(struct drm_bridge *bridge)
 
 	drm_connector_attach_encoder(&priv->connector, bridge->encoder);
 
+	ret = pm_runtime_get_sync(&priv->i2c->dev);
+	if (WARN_ON(ret < 0))
+		return ret;
+
+	/* unmask hpd and rx_sense interrupts */
+	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
+				IT66121_INT_MASK0_RX_SENSE |
+				IT66121_INT_MASK0_HPD, 0);
+
 	return 0;
+}
+
+static void it66121_bridge_detach(struct drm_bridge *bridge)
+{
+	struct it66121 *priv = bridge_to_it66121(bridge);
+
+	/* mask hpd and rx_sense interrupts */
+	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
+				IT66121_INT_MASK0_RX_SENSE |
+				IT66121_INT_MASK0_HPD,
+				IT66121_INT_MASK0_RX_SENSE |
+				IT66121_INT_MASK0_HPD);
+
+	pm_runtime_put(&priv->i2c->dev);
 }
 
 static const struct drm_bridge_funcs it66121_bridge_funcs = {
 	.attach = it66121_bridge_attach,
+	.detach = it66121_bridge_detach,
 	.mode_set = it66121_bridge_mode_set,
 	.disable = it66121_bridge_disable,
 	.enable = it66121_bridge_enable,
@@ -1141,9 +1151,6 @@ static void it66121_hpd_work(struct work_struct *work)
 	int ret;
 
 printk("%s: start\n", __func__);
-	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
-		return;
-
 	ret = regmap_read(priv->regmap, IT66121_SYS_STATUS0, &val);
 	if (ret < 0)
 		status = connector_status_disconnected;
@@ -1172,7 +1179,6 @@ printk("%s: send event %d -> %d\n", __func__, priv->connector.status, status);
 		drm_kms_helper_hotplug_event(priv->connector.dev);
 	}
 
-	pm_runtime_put(&priv->i2c->dev);
 printk("%s: end\n", __func__);
 }
 
@@ -1360,7 +1366,7 @@ static int it66121_init(struct it66121 *priv)
 {
 	int ret = 0;
 
-	/* ungate the rclk for i2c access - FIXME: or is it ddc-i2c? */
+	/* ungate the rclk for i2c access */
 	ret = it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
 				      IT66121_SYS_STATUS1_GATE_RCLK, 0);
 	if (ret < 0)
@@ -1384,6 +1390,28 @@ static int it66121_init(struct it66121 *priv)
 				      IT66121_INT_CTRL_POL_ACT_HIGH |
 				      IT66121_INT_CTRL_OPENDRAIN,
 				      IT66121_INT_CTRL_OPENDRAIN);
+	if (ret < 0)
+		return ret;
+
+	ret = it66121_afe_disable(priv);
+	if (ret < 0)
+		return ret;
+
+	/* put submodules in reset */
+	ret = it66121_reg_update_bits(priv, IT66121_SW_RST,
+				      IT66121_SW_RST_SOFT_AUD |
+				      IT66121_SW_RST_SOFT_VID |
+				      IT66121_SW_RST_AUDIO_FIFO |
+				      IT66121_SW_RST_HDCP,
+				      IT66121_SW_RST_SOFT_AUD |
+				      IT66121_SW_RST_SOFT_VID |
+				      IT66121_SW_RST_AUDIO_FIFO |
+				      IT66121_SW_RST_HDCP);
+
+	/* default speed for ring_ck (now slowdown, speedup) */
+	ret = it66121_reg_update_bits(priv,  IT66121_AFE_RING_CTRL,
+				      IT66121_AFE_RING_CTRL_CK_SLOW |
+				      IT66121_AFE_RING_CTRL_CK_FAST, 0);
 	if (ret < 0)
 		return ret;
 
@@ -1612,11 +1640,6 @@ static int it66121_probe(struct i2c_client *client,
 	priv->bridge.funcs = &it66121_bridge_funcs;
 	priv->bridge.of_node = client->dev.of_node;
 	drm_bridge_add(&priv->bridge);
-
-	/* unmask hpd and rx_sense interrupts */
-	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
-				IT66121_INT_MASK0_RX_SENSE |
-				IT66121_INT_MASK0_HPD, 0);
 
 	return 0;
 }
