@@ -28,6 +28,17 @@ them, but also all the virtual ones used by KVM, so everyone qualifies).
 
 Contact: Daniel Vetter, Thierry Reding, respective driver maintainers
 
+
+Remove custom dumb_map_offset implementations
+---------------------------------------------
+
+All GEM based drivers should be using drm_gem_create_mmap_offset() instead.
+Audit each individual driver, make sure it'll work with the generic
+implementation (there's lots of outdated locking leftovers in various
+implementations), and then remove it.
+
+Contact: Daniel Vetter, respective driver maintainers
+
 Convert existing KMS drivers to atomic modesetting
 --------------------------------------------------
 
@@ -229,6 +240,21 @@ struct drm_gem_object_funcs
 
 GEM objects can now have a function table instead of having the callbacks on the
 DRM driver struct. This is now the preferred way and drivers can be moved over.
+
+Use DRM_MODESET_LOCK_ALL_* helpers instead of boilerplate
+---------------------------------------------------------
+
+For cases where drivers are attempting to grab the modeset locks with a local
+acquire context. Replace the boilerplate code surrounding
+drm_modeset_lock_all_ctx() with DRM_MODESET_LOCK_ALL_BEGIN() and
+DRM_MODESET_LOCK_ALL_END() instead.
+
+This should also be done for all places where drm_modest_lock_all() is still
+used.
+
+As a reference, take a look at the conversions already completed in drm core.
+
+Contact: Sean Paul, respective driver maintainers
 
 Core refactorings
 =================
