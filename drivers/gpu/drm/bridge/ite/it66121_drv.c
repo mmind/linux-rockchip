@@ -204,43 +204,6 @@ static struct a_reg_entry it66121_default_video_table[] = {
 	{ 0, 0, 0 }
 };
 
-static struct a_reg_entry  it66121_setHDMI_table[] = {
-	/* Config default HDMI Mode */
-	{ IT66121_HDMI_MODE, IT66121_HDMI_MODE_HDMI, IT66121_HDMI_MODE_HDMI },
-	{ IT66121_AV_MUTE, IT66121_AV_MUTE_BLUE_SCR | IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_BLUE_SCR | IT66121_AV_MUTE_MUTE },
-	{ IT66121_GENERAL_CTRL, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET },
-	{ 0, 0, 0 }
-};
-
-static struct a_reg_entry  it66121_setDVI_table[] = {
-	/* Config default DVI Mode */
-	{ IT66121_AVIINFO_DB1, 0xFF, 0x00 },
-	{ IT66121_HDMI_MODE, IT66121_HDMI_MODE_HDMI, 0 },
-	{ IT66121_AV_MUTE, IT66121_AV_MUTE_BLUE_SCR | IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_BLUE_SCR },
-	{ IT66121_GENERAL_CTRL, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET, 0 },
-	{ 0, 0, 0 }
-};
-
-static struct a_reg_entry  it66121_default_AVI_info_table[] = {
-	/* Config default avi infoframe */
-	{ 0x158, 0xFF, 0x10 },
-	{ 0x159, 0xFF, 0x08 },
-	{ 0x15A, 0xFF, 0x00 },
-	{ 0x15B, 0xFF, 0x00 },
-	{ 0x15C, 0xFF, 0x00 },
-	{ 0x15D, 0xFF, 0x57 },
-	{ 0x15E, 0xFF, 0x00 },
-	{ 0x15F, 0xFF, 0x00 },
-	{ 0x160, 0xFF, 0x00 },
-	{ 0x161, 0xFF, 0x00 },
-	{ 0x162, 0xFF, 0x00 },
-	{ 0x163, 0xFF, 0x00 },
-	{ 0x164, 0xFF, 0x00 },
-	{ 0x165, 0xFF, 0x00 },
-	{ IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET, IT66121_INFOFRM_REPEAT_PACKET | IT66121_INFOFRM_ENABLE_PACKET },
-	{ 0, 0, 0 }
-};
-
 static struct a_reg_entry  it66121_default_audio_info_table[] = {
 	/* Config default audio infoframe */
 	{ 0x168, 0xFF, 0x00 },
@@ -985,33 +948,50 @@ static void it66121_enable_video_output(struct it66121 *priv,
 			  IT66121_SW_RST_HDCP);*/
 }
 
-static void it66121_bridge_mode_set(struct drm_bridge *bridge,
-				    struct drm_display_mode *mode,
-				    struct drm_display_mode *adj)
+static int it66121_set_mode_dvi(struct it66121 *priv,
+				struct drm_display_mode *adj)
 {
-	struct it66121 *priv = bridge_to_it66121(bridge);
+	int ret;
+
+	ret = it66121_reg_write(priv, IT66121_HDMI_MODE, 0);
+	if (ret < 0) {
+		DRM_ERROR("failed to set dvi mode\n");
+		return ret;
+	}
+
+	ret = it66121_reg_write(priv, IT66121_AVIINFO_DB1, 0);
+	if (ret < 0) {
+		DRM_ERROR("failed to clear infoframe\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int it66121_set_mode_hdmi(struct it66121 *priv,
+				 struct drm_display_mode *adj)
+{
 	struct hdmi_avi_infoframe frame;
 	u8 buf[HDMI_INFOFRAME_SIZE(AVI)];
 	int ret;
 
 	ret = it66121_reg_write(priv, IT66121_HDMI_MODE,
-				priv->dvi_mode ? 0 : IT66121_HDMI_MODE_HDMI);
+				      IT66121_HDMI_MODE_HDMI);
 	if (ret < 0) {
 		DRM_ERROR("failed to set hdmi mode\n");
 		return;
 	}
 
-//FIXME: possibly just set AVIINFO_DB1 to 0 in the DVI case?
 	ret = drm_hdmi_avi_infoframe_from_display_mode(&frame, adj, false);
 	if (ret < 0) {
 		DRM_ERROR("couldn't fill AVI infoframe\n");
-		return;
+		return ret;
 	}
 
 	ret = hdmi_avi_infoframe_pack(&frame, buf, sizeof(buf));
 	if (ret < 0) {
 		DRM_ERROR("failed to pack AVI infoframe: %d\n", ret);
-		return;
+		return ret;
 	}
 
 	/* register layout is DB1..DB5..CHK..DB6.. requiring 2 writes */
@@ -1019,7 +999,7 @@ static void it66121_bridge_mode_set(struct drm_bridge *bridge,
 				     buf + HDMI_INFOFRAME_HEADER_SIZE, 5);
 	if (ret < 0) {
 		DRM_ERROR("failed to write AVI infoframe: %d\n", ret);
-		return;
+		return ret ;
 	}
 
 	ret = it66121_reg_bulk_write(priv, IT66121_AVIINFO_DB6,
@@ -1027,14 +1007,31 @@ static void it66121_bridge_mode_set(struct drm_bridge *bridge,
 				     HDMI_AVI_INFOFRAME_SIZE - 5);
 	if (ret < 0) {
 		DRM_ERROR("failed to write AVI infoframe: %d\n", ret);
-		return;
+		return ret;
 	}
 
 	ret = it66121_reg_write(priv, IT66121_AVIINFO_SUM, buf[3]);
 	if (ret < 0) {
 		DRM_ERROR("failed to write AVI infoframe: %d\n", ret);
-		return;
+		return ret ;
 	}
+
+	return 0;
+}
+
+static void it66121_bridge_mode_set(struct drm_bridge *bridge,
+				    struct drm_display_mode *mode,
+				    struct drm_display_mode *adj)
+{
+	struct it66121 *priv = bridge_to_it66121(bridge);
+	int ret;
+
+	if (priv->dvi_mode)
+		ret = it66121_set_mode_dvi(priv, adj);
+	else
+		ret = it66121_set_mode_hdmi(priv, adj);
+	if (ret < 0)
+		return;
 
 	it66121_enable_video_output(priv, adj);
 }
@@ -1049,7 +1046,8 @@ printk("%s: disabling bridge\n", __func__);
 //FIXME: simply do avmute?
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, IT66121_SW_RST_SOFT_VID);
 
-	it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, 0);
+	if (!priv->dvi_mode);
+		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, 0);
 
 	/* disable csc-clock */
 	ret = it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
@@ -1072,7 +1070,8 @@ printk("%s: enabling bridge\n", __func__);
 	if (priv->need_csc)
 		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, 0);
 
-	it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
+	if (!priv->dvi_mode);
+		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
 
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, 0);
 printk("%s: enabled bridge\n", __func__);
@@ -1422,16 +1421,6 @@ static int it66121_init(struct it66121 *priv)
 
 /*	if (it66121_load_reg_table(priv, it66121_default_video_table) < 0) {
 		dev_err(&priv->i2c->dev, "fail to load default video table\n");
-		goto err_device;
-	}
-
-	if (it66121_load_reg_table(priv, it66121_setHDMI_table) < 0) {
-		dev_err(&priv->i2c->dev, "fail to load hdmi table\n");
-		goto err_device;
-	}
-
-	if (it66121_load_reg_table(priv, it66121_default_AVI_info_table) < 0) {
-		dev_err(&priv->i2c->dev, "fail to load default avi table\n");
 		goto err_device;
 	}
 
