@@ -461,6 +461,7 @@
 		regulator-name = "vdd_cpu_b";
 		regulator-min-microvolt = <712500>;
 		regulator-max-microvolt = <1500000>;
+		regulator-enable-ramp-delay = <300>;
 		regulator-ramp-delay = <1000>;
 		regulator-always-on;
 		regulator-boot-on;
@@ -480,6 +481,7 @@
 		regulator-name = "vdd_gpu";
 		regulator-min-microvolt = <712500>;
 		regulator-max-microvolt = <1500000>;
+		regulator-enable-ramp-delay = <300>;
 		regulator-ramp-delay = <1000>;
 		regulator-always-on;
 		regulator-boot-on;
