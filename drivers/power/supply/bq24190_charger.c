@@ -21,6 +21,7 @@
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
 #include <linux/i2c.h>
+#include <linux/extcon-provider.h>
 
 #define	BQ24190_MANUFACTURER	"Texas Instruments"
 
@@ -142,7 +143,7 @@
 #define BQ24190_REG_VPRS_PN_MASK		(BIT(5) | BIT(4) | BIT(3))
 #define BQ24190_REG_VPRS_PN_SHIFT		3
 #define BQ24190_REG_VPRS_PN_24190			0x4
-#define BQ24190_REG_VPRS_PN_24192			0x5 /* Also 24193 */
+#define BQ24190_REG_VPRS_PN_24192			0x5 /* Also 24193, 24196 */
 #define BQ24190_REG_VPRS_PN_24192I			0x3
 #define BQ24190_REG_VPRS_TS_PROFILE_MASK	BIT(2)
 #define BQ24190_REG_VPRS_TS_PROFILE_SHIFT	2
@@ -159,6 +160,7 @@
 struct bq24190_dev_info {
 	struct i2c_client		*client;
 	struct device			*dev;
+	struct extcon_dev		*edev;
 	struct power_supply		*charger;
 	struct power_supply		*battery;
 	struct delayed_work		input_current_limit_work;
@@ -172,6 +174,11 @@ struct bq24190_dev_info {
 	u8				f_reg;
 	u8				ss_reg;
 	u8				watchdog;
+};
+
+static const unsigned int bq24190_usb_extcon_cable[] = {
+	EXTCON_USB,
+	EXTCON_NONE,
 };
 
 /*
@@ -577,6 +584,7 @@ static const struct regulator_ops bq24190_vbus_ops = {
 
 static const struct regulator_desc bq24190_vbus_desc = {
 	.name = "usb_otg_vbus",
+	.of_match = "usb-otg-vbus",
 	.type = REGULATOR_VOLTAGE,
 	.owner = THIS_MODULE,
 	.ops = &bq24190_vbus_ops,
@@ -1527,6 +1535,20 @@ static const struct power_supply_desc bq24190_battery_desc = {
 	.property_is_writeable	= bq24190_battery_property_is_writeable,
 };
 
+static int bq24190_configure_usb_otg(struct bq24190_dev_info *bdi, u8 ss_reg)
+{
+	bool otg_enabled;
+	int ret;
+
+	otg_enabled = !!(ss_reg & BQ24190_REG_SS_VBUS_STAT_MASK);
+	ret = extcon_set_state_sync(bdi->edev, EXTCON_USB, otg_enabled);
+	if (ret < 0)
+		dev_err(bdi->dev, "Can't set extcon state to %d: %d\n",
+			otg_enabled, ret);
+
+	return ret;
+}
+
 static void bq24190_check_status(struct bq24190_dev_info *bdi)
 {
 	const u8 battery_mask_ss = BQ24190_REG_SS_CHRG_STAT_MASK;
@@ -1596,8 +1618,10 @@ static void bq24190_check_status(struct bq24190_dev_info *bdi)
 		bdi->ss_reg = ss_reg;
 	}
 
-	if (alert_charger || alert_battery)
+	if (alert_charger || alert_battery) {
 		power_supply_changed(bdi->charger);
+		bq24190_configure_usb_otg(bdi, ss_reg);
+	}
 	if (alert_battery && bdi->battery)
 		power_supply_changed(bdi->battery);
 
@@ -1637,8 +1661,12 @@ static int bq24190_hw_init(struct bq24190_dev_info *bdi)
 	if (ret < 0)
 		return ret;
 
-	if (v != BQ24190_REG_VPRS_PN_24190 &&
-	    v != BQ24190_REG_VPRS_PN_24192I) {
+	switch (v) {
+	case BQ24190_REG_VPRS_PN_24190:
+	case BQ24190_REG_VPRS_PN_24192:
+	case BQ24190_REG_VPRS_PN_24192I:
+		break;
+	default:
 		dev_err(bdi->dev, "Error unknown model: 0x%02x\n", v);
 		return -ENODEV;
 	}
@@ -1727,6 +1755,14 @@ static int bq24190_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 
+	bdi->edev = devm_extcon_dev_allocate(dev, bq24190_usb_extcon_cable);
+	if (IS_ERR(bdi->edev))
+		return PTR_ERR(bdi->edev);
+
+	ret = devm_extcon_dev_register(dev, bdi->edev);
+	if (ret < 0)
+		return ret;
+
 	pm_runtime_enable(dev);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_set_autosuspend_delay(dev, 600);
@@ -1772,6 +1808,10 @@ static int bq24190_probe(struct i2c_client *client,
 		dev_err(dev, "Hardware init failed\n");
 		goto out_charger;
 	}
+
+	ret = bq24190_configure_usb_otg(bdi, bdi->ss_reg);
+	if (ret < 0)
+		goto out_charger;
 
 	ret = bq24190_sysfs_create_group(bdi);
 	if (ret < 0) {
@@ -1931,7 +1971,9 @@ static const struct dev_pm_ops bq24190_pm_ops = {
 
 static const struct i2c_device_id bq24190_i2c_ids[] = {
 	{ "bq24190" },
+	{ "bq24192" },
 	{ "bq24192i" },
+	{ "bq24196" },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, bq24190_i2c_ids);
@@ -1939,7 +1981,9 @@ MODULE_DEVICE_TABLE(i2c, bq24190_i2c_ids);
 #ifdef CONFIG_OF
 static const struct of_device_id bq24190_of_match[] = {
 	{ .compatible = "ti,bq24190", },
+	{ .compatible = "ti,bq24192", },
 	{ .compatible = "ti,bq24192i", },
+	{ .compatible = "ti,bq24196", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, bq24190_of_match);

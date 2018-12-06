@@ -363,7 +363,7 @@ static int try_charger_enable(struct charger_manager *cm, bool enable)
 	int err = 0, i;
 	struct charger_desc *desc = cm->desc;
 
-	/* Ignore if it's redundent command */
+	/* Ignore if it's redundant command */
 	if (enable == cm->charger_enabled)
 		return 0;
 
@@ -1212,7 +1212,6 @@ static int charger_extcon_init(struct charger_manager *cm,
 	if (ret < 0) {
 		pr_info("Cannot register extcon_dev for %s(cable: %s)\n",
 			cable->extcon_name, cable->name);
-		ret = -EINVAL;
 	}
 
 	return ret;
@@ -1521,19 +1520,19 @@ static struct charger_desc *of_cm_parse_desc(struct device *dev)
 	/* chargers */
 	of_property_read_u32(np, "cm-num-chargers", &num_chgs);
 	if (num_chgs) {
+		int i;
+
 		/* Allocate empty bin at the tail of array */
 		desc->psy_charger_stat = devm_kcalloc(dev,
 						      num_chgs + 1,
 						      sizeof(char *),
 						      GFP_KERNEL);
-		if (desc->psy_charger_stat) {
-			int i;
-			for (i = 0; i < num_chgs; i++)
-				of_property_read_string_index(np, "cm-chargers",
-						i, &desc->psy_charger_stat[i]);
-		} else {
+		if (!desc->psy_charger_stat)
 			return ERR_PTR(-ENOMEM);
-		}
+
+		for (i = 0; i < num_chgs; i++)
+			of_property_read_string_index(np, "cm-chargers",
+						      i, &desc->psy_charger_stat[i]);
 	}
 
 	of_property_read_string(np, "cm-fuel-gauge", &desc->psy_fuel_gauge);
@@ -1633,7 +1632,7 @@ static int charger_manager_probe(struct platform_device *pdev)
 
 	if (IS_ERR(desc)) {
 		dev_err(&pdev->dev, "No platform data (desc) found\n");
-		return -ENODEV;
+		return PTR_ERR(desc);
 	}
 
 	cm = devm_kzalloc(&pdev->dev, sizeof(*cm), GFP_KERNEL);
@@ -1686,10 +1685,6 @@ static int charger_manager_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "No fuel gauge power supply defined\n");
 		return -EINVAL;
 	}
-
-	/* Counting index only */
-	while (desc->psy_charger_stat[i])
-		i++;
 
 	/* Check if charger's supplies are present at probe */
 	for (i = 0; desc->psy_charger_stat[i]; i++) {
@@ -1803,7 +1798,7 @@ static int charger_manager_probe(struct platform_device *pdev)
 
 	/*
 	 * Charger-manager is capable of waking up the systme from sleep
-	 * when event is happend through cm_notify_event()
+	 * when event is happened through cm_notify_event()
 	 */
 	device_init_wakeup(&pdev->dev, true);
 	device_set_wakeup_capable(&pdev->dev, false);
@@ -2023,7 +2018,7 @@ module_exit(charger_manager_cleanup);
  * cm_notify_event - charger driver notify Charger Manager of charger event
  * @psy: pointer to instance of charger's power_supply
  * @type: type of charger event
- * @msg: optional message passed to uevent_notify fuction
+ * @msg: optional message passed to uevent_notify function
  */
 void cm_notify_event(struct power_supply *psy, enum cm_event_types type,
 		     char *msg)
