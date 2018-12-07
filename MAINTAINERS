@@ -4798,6 +4798,7 @@ DRM DRIVER FOR QXL VIRTUAL GPU
 M:	Dave Airlie <airlied@redhat.com>
 M:	Gerd Hoffmann <kraxel@redhat.com>
 L:	virtualization@lists.linux-foundation.org
+L:	spice-devel@lists.freedesktop.org
 T:	git git://anongit.freedesktop.org/drm/drm-misc
 S:	Maintained
 F:	drivers/gpu/drm/qxl/
@@ -6273,6 +6274,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/kishon/linux-phy.git
 S:	Supported
 F:	drivers/phy/
 F:	include/linux/phy/
+F:	Documentation/devicetree/bindings/phy/
 
 GENERIC PINCTRL I2C DEMULTIPLEXER DRIVER
 M:	Wolfram Sang <wsa+renesas@sang-engineering.com>
