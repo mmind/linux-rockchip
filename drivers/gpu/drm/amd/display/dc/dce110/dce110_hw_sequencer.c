@@ -2380,10 +2380,40 @@ void dce110_prepare_bandwidth(
 
 	dce110_set_safe_displaymarks(&context->res_ctx, dc->res_pool);
 
-	dccg->funcs->update_clocks(
-			dccg,
-			context,
-			false);
+	pp_display_cfg->min_engine_clock_khz = determine_sclk_from_bounding_box(
+			dc,
+			context->bw.dce.sclk_khz);
+
+	pp_display_cfg->min_dcfclock_khz = pp_display_cfg->min_engine_clock_khz;
+
+	pp_display_cfg->min_engine_clock_deep_sleep_khz
+			= context->bw.dce.sclk_deep_sleep_khz;
+
+	pp_display_cfg->avail_mclk_switch_time_us =
+						dce110_get_min_vblank_time_us(context);
+	/* TODO: dce11.2*/
+	pp_display_cfg->avail_mclk_switch_time_in_disp_active_us = 0;
+
+	pp_display_cfg->disp_clk_khz = dc->res_pool->dccg->clks.dispclk_khz;
+
+	dce110_fill_display_configs(context, pp_display_cfg);
+
+	/* TODO: is this still applicable?*/
+	if (pp_display_cfg->display_count == 1) {
+		const struct dc_crtc_timing *timing =
+			&context->streams[0]->timing;
+
+		pp_display_cfg->crtc_index =
+			pp_display_cfg->disp_configs[0].pipe_idx;
+		pp_display_cfg->line_time_in_us = timing->h_total * 1000
+							/ timing->pix_clk_khz;
+	}
+
+	if (memcmp(&dc->prev_display_config, pp_display_cfg, sizeof(
+			struct dm_pp_display_configuration)) !=  0)
+		dm_pp_apply_display_requirements(dc->ctx, pp_display_cfg);
+
+	dc->prev_display_config = *pp_display_cfg;
 }
 
 void dce110_optimize_bandwidth(

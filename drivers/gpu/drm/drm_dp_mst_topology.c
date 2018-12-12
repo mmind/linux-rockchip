@@ -33,6 +33,7 @@
 #include <drm/drm_fixed.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_crtc_helper.h>
 
 /**
  * DOC: dp mst helper
@@ -1639,7 +1640,7 @@ static void drm_dp_send_link_address(struct drm_dp_mst_topology_mgr *mgr,
 			for (i = 0; i < txmsg->reply.u.link_addr.nports; i++) {
 				drm_dp_add_port(mstb, mgr->dev, &txmsg->reply.u.link_addr.ports[i]);
 			}
-			(*mgr->cbs->hotplug)(mgr);
+			drm_kms_helper_hotplug_event(mgr->dev);
 		}
 	} else {
 		mstb->link_address_sent = false;
@@ -2412,7 +2413,7 @@ static int drm_dp_mst_handle_up_req(struct drm_dp_mst_topology_mgr *mgr)
 			drm_dp_update_port(mstb, &msg.u.conn_stat);
 
 			DRM_DEBUG_KMS("Got CSN: pn: %d ldps:%d ddps: %d mcs: %d ip: %d pdt: %d\n", msg.u.conn_stat.port_number, msg.u.conn_stat.legacy_device_plug_status, msg.u.conn_stat.displayport_device_plug_status, msg.u.conn_stat.message_capability_status, msg.u.conn_stat.input_port, msg.u.conn_stat.peer_device_type);
-			(*mgr->cbs->hotplug)(mgr);
+			drm_kms_helper_hotplug_event(mgr->dev);
 
 		} else if (msg.req_type == DP_RESOURCE_STATUS_NOTIFY) {
 			drm_dp_send_up_ack_reply(mgr, mgr->mst_primary, msg.req_type, seqno, false);
@@ -3109,7 +3110,7 @@ static void drm_dp_destroy_connector_work(struct work_struct *work)
 		send_hotplug = true;
 	}
 	if (send_hotplug)
-		(*mgr->cbs->hotplug)(mgr);
+		drm_kms_helper_hotplug_event(mgr->dev);
 }
 
 static struct drm_private_state *
@@ -3220,7 +3221,7 @@ int drm_dp_mst_topology_mgr_init(struct drm_dp_mst_topology_mgr *mgr,
 	/* max. time slots - one slot for MTP header */
 	mst_state->avail_slots = 63;
 
-	drm_atomic_private_obj_init(&mgr->base,
+	drm_atomic_private_obj_init(dev, &mgr->base,
 				    &mst_state->base,
 				    &mst_state_funcs);
 
@@ -3249,6 +3250,23 @@ void drm_dp_mst_topology_mgr_destroy(struct drm_dp_mst_topology_mgr *mgr)
 }
 EXPORT_SYMBOL(drm_dp_mst_topology_mgr_destroy);
 
+static bool remote_i2c_read_ok(const struct i2c_msg msgs[], int num)
+{
+	int i;
+
+	if (num - 1 > DP_REMOTE_I2C_READ_MAX_TRANSACTIONS)
+		return false;
+
+	for (i = 0; i < num - 1; i++) {
+		if (msgs[i].flags & I2C_M_RD ||
+		    msgs[i].len > 0xff)
+			return false;
+	}
+
+	return msgs[num - 1].flags & I2C_M_RD &&
+		msgs[num - 1].len <= 0xff;
+}
+
 /* I2C device */
 static int drm_dp_mst_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 			       int num)
@@ -3258,7 +3276,6 @@ static int drm_dp_mst_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs
 	struct drm_dp_mst_branch *mstb;
 	struct drm_dp_mst_topology_mgr *mgr = port->mgr;
 	unsigned int i;
-	bool reading = false;
 	struct drm_dp_sideband_msg_req_body msg;
 	struct drm_dp_sideband_msg_tx *txmsg = NULL;
 	int ret;
@@ -3267,12 +3284,7 @@ static int drm_dp_mst_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs
 	if (!mstb)
 		return -EREMOTEIO;
 
-	/* construct i2c msg */
-	/* see if last msg is a read */
-	if (msgs[num - 1].flags & I2C_M_RD)
-		reading = true;
-
-	if (!reading || (num - 1 > DP_REMOTE_I2C_READ_MAX_TRANSACTIONS)) {
+	if (!remote_i2c_read_ok(msgs, num)) {
 		DRM_DEBUG_KMS("Unsupported I2C transaction for MST device\n");
 		ret = -EIO;
 		goto out;
@@ -3286,6 +3298,7 @@ static int drm_dp_mst_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs
 		msg.u.i2c_read.transactions[i].i2c_dev_id = msgs[i].addr;
 		msg.u.i2c_read.transactions[i].num_bytes = msgs[i].len;
 		msg.u.i2c_read.transactions[i].bytes = msgs[i].buf;
+		msg.u.i2c_read.transactions[i].no_stop_bit = !(msgs[i].flags & I2C_M_STOP);
 	}
 	msg.u.i2c_read.read_i2c_device_id = msgs[num - 1].addr;
 	msg.u.i2c_read.num_bytes_read = msgs[num - 1].len;
