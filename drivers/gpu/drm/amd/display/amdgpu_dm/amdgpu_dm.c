@@ -2618,9 +2618,9 @@ static void fill_audio_info(struct audio_info *audio_info,
 
 	cea_revision = drm_connector->display_info.cea_rev;
 
-	strncpy(audio_info->display_name,
+	strscpy(audio_info->display_name,
 		edid_caps->display_name,
-		AUDIO_INFO_DISPLAY_NAME_SIZE_IN_CHARS - 1);
+		AUDIO_INFO_DISPLAY_NAME_SIZE_IN_CHARS);
 
 	if (cea_revision >= 3) {
 		audio_info->mode_count = edid_caps->audio_mode_count;
@@ -3106,6 +3106,7 @@ void amdgpu_dm_connector_funcs_reset(struct drm_connector *connector)
 		state->underscan_enable = false;
 		state->underscan_hborder = 0;
 		state->underscan_vborder = 0;
+		state->max_bpc = 8;
 
 		__drm_atomic_helper_connector_reset(connector, &state->base);
 	}
@@ -3127,6 +3128,7 @@ amdgpu_dm_connector_atomic_duplicate_state(struct drm_connector *connector)
 
 	new_state->freesync_capable = state->freesync_capable;
 	new_state->freesync_enable = state->freesync_enable;
+	new_state->max_bpc = state->max_bpc;
 
 	return &new_state->base;
 }
@@ -3716,7 +3718,7 @@ amdgpu_dm_create_common_mode(struct drm_encoder *encoder,
 	mode->hdisplay = hdisplay;
 	mode->vdisplay = vdisplay;
 	mode->type &= ~DRM_MODE_TYPE_PREFERRED;
-	strncpy(mode->name, name, DRM_DISPLAY_MODE_LEN);
+	strscpy(mode->name, name, DRM_DISPLAY_MODE_LEN);
 
 	return mode;
 
