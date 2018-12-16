@@ -171,6 +171,11 @@
 	status = "ok";
 };
 
+&hdmi {
+	ddc-i2c-bus = <&i2c5>;
+	status = "okay";
+};
+
 &i2c0 {
 	status = "okay";
 
@@ -196,6 +201,10 @@
 		clock-output-names = "xin32k";
 		/* rtc_int is not connected */
 	};
+};
+
+&i2c5 {
+	status = "okay";
 };
 
 &io_domains {
@@ -326,6 +335,14 @@
 
 &usb_otg {
 	dr_mode = "host";
+	status = "okay";
+};
+
+&vop {
+	status = "okay";
+};
+
+&vop_mmu {
 	status = "okay";
 };
 
