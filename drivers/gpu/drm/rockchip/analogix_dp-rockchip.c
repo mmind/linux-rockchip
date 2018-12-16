@@ -54,7 +54,7 @@
  * @chip_type: specific chip type
  */
 struct rockchip_dp_chip_data {
-	u32	lcdsel_grf_reg;
+	int	lcdsel_grf_reg;
 	u32	lcdsel_big;
 	u32	lcdsel_lit;
 	u32	chip_type;
@@ -207,9 +207,12 @@ static void rockchip_dp_drm_encoder_enable(struct drm_encoder *encoder)
 		return;
 	}
 
-	ret = regmap_write(dp->grf, dp->data->lcdsel_grf_reg, val);
-	if (ret != 0)
-		DRM_DEV_ERROR(dp->dev, "Could not write to GRF: %d\n", ret);
+	if (dp->data->lcdsel_grf_reg >= 0) {
+		ret = regmap_write(dp->grf, dp->data->lcdsel_grf_reg, val);
+		if (ret != 0)
+			DRM_DEV_ERROR(dp->dev, "Could not write to GRF: %d\n",
+				      ret);
+	}
 
 	clk_disable_unprepare(dp->grfclk);
 }
@@ -455,8 +458,14 @@ static const struct rockchip_dp_chip_data rk3288_dp = {
 	.chip_type = RK3288_DP,
 };
 
+static const struct rockchip_dp_chip_data rk3368_dp = {
+	.lcdsel_grf_reg = -1,
+	.chip_type = RK3288_DP,
+};
+
 static const struct of_device_id rockchip_dp_dt_ids[] = {
 	{.compatible = "rockchip,rk3288-dp", .data = &rk3288_dp },
+	{.compatible = "rockchip,rk3368-dp", .data = &rk3368_dp },
 	{.compatible = "rockchip,rk3399-edp", .data = &rk3399_edp },
 	{}
 };
