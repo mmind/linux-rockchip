@@ -5334,7 +5334,19 @@ int i915_gem_init_hw(struct drm_i915_private *dev_priv)
 		I915_WRITE(MI_PREDICATE_RESULT_2, IS_HSW_GT3(dev_priv) ?
 			   LOWER_SLICE_ENABLED : LOWER_SLICE_DISABLED);
 
-	intel_gt_workarounds_apply(dev_priv);
+	if (HAS_PCH_NOP(dev_priv)) {
+		if (IS_IVYBRIDGE(dev_priv)) {
+			u32 temp = I915_READ(GEN7_MSG_CTL);
+			temp &= ~(WAIT_FOR_PCH_FLR_ACK | WAIT_FOR_PCH_RESET_ACK);
+			I915_WRITE(GEN7_MSG_CTL, temp);
+		} else if (INTEL_GEN(dev_priv) >= 7) {
+			u32 temp = I915_READ(HSW_NDE_RSTWRN_OPT);
+			temp &= ~RESET_PCH_HANDSHAKE_ENABLE;
+			I915_WRITE(HSW_NDE_RSTWRN_OPT, temp);
+		}
+	}
+
+	intel_gt_apply_workarounds(dev_priv);
 
 	i915_gem_init_swizzling(dev_priv);
 
@@ -5529,6 +5541,44 @@ err_active:
 	goto out_ctx;
 }
 
+static int
+i915_gem_init_scratch(struct drm_i915_private *i915, unsigned int size)
+{
+	struct drm_i915_gem_object *obj;
+	struct i915_vma *vma;
+	int ret;
+
+	obj = i915_gem_object_create_stolen(i915, size);
+	if (!obj)
+		obj = i915_gem_object_create_internal(i915, size);
+	if (IS_ERR(obj)) {
+		DRM_ERROR("Failed to allocate scratch page\n");
+		return PTR_ERR(obj);
+	}
+
+	vma = i915_vma_instance(obj, &i915->ggtt.vm, NULL);
+	if (IS_ERR(vma)) {
+		ret = PTR_ERR(vma);
+		goto err_unref;
+	}
+
+	ret = i915_vma_pin(vma, 0, 0, PIN_GLOBAL | PIN_HIGH);
+	if (ret)
+		goto err_unref;
+
+	i915->gt.scratch = vma;
+	return 0;
+
+err_unref:
+	i915_gem_object_put(obj);
+	return ret;
+}
+
+static void i915_gem_fini_scratch(struct drm_i915_private *i915)
+{
+	i915_vma_unpin_and_release(&i915->gt.scratch, 0);
+}
+
 int i915_gem_init(struct drm_i915_private *dev_priv)
 {
 	int ret;
@@ -5575,10 +5625,17 @@ int i915_gem_init(struct drm_i915_private *dev_priv)
 		goto err_unlock;
 	}
 
-	ret = i915_gem_contexts_init(dev_priv);
+	ret = i915_gem_init_scratch(dev_priv,
+				    IS_GEN2(dev_priv) ? SZ_256K : PAGE_SIZE);
 	if (ret) {
 		GEM_BUG_ON(ret == -EIO);
 		goto err_ggtt;
+	}
+
+	ret = i915_gem_contexts_init(dev_priv);
+	if (ret) {
+		GEM_BUG_ON(ret == -EIO);
+		goto err_scratch;
 	}
 
 	ret = intel_engines_init(dev_priv);
@@ -5653,6 +5710,8 @@ err_pm:
 err_context:
 	if (ret != -EIO)
 		i915_gem_contexts_fini(dev_priv);
+err_scratch:
+	i915_gem_fini_scratch(dev_priv);
 err_ggtt:
 err_unlock:
 	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
@@ -5704,7 +5763,10 @@ void i915_gem_fini(struct drm_i915_private *dev_priv)
 	intel_uc_fini(dev_priv);
 	i915_gem_cleanup_engines(dev_priv);
 	i915_gem_contexts_fini(dev_priv);
+	i915_gem_fini_scratch(dev_priv);
 	mutex_unlock(&dev_priv->drm.struct_mutex);
+
+	intel_wa_list_free(&dev_priv->gt_wa_list);
 
 	intel_cleanup_gt_powersave(dev_priv);
 
