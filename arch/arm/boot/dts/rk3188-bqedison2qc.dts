@@ -451,6 +451,7 @@
 		touchscreen-size-y = <1024>;
 		touchscreen-size-x = <768>;
 		touchscreen-swapped-x-y;
+		//vcc_tp
 	};
 
 	it66121: hdmi@4c {
