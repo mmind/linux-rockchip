@@ -51,13 +51,13 @@
 		stdout-path = "serial2:1500000n8";
 	};
 
-	ir: ir-receiver {
+/*	ir: ir-receiver {
 		compatible = "gpio-ir-receiver";
 		gpios = <&gpio2 RK_PA2 GPIO_ACTIVE_LOW>;
 		linux,rc-map-name = "rc-z28";
 		pinctrl-names = "default";
 		pinctrl-0 = <&ir_int>;
-	};
+	}; */
 
 	leds {
 		compatible = "gpio-leds";
@@ -114,7 +114,7 @@
 	vcc_otg_5v: vcc-otg-5v-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio0 RK_PA2 GPIO_ACTIVE_HIGH>;
+		gpio = <&gpio0 RK_PD3 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb20_otg_drv>;
 		regulator-name = "vcc_otg_5v";
@@ -347,7 +347,7 @@
 
 	usb2 {
 		usb20_otg_drv: usb20-otg-drv {
-			rockchip,pins = <0 RK_PA2 RK_FUNC_GPIO &pcfg_pull_none>;
+			rockchip,pins = <0 RK_PD3 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 };
@@ -380,8 +380,15 @@
 };
 
 &spdif {
-	pinctrl-0 = <&spdifm0_tx>;
+	pinctrl-0 = <&spdifm2_tx>;
 	status = "okay";
+	#sound-dai-cells = <0>;
+
+	spdif_p0: port {
+		spdif_p0_0: endpoint {
+			remote-endpoint = <&dit_p0_0>;
+		};
+	};
 };
 
 &tsadc {
