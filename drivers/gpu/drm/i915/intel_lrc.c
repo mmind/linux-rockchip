@@ -772,6 +772,8 @@ execlists_cancel_port_requests(struct intel_engine_execlists * const execlists)
 
 static void reset_csb_pointers(struct intel_engine_execlists *execlists)
 {
+	const unsigned int reset_value = GEN8_CSB_ENTRIES - 1;
+
 	/*
 	 * After a reset, the HW starts writing into CSB entry [0]. We
 	 * therefore have to set our HEAD pointer back one entry so that
@@ -781,8 +783,8 @@ static void reset_csb_pointers(struct intel_engine_execlists *execlists)
 	 * inline comparison of our cached head position against the last HW
 	 * write works even before the first interrupt.
 	 */
-	execlists->csb_head = execlists->csb_write_reset;
-	WRITE_ONCE(*execlists->csb_write, execlists->csb_write_reset);
+	execlists->csb_head = reset_value;
+	WRITE_ONCE(*execlists->csb_write, reset_value);
 }
 
 static void nop_submission_tasklet(unsigned long data)
@@ -823,8 +825,11 @@ static void execlists_cancel_requests(struct intel_engine_cs *engine)
 	/* Mark all executing requests as skipped. */
 	list_for_each_entry(rq, &engine->timeline.requests, link) {
 		GEM_BUG_ON(!rq->global_seqno);
-		if (!i915_request_completed(rq))
-			dma_fence_set_error(&rq->fence, -EIO);
+
+		if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &rq->fence.flags))
+			continue;
+
+		dma_fence_set_error(&rq->fence, -EIO);
 	}
 
 	/* Flush the queued requests to the timeline list (for retiring). */
@@ -843,6 +848,10 @@ static void execlists_cancel_requests(struct intel_engine_cs *engine)
 		if (p->priority != I915_PRIORITY_NORMAL)
 			kmem_cache_free(engine->i915->priorities, p);
 	}
+
+	intel_write_status_page(engine,
+				I915_GEM_HWS_INDEX,
+				intel_engine_last_submit(engine));
 
 	/* Remaining _unready_ requests will be nop'ed when submitted */
 
@@ -1407,18 +1416,6 @@ static u32 *gen9_init_indirectctx_bb(struct intel_engine_cs *engine, u32 *batch)
 
 	batch = emit_lri(batch, lri, ARRAY_SIZE(lri));
 
-	/* WaClearSlmSpaceAtContextSwitch:kbl */
-	/* Actual scratch location is at 128 bytes offset */
-	if (IS_KBL_REVID(engine->i915, 0, KBL_REVID_A0)) {
-		batch = gen8_emit_pipe_control(batch,
-					       PIPE_CONTROL_FLUSH_L3 |
-					       PIPE_CONTROL_GLOBAL_GTT_IVB |
-					       PIPE_CONTROL_CS_STALL |
-					       PIPE_CONTROL_QW_WRITE,
-					       i915_scratch_offset(engine->i915)
-					       + 2 * CACHELINE_BYTES);
-	}
-
 	/* WaMediaPoolStateCmdInWABB:bxt,glk */
 	if (HAS_POOLED_EU(engine->i915)) {
 		/*
@@ -1661,7 +1658,7 @@ static int gen8_init_render_ring(struct intel_engine_cs *engine)
 	if (ret)
 		return ret;
 
-	intel_whitelist_workarounds_apply(engine);
+	intel_engine_apply_whitelist(engine);
 
 	/* We need to disable the AsyncFlip performance optimisations in order
 	 * to use MI_WAIT_FOR_EVENT within the CS. It should already be
@@ -1684,7 +1681,7 @@ static int gen9_init_render_ring(struct intel_engine_cs *engine)
 	if (ret)
 		return ret;
 
-	intel_whitelist_workarounds_apply(engine);
+	intel_engine_apply_whitelist(engine);
 
 	return 0;
 }
@@ -2096,7 +2093,7 @@ static int gen8_init_rcs_context(struct i915_request *rq)
 {
 	int ret;
 
-	ret = intel_ctx_workarounds_emit(rq);
+	ret = intel_engine_emit_ctx_wa(rq);
 	if (ret)
 		return ret;
 
@@ -2237,12 +2234,6 @@ logical_ring_setup(struct intel_engine_cs *engine)
 	logical_ring_default_irqs(engine);
 }
 
-static bool csb_force_mmio(struct drm_i915_private *i915)
-{
-	/* Older GVT emulation depends upon intercepting CSB mmio */
-	return intel_vgpu_active(i915) && !intel_vgpu_has_hwsp_emulation(i915);
-}
-
 static int logical_ring_init(struct intel_engine_cs *engine)
 {
 	struct drm_i915_private *i915 = engine->i915;
@@ -2272,24 +2263,12 @@ static int logical_ring_init(struct intel_engine_cs *engine)
 			upper_32_bits(ce->lrc_desc);
 	}
 
-	execlists->csb_read =
-		i915->regs + i915_mmio_reg_offset(RING_CONTEXT_STATUS_PTR(engine));
-	if (csb_force_mmio(i915)) {
-		execlists->csb_status = (u32 __force *)
-			(i915->regs + i915_mmio_reg_offset(RING_CONTEXT_STATUS_BUF_LO(engine, 0)));
+	execlists->csb_status =
+		&engine->status_page.page_addr[I915_HWS_CSB_BUF0_INDEX];
 
-		execlists->csb_write = (u32 __force *)execlists->csb_read;
-		execlists->csb_write_reset =
-			_MASKED_FIELD(GEN8_CSB_WRITE_PTR_MASK,
-				      GEN8_CSB_ENTRIES - 1);
-	} else {
-		execlists->csb_status =
-			&engine->status_page.page_addr[I915_HWS_CSB_BUF0_INDEX];
+	execlists->csb_write =
+		&engine->status_page.page_addr[intel_hws_csb_write_index(i915)];
 
-		execlists->csb_write =
-			&engine->status_page.page_addr[intel_hws_csb_write_index(i915)];
-		execlists->csb_write_reset = GEN8_CSB_ENTRIES - 1;
-	}
 	reset_csb_pointers(execlists);
 
 	return 0;
@@ -2330,6 +2309,7 @@ int logical_render_ring_init(struct intel_engine_cs *engine)
 			  ret);
 	}
 
+	intel_engine_init_whitelist(engine);
 	intel_engine_init_workarounds(engine);
 
 	return 0;

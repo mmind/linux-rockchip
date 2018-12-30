@@ -583,7 +583,7 @@ static int vmw_dma_select_mode(struct vmw_private *dev_priv)
 
 	dev_priv->map_mode = vmw_dma_map_populate;
 
-	if (dma_ops->sync_single_for_cpu)
+	if (dma_ops && dma_ops->sync_single_for_cpu)
 		dev_priv->map_mode = vmw_dma_alloc_coherent;
 #ifdef CONFIG_SWIOTLB
 	if (swiotlb_nr_tbl() == 0)
@@ -667,7 +667,6 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	mutex_init(&dev_priv->cmdbuf_mutex);
 	mutex_init(&dev_priv->release_mutex);
 	mutex_init(&dev_priv->binding_mutex);
-	mutex_init(&dev_priv->requested_layout_mutex);
 	mutex_init(&dev_priv->global_kms_state_mutex);
 	ttm_lock_init(&dev_priv->reservation_sem);
 	spin_lock_init(&dev_priv->resource_lock);
