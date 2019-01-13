@@ -984,8 +984,8 @@ static int i915_gpu_info_open(struct inode *inode, struct file *file)
 	intel_runtime_pm_get(i915);
 	gpu = i915_capture_gpu_state(i915);
 	intel_runtime_pm_put(i915);
-	if (!gpu)
-		return -ENOMEM;
+	if (IS_ERR(gpu))
+		return PTR_ERR(gpu);
 
 	file->private_data = gpu;
 	return 0;
@@ -1018,7 +1018,13 @@ i915_error_state_write(struct file *filp,
 
 static int i915_error_state_open(struct inode *inode, struct file *file)
 {
-	file->private_data = i915_first_error_state(inode->i_private);
+	struct i915_gpu_state *error;
+
+	error = i915_first_error_state(inode->i_private);
+	if (IS_ERR(error))
+		return PTR_ERR(error);
+
+	file->private_data  = error;
 	return 0;
 }
 
@@ -2948,14 +2954,7 @@ static void intel_seq_print_mode(struct seq_file *m, int tabs,
 	for (i = 0; i < tabs; i++)
 		seq_putc(m, '\t');
 
-	seq_printf(m, "id %d:\"%s\" freq %d clock %d hdisp %d hss %d hse %d htot %d vdisp %d vss %d vse %d vtot %d type 0x%x flags 0x%x\n",
-		   mode->base.id, mode->name,
-		   mode->vrefresh, mode->clock,
-		   mode->hdisplay, mode->hsync_start,
-		   mode->hsync_end, mode->htotal,
-		   mode->vdisplay, mode->vsync_start,
-		   mode->vsync_end, mode->vtotal,
-		   mode->type, mode->flags);
+	seq_printf(m, DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
 }
 
 static void intel_encoder_info(struct seq_file *m,
