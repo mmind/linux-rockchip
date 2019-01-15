@@ -979,10 +979,12 @@ static int it66121_set_mode_hdmi(struct it66121 *priv,
 				      IT66121_HDMI_MODE_HDMI);
 	if (ret < 0) {
 		DRM_ERROR("failed to set hdmi mode\n");
-		return;
+		return ret;
 	}
 
-	ret = drm_hdmi_avi_infoframe_from_display_mode(&frame, adj, false);
+	ret = drm_hdmi_avi_infoframe_from_display_mode(&frame,
+						       &priv->connector,
+						       adj);
 	if (ret < 0) {
 		DRM_ERROR("couldn't fill AVI infoframe\n");
 		return ret;
@@ -1046,7 +1048,7 @@ printk("%s: disabling bridge\n", __func__);
 //FIXME: simply do avmute?
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, IT66121_SW_RST_SOFT_VID);
 
-	if (!priv->dvi_mode);
+	if (!priv->dvi_mode)
 		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, 0);
 
 	/* disable csc-clock */
@@ -1070,7 +1072,7 @@ printk("%s: enabling bridge\n", __func__);
 	if (priv->need_csc)
 		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, 0);
 
-	if (!priv->dvi_mode);
+	if (!priv->dvi_mode)
 		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
 
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, 0);
