@@ -22,6 +22,8 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
 
+#include <media/cec.h>
+
 #include "it66121.h"
 
 struct a_reg_entry {
@@ -460,8 +462,7 @@ it66121_connector_detect(struct drm_connector *connector, bool force)
 	char isconnect;
 	int ret;
 
-	ret = pm_runtime_get_sync(&priv->i2c->dev);
-	if (WARN_ON(ret < 0))
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
 		return connector_status_unknown;
 
 	isconnect = it66121_reg_read(priv, IT66121_SYS_STATUS0);
@@ -627,8 +628,7 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 	struct edid *edid;
 	int ret;
 
-	ret = pm_runtime_get_sync(&priv->i2c->dev);
-	if (WARN_ON(ret < 0))
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
 		return ret;
 
 	edid = drm_do_get_edid(connector, it66121_read_edid_block, priv);
@@ -1074,8 +1074,7 @@ static void it66121_bridge_enable(struct drm_bridge *bridge)
 	int ret;
 
 printk("%s: enabling bridge\n", __func__);
-	ret = pm_runtime_get_sync(&priv->i2c->dev);
-	if (WARN_ON(ret < 0))
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
 		return;
 
 	it66121_afe_enable(priv);
@@ -1156,8 +1155,7 @@ static void it66121_hpd_work(struct work_struct *work)
 	int ret;
 
 printk("%s: start\n", __func__);
-	ret = pm_runtime_get_sync(&priv->i2c->dev);
-	if (WARN_ON(ret < 0))
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
 		return;
 
 	ret = regmap_read(priv->regmap, IT66121_SYS_STATUS0, &val);
@@ -1241,8 +1239,7 @@ static irqreturn_t it66121_thread_interrupt(int irq, void *data)
 	u8 intdata3;
 
 printk("%s: begin of interrupt\n", __func__);
-	ret = pm_runtime_get_sync(&priv->i2c->dev);
-	if (WARN_ON(ret < 0))
+	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
 		return IRQ_NONE;
 
 	intcore = it66121_reg_read(priv, IT66121_INT_CORE_STAT);
@@ -1258,7 +1255,6 @@ printk("%s: core status 0x%x\n", __func__, intcore);
 	intdata0 = it66121_reg_read(priv, IT66121_INT_STAT0);
 	intdata1 = it66121_reg_read(priv, IT66121_INT_STAT1);
 	intdata2 = it66121_reg_read(priv, IT66121_INT_STAT2);
-	intdata3 = it66121_reg_read(priv, IT66121_INT_STAT_EXT);
 
 	it66121_clear_interrupt(priv, intdata0, it66121_int_stat1_clr,
 				ARRAY_SIZE(it66121_int_stat1_clr));
@@ -1267,16 +1263,13 @@ printk("%s: core status 0x%x\n", __func__, intcore);
 	it66121_clear_interrupt(priv, intdata2, it66121_int_stat3_clr,
 				ARRAY_SIZE(it66121_int_stat2_clr));
 
-	/* ext-interrupt is write-1-to-clear */
-	if (intdata3)
-		it66121_reg_write(priv, IT66121_INT_STAT_EXT, intdata3);
+	if (intcore & IT66121_INT_CORE_STAT_EXT) {
+		intdata3 = it66121_reg_read(priv, IT66121_INT_STAT_EXT);
 
-	/* mark interrupt as cleared */
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0,
-				IT66121_SYS_STATUS0_INTACTDONE,
-				IT66121_SYS_STATUS0_INTACTDONE);
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0,
-				IT66121_SYS_STATUS0_INTACTDONE, 0);
+		/* ext-interrupt is write-1-to-clear */
+		if (intdata3)
+			it66121_reg_write(priv, IT66121_INT_STAT_EXT, intdata3);
+	}
 
 	if (intdata0 & IT66121_INT_STAT0_DDC_FIFO_ERR) {
 printk("%s: handling ddc_fifo_err\n", __func__);
@@ -1317,6 +1310,14 @@ printk("%s: handling vid_stable\n", __func__);
 printk("%s: handling hotplug\n", __func__);
 		schedule_work(&priv->hpd_work);
 }
+
+	if (intcore & IT66121_INT_CORE_STAT_CEC)
+		it66121_cec_irq_process(priv);
+
+	/* mark interrupt handling as done */
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0,
+				IT66121_SYS_STATUS0_INTACTDONE,
+				IT66121_SYS_STATUS0_INTACTDONE);
 
 	pm_runtime_put(&priv->i2c->dev);
 printk("%s: interrupt end\n", __func__);
@@ -1645,6 +1646,8 @@ static int it66121_remove(struct i2c_client *client)
 	drm_bridge_remove(&priv->bridge);
 	pm_runtime_disable(&client->dev);
 	it66121_audio_exit(priv);
+
+	cec_unregister_adapter(priv->cec_adap);
 
 	return 0;
 }

@@ -39,6 +39,9 @@ struct it66121 {
 	int plug_status;
 	u8 AudioChannelEnable;
 	struct platform_device *audio_pdev;
+
+	struct cec_adapter *cec_adap;
+	bool cec_enabled_adap;
 };
 
 #define IT66121_VENDOR_ID0			0x00
@@ -947,11 +950,14 @@ int it66121_reg_bulk_write(struct it66121 *priv, unsigned int reg,
 
 #ifdef CONFIG_DRM_IT66121_CEC
 int it66121_cec_init(struct device *dev, struct it66121 *priv);
-void it66121_cec_irq_process(struct it66121 *priv, unsigned int irq);
+void it66121_cec_irq_process(struct it66121 *priv);
 #else
 static inline int it66121_cec_init(struct device *dev, struct it66121 *priv)
 {
 	return 0;
+}
+static void it66121_cec_irq_process(struct it66121 *priv)
+{
 }
 #endif
 
