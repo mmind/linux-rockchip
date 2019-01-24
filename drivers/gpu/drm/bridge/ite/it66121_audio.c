@@ -471,8 +471,22 @@ static const struct hdmi_codec_pdata codec_data = {
 	.i2s = 1,
 };
 
+// #define INV_INPUT_ACLK
+
+#ifndef INV_INPUT_ACLK
+#define InvAudCLK 0
+#else
+#define InvAudCLK B_TX_AUDFMT_FALL_EDGE_SAMPLE_WS
+#endif
+
 int it66121_audio_init(struct device *dev, struct it66121 *priv)
 {
+	int ret;
+
+	ret = it66121_reg_update_bits(priv, IT66121_AUDIO_CTRL1, 0x20, InvAudCLK);
+	if (ret < 0)
+		return ret;
+
 	priv->audio_pdev = platform_device_register_data(
 		dev, HDMI_CODEC_DRV_NAME, PLATFORM_DEVID_AUTO,
 		&codec_data, sizeof(codec_data));

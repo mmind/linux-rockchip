@@ -127,22 +127,6 @@ static struct a_reg_entry it66121_init_table[] = {
 	{ IT66121_HDCP, 0x80, 0 },
 	{ 0xF8, 0xFF, 0xFF },
 
-	{ IT66121_CLK_CTRL1, IT66121_CLK_CTRL1_PLL_MANUAL_MASK | IT66121_CLK_CTRL1_LOCK_DISABLE | IT66121_CLK_CTRL1_VDO_LATCH_EDGE, IT66121_CLK_CTRL1_PLL_MANUAL(1) | PCLKINV },
-
-	{ IT66121_INT_MASK0, 0xFF, ~(IT66121_INT_MASK0_RX_SENSE | IT66121_INT_MASK0_HPD) },
-	{ IT66121_INT_MASK1, 0xFF, ~(IT66121_INT_MASK1_KSVLIST_CHK | IT66121_INT_MASK1_AUTH_DONE | IT66121_INT_MASK1_AUTH_FAIL) },
-	{ IT66121_INT_MASK2, 0xFF, ~(0x0) },
-
-	{ IT66121_INT_CLR0, 0xFF, 0xFF },
-	{ IT66121_INT_CLR1, 0xFF, 0xFF },
-	{ IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_CLEAR_AUD_CTS | IT66121_SYS_STATUS0_INTACTDONE, IT66121_SYS_STATUS0_CLEAR_AUD_CTS | IT66121_SYS_STATUS0_INTACTDONE },
-
-	{ IT66121_INT_CLR0, 0xFF, 0x00 },
-	{ IT66121_INT_CLR1, 0xFF, 0x00 },
-	{ IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_CLEAR_AUD_CTS, 0 },
-
-	{ IT66121_AUDIO_CTRL1, 0x20, InvAudCLK },
-
 	{ 0, 0, 0 }
 };
 
@@ -1250,7 +1234,6 @@ printk("%s: begin of interrupt\n", __func__);
 			  IT66121_INT_CORE_STAT_EXT |
 			  IT66121_INT_CORE_STAT_HDMI;
 	}
-printk("%s: core status 0x%x\n", __func__, intcore);
 
 	intdata0 = it66121_reg_read(priv, IT66121_INT_STAT0);
 	intdata1 = it66121_reg_read(priv, IT66121_INT_STAT1);
@@ -1355,6 +1338,14 @@ static const struct dev_pm_ops it66121_pm_ops = {
 	SET_RUNTIME_PM_OPS(it66121_runtime_suspend, it66121_runtime_resume, NULL)
 };
 
+#define INV_INPUT_PCLK
+
+#ifndef INV_INPUT_PCLK
+#define PCLKINV 0
+#else
+#define PCLKINV IT66121_CLK_CTRL1_VDO_LATCH_EDGE
+#endif
+
 static int it66121_init(struct it66121 *priv)
 {
 	int ret = 0;
@@ -1407,6 +1398,30 @@ static int it66121_init(struct it66121 *priv)
 				      IT66121_AFE_RING_CTRL_CK_FAST, 0);
 	if (ret < 0)
 		return ret;
+
+	ret = it66121_reg_update_bits(priv, IT66121_CLK_CTRL1,
+				      IT66121_CLK_CTRL1_PLL_MANUAL_MASK |
+				      IT66121_CLK_CTRL1_LOCK_DISABLE |
+				      IT66121_CLK_CTRL1_VDO_LATCH_EDGE,
+				      IT66121_CLK_CTRL1_PLL_MANUAL(1) |
+				      PCLKINV); //FIXME
+	if (ret < 0)
+		return ret;
+
+	/* mask and clear all interrupts */
+	it66121_reg_write(priv, IT66121_INT_MASK0, 0xff);
+	it66121_reg_write(priv, IT66121_INT_MASK1, 0xff);
+	it66121_reg_write(priv, IT66121_INT_MASK1, 0xff);
+
+	it66121_reg_write(priv, IT66121_INT_CLR0, 0xff);
+	it66121_reg_write(priv, IT66121_INT_CLR1, 0xff);
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0,
+				      IT66121_SYS_STATUS0_CLEAR_AUD_CTS,
+				      IT66121_SYS_STATUS0_CLEAR_AUD_CTS);
+
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0,
+				IT66121_SYS_STATUS0_INTACTDONE,
+				IT66121_SYS_STATUS0_INTACTDONE);
 
 	if (it66121_load_reg_table(priv, it66121_init_table) < 0) {
 		dev_err(&priv->i2c->dev, "fail to load init table\n");

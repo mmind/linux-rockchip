@@ -34,69 +34,23 @@ static int it66121_cec_adap_enable(struct cec_adapter *adap, bool enable)
 static int it66121_cec_adap_log_addr(struct cec_adapter *adap, u8 addr)
 {
 	struct it66121 *priv = cec_get_drvdata(adap);
-	int i;
-//	unsigned int i, free_idx = ADV7511_MAX_ADDRS;
 
 	if (!priv->cec_enabled_adap)
 		return addr == CEC_LOG_ADDR_INVALID ? 0 : -EIO;
 
 	if (addr == CEC_LOG_ADDR_INVALID) {
-/*		regmap_update_bits(adv7511->regmap_cec,
-				   ADV7511_REG_CEC_LOG_ADDR_MASK + offset,
-				   0x70, 0);
-		adv7511->cec_valid_addrs = 0;*/
+		regmap_write(priv->regmap_cec, IT66121_CEC_TX_LOGICAL_ADDR, 0);
 		return 0;
 	}
 
-/*	for (i = 0; i < ADV7511_MAX_ADDRS; i++) {
-		bool is_valid = adv7511->cec_valid_addrs & (1 << i);
+	if (addr > IT66121_CEC_TX_LOGICAL_ADDR) {
+		dev_err(&priv->i2c_cec->dev,
+			"address 0x%x unsupported\n", addr);
+		return -EINVAL;
+	}
 
-		if (free_idx == ADV7511_MAX_ADDRS && !is_valid)
-			free_idx = i;
-		if (is_valid && adv7511->cec_addr[i] == addr)
-			return 0;
-	}
-	if (i == ADV7511_MAX_ADDRS) {
-		i = free_idx;
-		if (i == ADV7511_MAX_ADDRS)
-			return -ENXIO;
-	}
-	adv7511->cec_addr[i] = addr;
-	adv7511->cec_valid_addrs |= 1 << i;
-*/
+	regmap_write(priv->regmap_cec, IT66121_CEC_TX_LOGICAL_ADDR, addr);
 
-	switch (i) {
-	case 0:
-		/* enable address mask 0 */
-//		regmap_update_bits(adv7511->regmap_cec,
-//				   ADV7511_REG_CEC_LOG_ADDR_MASK + offset,
-//				   0x10, 0x10);
-		/* set address for mask 0 */
-//		regmap_update_bits(adv7511->regmap_cec,
-//				   ADV7511_REG_CEC_LOG_ADDR_0_1 + offset,
-//				   0x0f, addr);
-		break;
-	case 1:
-		/* enable address mask 1 */
-//		regmap_update_bits(adv7511->regmap_cec,
-//				   ADV7511_REG_CEC_LOG_ADDR_MASK + offset,
-//				   0x20, 0x20);
-		/* set address for mask 1 */
-//		regmap_update_bits(adv7511->regmap_cec,
-//				   ADV7511_REG_CEC_LOG_ADDR_0_1 + offset,
-//				   0xf0, addr << 4);
-		break;
-	case 2:
-		/* enable address mask 2 */
-//		regmap_update_bits(adv7511->regmap_cec,
-//				   ADV7511_REG_CEC_LOG_ADDR_MASK + offset,
-//				   0x40, 0x40);
-		/* set address for mask 1 */
-//		regmap_update_bits(adv7511->regmap_cec,
-//				   ADV7511_REG_CEC_LOG_ADDR_2 + offset,
-//				   0x0f, addr);
-		break;
-	}
 	return 0;
 }
 
@@ -120,17 +74,16 @@ static int it66121_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 //	regmap_update_bits(adv7511->regmap, ADV7511_REG_INT(1), 0x38, 0x38);
 
 	/* write data */
-/*	for (i = 0; i < len; i++)
-		regmap_write(adv7511->regmap_cec,
-			     i + ADV7511_REG_CEC_TX_FRAME_HDR + offset,
-			     msg->msg[i]); */
+	regmap_bulk_write(priv->regmap_cec, IT66121_CEC_TX_OPERAND1,
+			  msg->msg, msg->len);
 
 	/* set length (data + header) */
-//	regmap_write(adv7511->regmap_cec,
-//		     ADV7511_REG_CEC_TX_FRAME_LEN + offset, len);
+	regmap_write(priv->regmap_cec, IT66121_CEC_TX_OUT_NUM, len);
+
 	/* start transmit, enable tx */
-//	regmap_write(adv7511->regmap_cec,
-//		     ADV7511_REG_CEC_TX_ENABLE + offset, 0x01);
+	regmap_update_bits(priv->regmap_cec, IT66121_CEC_CTRL0,
+			   IT66121_CEC_CTRL0_FIRE_FRAME,
+			   IT66121_CEC_CTRL0_FIRE_FRAME);
 	return 0;
 }
 
