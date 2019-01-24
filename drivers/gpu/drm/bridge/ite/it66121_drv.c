@@ -289,8 +289,11 @@ static int it66121_set_bank(struct it66121 *priv, int bank)
 	dev_warn(&priv->i2c->dev, "switching to bank %d\n", bank);
 	ret = regmap_update_bits(priv->regmap, IT66121_SYS_STATUS1,
 				 IT66121_SYS_STATUS1_BANK_MASK, bank);
-	if (ret < 0)
+	if (ret < 0) {
+		/* update failed, so we don't know which bank is set */
+		priv->cur_bank = -1;
 		return ret;
+	}
 
 	priv->cur_bank = bank;
 	return ret;
@@ -455,8 +458,10 @@ it66121_connector_detect(struct drm_connector *connector, bool force)
 {
 	struct it66121 *priv = connector_to_it66121(connector);
 	char isconnect;
+	int ret;
 
-	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
+	ret = pm_runtime_get_sync(&priv->i2c->dev);
+	if (WARN_ON(ret < 0))
 		return connector_status_unknown;
 
 	isconnect = it66121_reg_read(priv, IT66121_SYS_STATUS0);
@@ -639,6 +644,7 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 
 	ret = drm_add_edid_modes(connector, edid);
 	kfree(edid);
+
 	pm_runtime_put(&priv->i2c->dev);
 	return ret;
 }
@@ -773,77 +779,79 @@ static void it66121_set_CSC_scale(struct it66121 *priv,
 
 static int it66121_afe_enable(struct it66121 *priv)
 {
-	int ret;
-
-dev_err(&priv->i2c->dev, "%s", __func__);
 	/* power up AFE */
-	ret = it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL,
-				      IT66121_AFE_DRV_CTRL_PWD, 0);
-	if (ret < 0)
-		return ret;
-
-	ret = it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
-				      IT66121_AFE_XP_CTRL_PWDPLL |
-				      IT66121_AFE_XP_CTRL_PWDI, 0);
-	if (ret < 0)
-		return ret;
-
-	ret = it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_PWDPLL, 0);
+	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL,
+				IT66121_AFE_DRV_CTRL_PWD, 0);
+	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
+				IT66121_AFE_XP_CTRL_PWDPLL |
+				IT66121_AFE_XP_CTRL_PWDI, 0);
+	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL,
+				IT66121_AFE_IP_CTRL_PWDPLL, 0);
 
 	msleep(100);
 
 	/* pull AFE out of reset */
-	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_RST, 0);
-	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, IT66121_AFE_XP_CTRL_RESETB);
-	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_RESETB, IT66121_AFE_IP_CTRL_RESETB);
+	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL,
+				IT66121_AFE_DRV_CTRL_RST, 0);
+	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
+				IT66121_AFE_XP_CTRL_RESETB,
+				IT66121_AFE_XP_CTRL_RESETB);
+	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL,
+				IT66121_AFE_IP_CTRL_RESETB,
+				IT66121_AFE_IP_CTRL_RESETB);
 
 	return 0;
 }
 
 static int it66121_afe_disable(struct it66121 *priv)
 {
-dev_err(&priv->i2c->dev, "%s", __func__);
 	/* put AFE in reset */
-	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_RST, IT66121_AFE_DRV_CTRL_RST);
-	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_RESETB, 0);
-	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_RESETB, 0);
+	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL,
+				IT66121_AFE_DRV_CTRL_RST,
+				IT66121_AFE_DRV_CTRL_RST);
+	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
+				IT66121_AFE_XP_CTRL_RESETB, 0);
+	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL,
+				IT66121_AFE_IP_CTRL_RESETB, 0);
 
 	msleep(100);
 
 	/* power down AFE */
-	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_PWD, IT66121_AFE_DRV_CTRL_PWD);
-	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL, IT66121_AFE_XP_CTRL_PWDPLL | IT66121_AFE_XP_CTRL_PWDI, IT66121_AFE_XP_CTRL_PWDPLL | IT66121_AFE_XP_CTRL_PWDI);
-	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL, IT66121_AFE_IP_CTRL_PWDPLL, IT66121_AFE_IP_CTRL_PWDPLL);
+	it66121_reg_update_bits(priv, IT66121_AFE_DRV_CTRL,
+				IT66121_AFE_DRV_CTRL_PWD,
+				IT66121_AFE_DRV_CTRL_PWD);
+	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
+				IT66121_AFE_XP_CTRL_PWDPLL |
+				IT66121_AFE_XP_CTRL_PWDI,
+				IT66121_AFE_XP_CTRL_PWDPLL |
+				IT66121_AFE_XP_CTRL_PWDI);
+	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL,
+				IT66121_AFE_IP_CTRL_PWDPLL,
+				IT66121_AFE_IP_CTRL_PWDPLL);
 
 	return 0;
 }
 
 static void it66121_afe_setup(struct it66121 *priv, bool high_level)
 {
-	int ret;
-//	it66121_reg_write(priv, IT66121_AFE_DRV_CTRL, IT66121_AFE_DRV_CTRL_RST);
+	it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
+				IT66121_AFE_XP_CTRL_GAIN |
+				IT66121_AFE_XP_CTRL_ER0,
+				high_level ? IT66121_AFE_XP_CTRL_GAIN :
+					     IT66121_AFE_XP_CTRL_ER0);
 
-dev_err(&priv->i2c->dev, "%s", __func__);
-	ret = it66121_reg_update_bits(priv, IT66121_AFE_XP_CTRL,
-				      IT66121_AFE_XP_CTRL_GAIN |
-				      IT66121_AFE_XP_CTRL_ER0,
-				      high_level ? IT66121_AFE_XP_CTRL_GAIN :
-						   IT66121_AFE_XP_CTRL_ER0);
+	it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL,
+				IT66121_AFE_IP_CTRL_GAIN |
+				IT66121_AFE_IP_CTRL_ER0 |
+				IT66121_AFE_IP_CTRL_EC1,
+				high_level ? IT66121_AFE_IP_CTRL_GAIN :
+					     IT66121_AFE_IP_CTRL_ER0 |
+					     IT66121_AFE_IP_CTRL_EC1);
 
-	ret = it66121_reg_update_bits(priv, IT66121_AFE_IP_CTRL,
-				      IT66121_AFE_IP_CTRL_GAIN |
-				      IT66121_AFE_IP_CTRL_ER0 |
-				      IT66121_AFE_IP_CTRL_EC1,
-				      high_level ? IT66121_AFE_IP_CTRL_GAIN :
-						   IT66121_AFE_IP_CTRL_ER0 |
-						   IT66121_AFE_IP_CTRL_EC1);
-
-	ret = it66121_reg_update_bits(priv, IT66121_AFE_XPIP_PARAM,
-				      IT66121_AFE_XPIP_PARAM_XP_EC1,
-				      high_level ? 0 :
-						IT66121_AFE_XPIP_PARAM_XP_EC1);
-
-//	it66121_reg_write(priv, IT66121_AFE_DRV_CTRL, 0);
+	it66121_reg_update_bits(priv, IT66121_AFE_XPIP_PARAM,
+				IT66121_AFE_XPIP_PARAM_XP_EC1,
+				high_level ? 0 :
+					     IT66121_AFE_XPIP_PARAM_XP_EC1);
 }
 
 /**
@@ -905,10 +913,6 @@ static void it66121_enable_video_output(struct it66121 *priv,
 			  IT66121_SW_RST_AUDIO_FIFO |
 			  IT66121_SW_RST_SOFT_AUD |
 			  IT66121_SW_RST_HDCP);
-
-	// 2009/12/09 added by jau-chih.tseng@ite.com.tw
-//	it66121_reg_write(priv, IT66121_AVIINFO_DB1, 0x00);
-	//~jau-chih.tseng@ite.com.tw
 
 	/*Set regC1[0] = '1' for AVMUTE the output, only support hdmi mode now*/
 	//it66121_reg_update_bits(priv, IT66121_AV_MUTE, IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_MUTE);
@@ -1041,7 +1045,6 @@ static void it66121_bridge_mode_set(struct drm_bridge *bridge,
 static void it66121_bridge_disable(struct drm_bridge *bridge)
 {
 	struct it66121 *priv = bridge_to_it66121(bridge);
-	int ret;
 
 printk("%s: disabling bridge\n", __func__);
 	/* disable video output */
@@ -1052,22 +1055,30 @@ printk("%s: disabling bridge\n", __func__);
 		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, 0);
 
 	/* disable csc-clock */
-	ret = it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
-				      IT66121_SYS_STATUS1_GATE_TXCLK,
-				      IT66121_SYS_STATUS1_GATE_TXCLK);
-	if (ret < 0)
-		return;
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
+				IT66121_SYS_STATUS1_GATE_TXCLK,
+				IT66121_SYS_STATUS1_GATE_TXCLK);
 
 	/* disable audio output */
 //	it66121_reg_update_bits(priv, IT66121_SW_RST, (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD), (IT66121_SW_RST_AUDIO_FIFO | IT66121_SW_RST_SOFT_AUD));
+
+	it66121_afe_disable(priv);
+
+	pm_runtime_put(&priv->i2c->dev);
 printk("%s: disabled bridge\n", __func__);
 }
 
 static void it66121_bridge_enable(struct drm_bridge *bridge)
 {
 	struct it66121 *priv = bridge_to_it66121(bridge);
+	int ret;
 
 printk("%s: enabling bridge\n", __func__);
+	ret = pm_runtime_get_sync(&priv->i2c->dev);
+	if (WARN_ON(ret < 0))
+		return;
+
+	it66121_afe_enable(priv);
 
 	if (priv->need_csc)
 		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, 0);
@@ -1109,14 +1120,10 @@ static int it66121_bridge_attach(struct drm_bridge *bridge)
 
 	drm_connector_attach_encoder(&priv->connector, bridge->encoder);
 
-	ret = pm_runtime_get_sync(&priv->i2c->dev);
-	if (WARN_ON(ret < 0))
-		return ret;
-
 	/* unmask hpd and rx_sense interrupts */
-	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
+/*	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
 				IT66121_INT_MASK0_RX_SENSE |
-				IT66121_INT_MASK0_HPD, 0);
+				IT66121_INT_MASK0_HPD, 0);*/
 
 	return 0;
 }
@@ -1126,13 +1133,11 @@ static void it66121_bridge_detach(struct drm_bridge *bridge)
 	struct it66121 *priv = bridge_to_it66121(bridge);
 
 	/* mask hpd and rx_sense interrupts */
-	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
+/*	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
 				IT66121_INT_MASK0_RX_SENSE |
 				IT66121_INT_MASK0_HPD,
 				IT66121_INT_MASK0_RX_SENSE |
-				IT66121_INT_MASK0_HPD);
-
-	pm_runtime_put(&priv->i2c->dev);
+				IT66121_INT_MASK0_HPD); */
 }
 
 static const struct drm_bridge_funcs it66121_bridge_funcs = {
@@ -1143,7 +1148,6 @@ static const struct drm_bridge_funcs it66121_bridge_funcs = {
 	.enable = it66121_bridge_enable,
 };
 
-
 static void it66121_hpd_work(struct work_struct *work)
 {
 	struct it66121 *priv = container_of(work, struct it66121, hpd_work);
@@ -1152,6 +1156,10 @@ static void it66121_hpd_work(struct work_struct *work)
 	int ret;
 
 printk("%s: start\n", __func__);
+	ret = pm_runtime_get_sync(&priv->i2c->dev);
+	if (WARN_ON(ret < 0))
+		return;
+
 	ret = regmap_read(priv->regmap, IT66121_SYS_STATUS0, &val);
 	if (ret < 0)
 		status = connector_status_disconnected;
@@ -1159,18 +1167,6 @@ printk("%s: start\n", __func__);
 		status = connector_status_connected;
 	else
 		status = connector_status_disconnected;
-
-	/*
-	 * The bridge resets its registers on unplug. So when we get a plug
-	 * event and we're already supposed to be powered, cycle the bridge to
-	 * restore its state.
-	 */
-/*	if (status == connector_status_connected &&
-	    adv7511->connector.status == connector_status_disconnected &&
-	    adv7511->powered) {
-		regcache_mark_dirty(adv7511->regmap);
-		adv7511_power_on(adv7511);
-	}*/
 
 	if (priv->connector.status != status) {
 printk("%s: send event %d -> %d\n", __func__, priv->connector.status, status);
@@ -1180,6 +1176,7 @@ printk("%s: send event %d -> %d\n", __func__, priv->connector.status, status);
 		drm_kms_helper_hotplug_event(priv->connector.dev);
 	}
 
+	pm_runtime_put(&priv->i2c->dev);
 printk("%s: end\n", __func__);
 }
 
@@ -1235,16 +1232,17 @@ static int it66121_clear_interrupt(struct it66121 *priv, u8 intreg,
 static irqreturn_t it66121_thread_interrupt(int irq, void *data)
 {
 	struct it66121 *priv = data;
-	int intcore;
+	int intcore, ret;
 
 	u8 sysstat;
 	u8 intdata0;
 	u8 intdata1;
 	u8 intdata2;
 	u8 intdata3;
-//	u8 intclr3;
 
-	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
+printk("%s: begin of interrupt\n", __func__);
+	ret = pm_runtime_get_sync(&priv->i2c->dev);
+	if (WARN_ON(ret < 0))
 		return IRQ_NONE;
 
 	intcore = it66121_reg_read(priv, IT66121_INT_CORE_STAT);
@@ -1255,32 +1253,30 @@ static irqreturn_t it66121_thread_interrupt(int irq, void *data)
 			  IT66121_INT_CORE_STAT_EXT |
 			  IT66121_INT_CORE_STAT_HDMI;
 	}
-printk("%s: begin of interrupt, core status 0x%x\n", __func__, intcore);
-
+printk("%s: core status 0x%x\n", __func__, intcore);
 
 	intdata0 = it66121_reg_read(priv, IT66121_INT_STAT0);
 	intdata1 = it66121_reg_read(priv, IT66121_INT_STAT1);
 	intdata2 = it66121_reg_read(priv, IT66121_INT_STAT2);
 	intdata3 = it66121_reg_read(priv, IT66121_INT_STAT_EXT);
 
-	it66121_clear_interrupt(priv, intdata0, it66121_int_stat1_clr, ARRAY_SIZE(it66121_int_stat1_clr));
-	it66121_clear_interrupt(priv, intdata1, it66121_int_stat2_clr, ARRAY_SIZE(it66121_int_stat2_clr));
-	it66121_clear_interrupt(priv, intdata2, it66121_int_stat3_clr, ARRAY_SIZE(it66121_int_stat2_clr));
+	it66121_clear_interrupt(priv, intdata0, it66121_int_stat1_clr,
+				ARRAY_SIZE(it66121_int_stat1_clr));
+	it66121_clear_interrupt(priv, intdata1, it66121_int_stat2_clr,
+				ARRAY_SIZE(it66121_int_stat2_clr));
+	it66121_clear_interrupt(priv, intdata2, it66121_int_stat3_clr,
+				ARRAY_SIZE(it66121_int_stat2_clr));
 
 	/* ext-interrupt is write-1-to-clear */
 	if (intdata3)
 		it66121_reg_write(priv, IT66121_INT_STAT_EXT, intdata3);
 
-/*	intclr3 = it66121_reg_read(priv, IT66121_SYS_STATUS0);
-	intclr3 = intclr3 | IT66121_SYS_STATUS0_CLEAR_AUD_CTS;
-	it66121_reg_write(priv, IT66121_INT_CLR0, 0xFF);
-	it66121_reg_write(priv, IT66121_INT_CLR1, 0xFF);
-	it66121_reg_write(priv, IT66121_SYS_STATUS0, intclr3); // clear interrupt.
-*/
-
 	/* mark interrupt as cleared */
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_INTACTDONE, IT66121_SYS_STATUS0_INTACTDONE);
-	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0, IT66121_SYS_STATUS0_INTACTDONE, 0);
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0,
+				IT66121_SYS_STATUS0_INTACTDONE,
+				IT66121_SYS_STATUS0_INTACTDONE);
+	it66121_reg_update_bits(priv, IT66121_SYS_STATUS0,
+				IT66121_SYS_STATUS0_INTACTDONE, 0);
 
 	if (intdata0 & IT66121_INT_STAT0_DDC_FIFO_ERR) {
 printk("%s: handling ddc_fifo_err\n", __func__);
@@ -1323,6 +1319,7 @@ printk("%s: handling hotplug\n", __func__);
 }
 
 	pm_runtime_put(&priv->i2c->dev);
+printk("%s: interrupt end\n", __func__);
 	return IRQ_HANDLED;
 }
 
@@ -1338,8 +1335,6 @@ static int __maybe_unused it66121_runtime_resume(struct device *dev)
 	if (ret < 0)
 		return ret;
 
-	ret = it66121_afe_enable(priv);
-
 	return ret;
 }
 
@@ -1347,10 +1342,6 @@ static int __maybe_unused it66121_runtime_suspend(struct device *dev)
 {
 	struct it66121 *priv = dev_get_drvdata(dev);
 	int ret;
-
-	ret = it66121_afe_disable(priv);
-	if (ret < 0)
-		return ret;
 
 	ret = it66121_reg_update_bits(priv, IT66121_INT_CTRL,
 				      IT66121_INT_CTRL_TXCLK_POWERDN,
@@ -1409,7 +1400,7 @@ static int it66121_init(struct it66121 *priv)
 				      IT66121_SW_RST_AUDIO_FIFO |
 				      IT66121_SW_RST_HDCP);
 
-	/* default speed for ring_ck (now slowdown, speedup) */
+	/* default speed for ring_ck (no slowdown, speedup) */
 	ret = it66121_reg_update_bits(priv,  IT66121_AFE_RING_CTRL,
 				      IT66121_AFE_RING_CTRL_CK_SLOW |
 				      IT66121_AFE_RING_CTRL_CK_FAST, 0);
@@ -1632,12 +1623,24 @@ static int it66121_probe(struct i2c_client *client,
 	priv->bridge.of_node = client->dev.of_node;
 	drm_bridge_add(&priv->bridge);
 
+	/* unmask hpd and rx_sense interrupts */
+	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
+				IT66121_INT_MASK0_RX_SENSE |
+				IT66121_INT_MASK0_HPD, 0);
+
 	return 0;
 }
 
 static int it66121_remove(struct i2c_client *client)
 {
 	struct it66121 *priv = i2c_get_clientdata(client);
+
+	/* mask hpd and rx_sense interrupts */
+	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
+				IT66121_INT_MASK0_RX_SENSE |
+				IT66121_INT_MASK0_HPD,
+				IT66121_INT_MASK0_RX_SENSE |
+				IT66121_INT_MASK0_HPD);
 
 	drm_bridge_remove(&priv->bridge);
 	pm_runtime_disable(&client->dev);
