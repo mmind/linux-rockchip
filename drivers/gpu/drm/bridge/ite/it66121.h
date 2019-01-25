@@ -32,7 +32,8 @@ struct it66121 {
 	struct drm_bridge bridge;
 	struct drm_connector connector;
 
-	bool dvi_mode;
+	bool sink_is_hdmi;
+	bool sink_has_audio;
 	bool need_csc;
 
 	int powerstatus;

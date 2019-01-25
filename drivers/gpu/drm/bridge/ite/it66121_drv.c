@@ -621,10 +621,15 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 		return -ENODEV;
 	}
 
-	priv->dvi_mode = !drm_detect_hdmi_monitor(edid);
+	priv->sink_is_hdmi = drm_detect_hdmi_monitor(edid);
+	priv->sink_has_audio = drm_detect_monitor_audio(edid);
+printk("%s: hdmi mode %d\n", __func__, priv->sink_is_hdmi);
+
+//FIXME: hdmi detection
+priv->sink_is_hdmi = 1;
 
 	drm_connector_update_edid_property(connector, edid);
-//	cec_notifier_set_phys_addr_from_edid(hdata->notifier, edid);
+	cec_s_phys_addr_from_edid(priv->cec_adap, edid);
 
 	ret = drm_add_edid_modes(connector, edid);
 	kfree(edid);
@@ -898,11 +903,6 @@ static void it66121_enable_video_output(struct it66121 *priv,
 			  IT66121_SW_RST_SOFT_AUD |
 			  IT66121_SW_RST_HDCP);
 
-	/*Set regC1[0] = '1' for AVMUTE the output, only support hdmi mode now*/
-	//it66121_reg_update_bits(priv, IT66121_AV_MUTE, IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_MUTE);
-	it66121_reg_update_bits(priv, IT66121_AV_MUTE, IT66121_AV_MUTE_MUTE,  0);
-	it66121_reg_write(priv, IT66121_GENERAL_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
-
 	/* Programming Input Signal Type
 	 * InputColorMode: F_MODE_RGB444
 	 *				   F_MODE_YUV422
@@ -1016,10 +1016,10 @@ static void it66121_bridge_mode_set(struct drm_bridge *bridge,
 	struct it66121 *priv = bridge_to_it66121(bridge);
 	int ret;
 
-	if (priv->dvi_mode)
-		ret = it66121_set_mode_dvi(priv, adj);
-	else
+	if (priv->sink_is_hdmi)
 		ret = it66121_set_mode_hdmi(priv, adj);
+	else
+		ret = it66121_set_mode_dvi(priv, adj);
 	if (ret < 0)
 		return;
 
@@ -1032,11 +1032,12 @@ static void it66121_bridge_disable(struct drm_bridge *bridge)
 
 printk("%s: disabling bridge\n", __func__);
 	/* disable video output */
-//FIXME: simply do avmute?
 	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, IT66121_SW_RST_SOFT_VID);
 
-	if (!priv->dvi_mode)
+	if (priv->sink_is_hdmi) {
 		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, 0);
+		it66121_reg_write(priv, IT66121_GENERAL_CTRL, 0);
+	}
 
 	/* disable csc-clock */
 	it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
@@ -1064,12 +1065,26 @@ printk("%s: enabling bridge\n", __func__);
 	it66121_afe_enable(priv);
 
 	if (priv->need_csc)
-		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1, IT66121_SYS_STATUS1_GATE_TXCLK, 0);
+		it66121_reg_update_bits(priv, IT66121_SYS_STATUS1,
+					IT66121_SYS_STATUS1_GATE_TXCLK, 0);
 
-	if (!priv->dvi_mode)
-		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL, IT66121_INFOFRM_ENABLE_PACKET | IT66121_INFOFRM_REPEAT_PACKET);
+	if (priv->sink_is_hdmi) {
+printk("%s: hdmi mode\n", __func__);
+		it66121_reg_write(priv, IT66121_AVI_INFOFRM_CTRL,
+				  IT66121_INFOFRM_ENABLE_PACKET |
+				  IT66121_INFOFRM_REPEAT_PACKET);
 
-	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_SOFT_VID, 0);
+	/*Set regC1[0] = '1' for AVMUTE the output, only support hdmi mode now*/
+	//it66121_reg_update_bits(priv, IT66121_AV_MUTE, IT66121_AV_MUTE_MUTE, IT66121_AV_MUTE_MUTE);
+		it66121_reg_update_bits(priv, IT66121_AV_MUTE,
+					IT66121_AV_MUTE_MUTE,  0);
+		it66121_reg_write(priv, IT66121_GENERAL_CTRL,
+				  IT66121_INFOFRM_ENABLE_PACKET |
+				  IT66121_INFOFRM_REPEAT_PACKET);
+	}
+
+	it66121_reg_update_bits(priv, IT66121_SW_RST,
+				IT66121_SW_RST_SOFT_VID, 0);
 printk("%s: enabled bridge\n", __func__);
 }
 
@@ -1103,29 +1118,11 @@ static int it66121_bridge_attach(struct drm_bridge *bridge)
 
 	drm_connector_attach_encoder(&priv->connector, bridge->encoder);
 
-	/* unmask hpd and rx_sense interrupts */
-/*	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
-				IT66121_INT_MASK0_RX_SENSE |
-				IT66121_INT_MASK0_HPD, 0);*/
-
 	return 0;
-}
-
-static void it66121_bridge_detach(struct drm_bridge *bridge)
-{
-	struct it66121 *priv = bridge_to_it66121(bridge);
-
-	/* mask hpd and rx_sense interrupts */
-/*	it66121_reg_update_bits(priv, IT66121_INT_MASK0,
-				IT66121_INT_MASK0_RX_SENSE |
-				IT66121_INT_MASK0_HPD,
-				IT66121_INT_MASK0_RX_SENSE |
-				IT66121_INT_MASK0_HPD); */
 }
 
 static const struct drm_bridge_funcs it66121_bridge_funcs = {
 	.attach = it66121_bridge_attach,
-	.detach = it66121_bridge_detach,
 	.mode_set = it66121_bridge_mode_set,
 	.disable = it66121_bridge_disable,
 	.enable = it66121_bridge_enable,
@@ -1153,8 +1150,8 @@ printk("%s: start\n", __func__);
 	if (priv->connector.status != status) {
 printk("%s: send event %d -> %d\n", __func__, priv->connector.status, status);
 		priv->connector.status = status;
-//		if (status == connector_status_disconnected)
-//			cec_phys_addr_invalidate(adv7511->cec_adap);
+		if (status == connector_status_disconnected)
+			cec_phys_addr_invalidate(priv->cec_adap);
 		drm_kms_helper_hotplug_event(priv->connector.dev);
 	}
 
