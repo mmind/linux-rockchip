@@ -444,7 +444,6 @@ it66121_connector_detect(struct drm_connector *connector, bool force)
 {
 	struct it66121 *priv = connector_to_it66121(connector);
 	char isconnect;
-	int ret;
 
 	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
 		return connector_status_unknown;
@@ -466,15 +465,64 @@ static const struct drm_connector_funcs it66121_connector_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
 
+/*
+ * Helper to fire the ddc command and poll for the result.
+ * The IT66121 doesn't have an interrupt for completed ddc actions,
+ * so the status register needs to be polled for each command.
+ * Setup for the command should be done separately before that.
+ */
+static int it66121_ddc_command(struct it66121 *priv, u8 cmd)
+{
+	unsigned int cond = IT66121_DDC_STATUS_DONE | IT66121_DDC_STATUS_ERROR;
+	unsigned int val;
+	int ret;
+
+	ret = it66121_reg_write(priv, IT66121_DDC_CMD, cmd);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * The ddc_status register is accessible from both banks,
+	 * so we can use the regular regmap_read_poll function.
+	 */
+	ret = regmap_read_poll_timeout(priv->regmap, IT66121_DDC_STATUS, val,
+				       val & cond, 1000, 250 * 1000);
+	if (ret < 0) {
+		dev_err(&priv->i2c->dev, "ddc command timeout\n");
+		return ret;
+	}
+
+	if (val & IT66121_DDC_STATUS_DONE)
+		return 0;
+
+	if (val & IT66121_DDC_STATUS_NOACK) {
+		dev_err(&priv->i2c->dev, "ddc noack error\n");
+		return -EIO;
+	}
+
+	if (val & IT66121_DDC_STATUS_WAIT_BUS) {
+		dev_err(&priv->i2c->dev, "ddc wait-bus error\n");
+		return -EIO;
+	}
+
+	if (val & IT66121_DDC_STATUS_ARBILOSE) {
+		dev_err(&priv->i2c->dev, "ddc arbiter lost error\n");
+		return -EIO;
+	}
+
+	/* shouldn't be reached */
+	return -EIO;
+}
 
 static void it66121_abort_DDC(struct it66121 *priv)
 {
-	u8 CPDesire, SWReset, DDCMaster;
-	u8 uc, timeout, i;
+	u8 CPDesire, SWReset;
+	int i;
+	int ret;
+
 	// save the SW reset,DDC master,and CP Desire setting.
 	SWReset = it66121_reg_read(priv, IT66121_SW_RST);
 	CPDesire = it66121_reg_read(priv, IT66121_HDCP);
-	DDCMaster = it66121_reg_read(priv, IT66121_DDC_MASTER);
 
 	it66121_reg_write(priv, IT66121_HDCP, CPDesire & (IT66121_HDCP_DESIRED));
 	it66121_reg_write(priv, IT66121_SW_RST, SWReset | IT66121_SW_RST_HDCP);
@@ -483,19 +531,9 @@ static void it66121_abort_DDC(struct it66121 *priv)
 	// 2009/01/15 modified by Jau-Chih.Tseng@ite.com.tw
 	// do abort DDC twice.
 	for (i = 0; i < 2; i++) {
-		it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_DDC_ABORT);
-
-		for (timeout = 0; timeout < 200; timeout++) {
-			uc = it66121_reg_read(priv, IT66121_DDC_STATUS);
-			if (uc & IT66121_DDC_STATUS_DONE) {
-				break; // success
-			}
-			if (uc & (IT66121_DDC_STATUS_NOACK | IT66121_DDC_STATUS_WAIT_BUS | IT66121_DDC_STATUS_ARBILOSE)) {
-				dev_err(&priv->i2c->dev, "it66121_abort_DDC Fail by reg16=%02X\n", (int)uc);
-				break;
-			}
-			mdelay(1); // delay 1 ms to stable.
-		}
+		ret = it66121_ddc_command(priv, IT66121_DDC_CMD_DDC_ABORT);
+		if (ret < 0)
+			dev_warn(&priv->i2c->dev, "ddc-abort failed with %d\n", ret);
 	}
 	//~Jau-Chih.Tseng@ite.com.tw
 }
@@ -523,15 +561,14 @@ static void it66121_abort_DDC(struct it66121 *priv)
  *
  * <start>-<0x98/0x9A>-<0x17>-<stop>-<start>-<0x99/0x9B>-<read data>-<stop>
  */
-static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t length)
+static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t len)
 {
 	struct it66121 *priv = data;
-	u16 ReqCount;
-	u8 bCurrOffset;
-	u16 TimeOut;
+	u16 reqcount;
+	u8 offset;
 	u8 *pBuff = buf;
-	u8 ucdata;
-	u8 bSegment;
+	u8 segment;
+	int ret;
 
 	if (!buf)
 		return -EINVAL;
@@ -541,69 +578,62 @@ static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t
 		it66121_abort_DDC(priv);
 	}
 
-	/*clear the DDC FIFO*/
-	it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
-	it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_FIFO_CLEAR);
+	offset = (blk % 2) / len;
+	segment  = blk / len;
 
-	bCurrOffset = (blk % 2) / length;
-	bSegment  = blk / length;
-
-	while (length > 0) {
-		ReqCount = (length > DDC_FIFO_MAXREQ) ? DDC_FIFO_MAXREQ : length;
+	while (len > 0) {
+		reqcount = (len > IT66121_DDC_FIFO_MAXREQ) ?
+					IT66121_DDC_FIFO_MAXREQ : len;
 
 		it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
-		it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_FIFO_CLEAR);
-
-		for (TimeOut = 0; TimeOut < 200; TimeOut++) {
-			ucdata = it66121_reg_read(priv, IT66121_DDC_STATUS);
-
-			if (ucdata & IT66121_DDC_STATUS_DONE)
-				break;
-
-			if ((ucdata & IT66121_DDC_STATUS_ERROR) || (it66121_reg_read(priv, IT66121_INT_STAT0) & IT66121_INT_STAT0_DDC_BUS_HANG)) {
-				dev_err(&priv->i2c->dev, "it66121_read_edid_block(): DDC_STATUS = %02X,fail.\n", (int)ucdata);
-				/*clear the DDC FIFO*/
-				it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
-				it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_FIFO_CLEAR);
-				return -ENXIO;
-			}
-		}
+		ret = it66121_ddc_command(priv, IT66121_DDC_CMD_FIFO_CLEAR);
+		if (ret < 0)
+			return ret;
 
 		it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
-		it66121_reg_write(priv, IT66121_DDC_HEADER, DDC_EDID_ADDRESS);
-		it66121_reg_write(priv, IT66121_DDC_REQOFFSET, bCurrOffset);
-		it66121_reg_write(priv, IT66121_DDC_REQCOUNT, (u8)ReqCount);
-		it66121_reg_write(priv, IT66121_DDC_SEGMENT, bSegment);
-		it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_EDID_READ);
+		it66121_reg_write(priv, IT66121_DDC_HEADER, IT66121_DDC_HEADER_EDID);
+		it66121_reg_write(priv, IT66121_DDC_REQOFFSET, offset);
+		it66121_reg_write(priv, IT66121_DDC_REQCOUNT, (u8)reqcount);
+		it66121_reg_write(priv, IT66121_DDC_SEGMENT, segment);
+		ret = it66121_ddc_command(priv, IT66121_DDC_CMD_EDID_READ);
+		if (ret < 0)
+			return ret;
 
-		bCurrOffset += ReqCount;
-		length -= ReqCount;
-
-		for (TimeOut = 250; TimeOut > 0; TimeOut--) {
-			mdelay(1);
-			ucdata = it66121_reg_read(priv, IT66121_DDC_STATUS);
-			if (ucdata & IT66121_DDC_STATUS_DONE)
-				break;
-
-			if (ucdata & IT66121_DDC_STATUS_ERROR) {
-				dev_err(&priv->i2c->dev, "it66121_read_edid_block(): DDC_STATUS = %02X,fail.\n", (int)ucdata);
-				return -1;
-			}
-		}
-
-		if (TimeOut == 0) {
-			dev_err(&priv->i2c->dev, "it66121_read_edid_block(): DDC TimeOut %d . \n", (int)ucdata);
-			return -1;
-		}
+		offset += reqcount;
+		len -= reqcount;
 
 		do {
 			*(pBuff++) = it66121_reg_read(priv, IT66121_DDC_READ_FIFO);
-			ReqCount--;
-		} while (ReqCount > 0);
-
+			reqcount--;
+		} while (reqcount > 0);
 	}
 
 	return 0;
+}
+
+static int it66121_hdcp_update_bstatus(struct it66121 *priv)
+{
+	int ret;
+
+	it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
+	ret = it66121_ddc_command(priv, IT66121_DDC_CMD_FIFO_CLEAR);
+	if (ret < 0)
+		return ret;
+
+	it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
+	it66121_reg_write(priv, IT66121_DDC_HEADER, IT66121_DDC_HEADER_HDCP);
+	it66121_reg_write(priv, IT66121_DDC_REQOFFSET, 0x41);
+	it66121_reg_write(priv, IT66121_DDC_REQCOUNT, 2);
+	ret = it66121_ddc_command(priv, IT66121_DDC_CMD_DDC_SEQ_BURST_READ);
+	if (ret < 0)
+		return ret;
+
+ret = it66121_reg_read(priv, IT66121_BSTATUS0);
+printk("%s: bstatus0: 0x%x\n", __func__, ret);
+ret = it66121_reg_read(priv, IT66121_BSTATUS1);
+printk("%s: bstatus1: 0x%x\n", __func__, ret);
+
+	return ret;
 }
 
 static int it66121_connector_get_modes(struct drm_connector *connector)
@@ -612,7 +642,8 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 	struct edid *edid;
 	int ret;
 
-	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
+	ret = pm_runtime_get_sync(&priv->i2c->dev);
+	if (WARN_ON(ret < 0))
 		return ret;
 
 	edid = drm_do_get_edid(connector, it66121_read_edid_block, priv);
@@ -623,10 +654,12 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 
 	priv->sink_is_hdmi = drm_detect_hdmi_monitor(edid);
 	priv->sink_has_audio = drm_detect_monitor_audio(edid);
-printk("%s: hdmi mode %d\n", __func__, priv->sink_is_hdmi);
+printk("%s: hdmi mode %d, audio %d\n", __func__, priv->sink_is_hdmi, priv->sink_has_audio);
 
 //FIXME: hdmi detection
 priv->sink_is_hdmi = 1;
+
+it66121_hdcp_update_bstatus(priv);
 
 	drm_connector_update_edid_property(connector, edid);
 	cec_s_phys_addr_from_edid(priv->cec_adap, edid);
@@ -1056,7 +1089,6 @@ printk("%s: disabled bridge\n", __func__);
 static void it66121_bridge_enable(struct drm_bridge *bridge)
 {
 	struct it66121 *priv = bridge_to_it66121(bridge);
-	int ret;
 
 printk("%s: enabling bridge\n", __func__);
 	if (WARN_ON(pm_runtime_get_sync(&priv->i2c->dev) < 0))
@@ -1256,7 +1288,9 @@ printk("%s: handling ddc_fifo_err\n", __func__);
 		//dev_err(&client->dev, "DDC FIFO Error.\n");
 		/*clear ddc fifo*/
 		it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
-		it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_FIFO_CLEAR);
+//		it66121_reg_write(priv, IT66121_DDC_CMD, IT66121_DDC_CMD_FIFO_CLEAR);
+		ret = it66121_ddc_command(priv, IT66121_DDC_CMD_FIFO_CLEAR);
+
 	}
 
 	if (intdata0 & IT66121_INT_STAT0_DDC_BUS_HANG) {

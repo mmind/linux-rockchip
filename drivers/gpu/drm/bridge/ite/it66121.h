@@ -191,11 +191,9 @@ enum {
 #define IT66121_DDC_MASTER_HDCP			(0)
 
 #define IT66121_DDC_HEADER			0x11
-enum {
-	IT66121_DDC_HEADER_HDCP = 0x74,
-	IT66121_DDC_HEADER_EDID = 0xa0,
-	IT66121_DDC_HEADER_EEPROM = 0xa2,
-};
+#define IT66121_DDC_HEADER_HDCP			0x74
+#define IT66121_DDC_HEADER_EDID			0xa0
+//#define IT66121_DDC_HEADER_EEPROM		0xa2
 
 #define IT66121_DDC_REQOFFSET			0x12
 #define IT66121_DDC_REQCOUNT			0x13
@@ -228,6 +226,10 @@ enum {
 #define IT66121_DDC_STATUS_VRVALID		BIT(0)
 
 #define IT66121_DDC_READ_FIFO			0x17
+
+//#define IT66121_DDC_HDCP_ADDRESS 0x74
+//#define IT66121_DDC_EDID_ADDRESS 0xA0
+#define IT66121_DDC_FIFO_MAXREQ 0x20
 
 #define IT66121_ROM_STARTADDR			0x18
 #define IT66121_HDCP_HEADER			0x19
@@ -876,13 +878,6 @@ enum {
 #define AUD_SWL_22          0x5
 #define AUD_SWL_23          0x9
 #define AUD_SWL_24          0xB
-
-/////////////////////////////////////////
-// DDC Address
-/////////////////////////////////////////
-#define DDC_HDCP_ADDRESS 0x74
-#define DDC_EDID_ADDRESS 0xA0
-#define DDC_FIFO_MAXREQ 0x20
 
 
 /* CEC i2c sub-device */

@@ -53,7 +53,7 @@
 		};
 	};
 
-	hdmi_sound: hdmi-sound {
+/*	hdmi_sound: hdmi-sound {
 		compatible = "simple-audio-card";
 		simple-audio-card,format = "i2s";
 //		simple-audio-card,mclk-fs = <256>;
@@ -65,7 +65,7 @@
 		simple-audio-card,codec {
 			sound-dai = <&it66121>;
 		};
-	};
+	}; */
 
 	sound {
 		compatible = "simple-audio-card";
