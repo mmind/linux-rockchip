@@ -525,7 +525,7 @@ static void it66121_abort_DDC(struct it66121 *priv)
 	CPDesire = it66121_reg_read(priv, IT66121_HDCP);
 
 	it66121_reg_write(priv, IT66121_HDCP, CPDesire & (IT66121_HDCP_DESIRED));
-	it66121_reg_write(priv, IT66121_SW_RST, SWReset | IT66121_SW_RST_HDCP);
+	it66121_reg_update_bits(priv, IT66121_SW_RST, IT66121_SW_RST_HDCP, IT66121_SW_RST_HDCP);
 	it66121_reg_write(priv, IT66121_DDC_MASTER, IT66121_DDC_MASTER_DDC | IT66121_DDC_MASTER_HOST);
 
 	// 2009/01/15 modified by Jau-Chih.Tseng@ite.com.tw
@@ -538,29 +538,6 @@ static void it66121_abort_DDC(struct it66121 *priv)
 	//~Jau-Chih.Tseng@ite.com.tw
 }
 
-/*
- * To get the EDID data, DDC master should write segment with I2C address 0x60 then ask
- * the bytes with I2C address 0xA0. (That is the major difference to burst read.) The
- * programming of EDID read should set the following registers:
- *
- * Reg11 \A8C Should set 0xA0 for EDID fetching.
- * Reg12 \A8C Set the starting offset of EDID block on current segment.
- * Reg13 \A8C Set the number of byte to read back. The data will be put in DDC FIFO,
- * 		   therefore, cannot exceed the size (32) of FIFO.
- * Reg14 \A8C The segment of EDID block to read.
- * Reg15 \A8C DDC command should be 0x03.
- *
- * After reg15 written 0x03, the command is fired and successfully when reg16[7] = '1' or
- * fail by reg16[5:3] contains any bit '1'. When EDID read done, EDID can be read from DDC
- * FIFO.
- * Note: By hardware implementation, the I2C access sequence on PCSCL/PCSDA should be
- *
- * <start>-<0x98/0x9A>-<0x17>-<Restart>-<0x99/0x9B>-<read data>-<stop>
- *
- * If the sequence is the following sequence, the FIFO read will be fail.
- *
- * <start>-<0x98/0x9A>-<0x17>-<stop>-<start>-<0x99/0x9B>-<read data>-<stop>
- */
 static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t len)
 {
 	struct it66121 *priv = data;
@@ -578,8 +555,9 @@ static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t
 		it66121_abort_DDC(priv);
 	}
 
-	offset = (blk % 2) / len;
-	segment  = blk / len;
+	dev_dbg(&priv->i2c->dev, "reading %d bytes from edid block %u\n", len, blk);
+	segment = blk / 2;
+	offset = (blk & 1) ? 128 : 0;
 
 	while (len > 0) {
 		reqcount = (len > IT66121_DDC_FIFO_MAXREQ) ?
@@ -611,6 +589,7 @@ static int it66121_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t
 	return 0;
 }
 
+/*
 static int it66121_hdcp_update_bstatus(struct it66121 *priv)
 {
 	int ret;
@@ -628,13 +607,8 @@ static int it66121_hdcp_update_bstatus(struct it66121 *priv)
 	if (ret < 0)
 		return ret;
 
-ret = it66121_reg_read(priv, IT66121_BSTATUS0);
-printk("%s: bstatus0: 0x%x\n", __func__, ret);
-ret = it66121_reg_read(priv, IT66121_BSTATUS1);
-printk("%s: bstatus1: 0x%x\n", __func__, ret);
-
 	return ret;
-}
+} */
 
 static int it66121_connector_get_modes(struct drm_connector *connector)
 {
@@ -654,12 +628,6 @@ static int it66121_connector_get_modes(struct drm_connector *connector)
 
 	priv->sink_is_hdmi = drm_detect_hdmi_monitor(edid);
 	priv->sink_has_audio = drm_detect_monitor_audio(edid);
-printk("%s: hdmi mode %d, audio %d\n", __func__, priv->sink_is_hdmi, priv->sink_has_audio);
-
-//FIXME: hdmi detection
-priv->sink_is_hdmi = 1;
-
-it66121_hdcp_update_bstatus(priv);
 
 	drm_connector_update_edid_property(connector, edid);
 	cec_s_phys_addr_from_edid(priv->cec_adap, edid);
@@ -964,9 +932,6 @@ static void it66121_enable_video_output(struct it66121 *priv,
 #endif
 
 	it66121_afe_setup(priv, is_high_clk); // pass if High Freq request
-/*	it66121_reg_write(priv, IT66121_SW_RST, IT66121_SW_RST_AUDIO_FIFO |
-			  IT66121_SW_RST_SOFT_AUD |
-			  IT66121_SW_RST_HDCP);*/
 }
 
 static int it66121_set_mode_dvi(struct it66121 *priv,
