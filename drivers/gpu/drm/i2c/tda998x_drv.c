@@ -26,9 +26,9 @@
 
 #include <drm/drmP.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
+#include <drm/drm_probe_helper.h>
 #include <drm/i2c/tda998x.h>
 
 #include <media/cec-notifier.h>
@@ -845,7 +845,7 @@ static int tda998x_write_aif(struct tda998x_priv *priv,
 }
 
 static void
-tda998x_write_avi(struct tda998x_priv *priv, struct drm_display_mode *mode)
+tda998x_write_avi(struct tda998x_priv *priv, const struct drm_display_mode *mode)
 {
 	union hdmi_infoframe frame;
 
@@ -1339,8 +1339,8 @@ static void tda998x_bridge_disable(struct drm_bridge *bridge)
 }
 
 static void tda998x_bridge_mode_set(struct drm_bridge *bridge,
-				    struct drm_display_mode *mode,
-				    struct drm_display_mode *adjusted_mode)
+				    const struct drm_display_mode *mode,
+				    const struct drm_display_mode *adjusted_mode)
 {
 	struct tda998x_priv *priv = bridge_to_tda998x_priv(bridge);
 	unsigned long tmds_clock;
