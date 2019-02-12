@@ -144,6 +144,13 @@ igt_spinner_create_request(struct igt_spinner *spin,
 
 	i915_gem_chipset_flush(spin->i915);
 
+	if (engine->emit_init_breadcrumb &&
+	    rq->timeline->has_initial_breadcrumb) {
+		err = engine->emit_init_breadcrumb(rq);
+		if (err)
+			goto cancel_rq;
+	}
+
 	err = engine->emit_bb_start(rq, vma->node.start, PAGE_SIZE, 0);
 
 cancel_rq:
@@ -185,11 +192,6 @@ void igt_spinner_fini(struct igt_spinner *spin)
 
 bool igt_wait_for_spinner(struct igt_spinner *spin, struct i915_request *rq)
 {
-	if (!wait_event_timeout(rq->execute,
-				READ_ONCE(rq->global_seqno),
-				msecs_to_jiffies(10)))
-		return false;
-
 	return !(wait_for_us(i915_seqno_passed(hws_seqno(spin, rq),
 					       rq->fence.seqno),
 			     10) &&

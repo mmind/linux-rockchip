@@ -80,17 +80,12 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	mst_pbn = drm_dp_calc_pbn_mode(adjusted_mode->crtc_clock, bpp);
 	pipe_config->pbn = mst_pbn;
 
-	/* Zombie connectors can't have VCPI slots */
-	if (!drm_connector_is_unregistered(connector)) {
-		slots = drm_dp_atomic_find_vcpi_slots(state,
-						      &intel_dp->mst_mgr,
-						      port,
-						      mst_pbn);
-		if (slots < 0) {
-			DRM_DEBUG_KMS("failed finding vcpi slots:%d\n",
-				      slots);
-			return slots;
-		}
+	slots = drm_dp_atomic_find_vcpi_slots(state, &intel_dp->mst_mgr, port,
+					      mst_pbn);
+	if (slots < 0) {
+		DRM_DEBUG_KMS("failed finding vcpi slots:%d\n",
+			      slots);
+		return slots;
 	}
 
 	intel_link_compute_m_n(bpp, lane_count,
@@ -247,7 +242,7 @@ static void intel_mst_pre_enable_dp(struct intel_encoder *encoder,
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
 	int ret;
-	uint32_t temp;
+	u32 temp;
 
 	/* MST encoders are bound to a crtc, not to a connector,
 	 * force the mapping here for get_hw_state.

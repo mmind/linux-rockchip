@@ -209,6 +209,8 @@ static void fence_write(struct drm_i915_fence_reg *fence,
 static int fence_update(struct drm_i915_fence_reg *fence,
 			struct i915_vma *vma)
 {
+	intel_wakeref_t wakeref;
+	struct i915_vma *old;
 	int ret;
 
 	if (vma) {
@@ -222,55 +224,70 @@ static int fence_update(struct drm_i915_fence_reg *fence,
 			 i915_gem_object_get_tiling(vma->obj)))
 			return -EINVAL;
 
-		ret = i915_gem_active_retire(&vma->last_fence,
+		ret = i915_active_request_retire(&vma->last_fence,
 					     &vma->obj->base.dev->struct_mutex);
 		if (ret)
 			return ret;
 	}
 
-	if (fence->vma) {
-		struct i915_vma *old = fence->vma;
-
-		ret = i915_gem_active_retire(&old->last_fence,
+	old = xchg(&fence->vma, NULL);
+	if (old) {
+		ret = i915_active_request_retire(&old->last_fence,
 					     &old->obj->base.dev->struct_mutex);
-		if (ret)
+		if (ret) {
+			fence->vma = old;
 			return ret;
+		}
 
 		i915_vma_flush_writes(old);
-	}
 
-	if (fence->vma && fence->vma != vma) {
-		/* Ensure that all userspace CPU access is completed before
+		/*
+		 * Ensure that all userspace CPU access is completed before
 		 * stealing the fence.
 		 */
-		GEM_BUG_ON(fence->vma->fence != fence);
-		i915_vma_revoke_mmap(fence->vma);
-
-		fence->vma->fence = NULL;
-		fence->vma = NULL;
+		if (old != vma) {
+			GEM_BUG_ON(old->fence != fence);
+			i915_vma_revoke_mmap(old);
+			old->fence = NULL;
+		}
 
 		list_move(&fence->link, &fence->i915->mm.fence_list);
 	}
 
-	/* We only need to update the register itself if the device is awake.
+	/*
+	 * We only need to update the register itself if the device is awake.
 	 * If the device is currently powered down, we will defer the write
 	 * to the runtime resume, see i915_gem_restore_fences().
+	 *
+	 * This only works for removing the fence register, on acquisition
+	 * the caller must hold the rpm wakeref. The fence register must
+	 * be cleared before we can use any other fences to ensure that
+	 * the new fences do not overlap the elided clears, confusing HW.
 	 */
-	if (intel_runtime_pm_get_if_in_use(fence->i915)) {
-		fence_write(fence, vma);
-		intel_runtime_pm_put(fence->i915);
+	wakeref = intel_runtime_pm_get_if_in_use(fence->i915);
+	if (!wakeref) {
+		GEM_BUG_ON(vma);
+		return 0;
 	}
 
-	if (vma) {
-		if (fence->vma != vma) {
-			vma->fence = fence;
-			fence->vma = vma;
-		}
+	ret = i915_reset_trylock(fence->i915);
+	if (ret < 0)
+		goto out_rpm;
 
+	fence_write(fence, vma);
+	fence->vma = vma;
+
+	if (vma) {
+		vma->fence = fence;
 		list_move_tail(&fence->link, &fence->i915->mm.fence_list);
 	}
 
-	return 0;
+	i915_reset_unlock(fence->i915, ret);
+	ret = 0;
+
+out_rpm:
+	intel_runtime_pm_put(fence->i915, wakeref);
+	return ret;
 }
 
 /**
@@ -434,32 +451,6 @@ void i915_unreserve_fence(struct drm_i915_fence_reg *fence)
 }
 
 /**
- * i915_gem_revoke_fences - revoke fence state
- * @dev_priv: i915 device private
- *
- * Removes all GTT mmappings via the fence registers. This forces any user
- * of the fence to reacquire that fence before continuing with their access.
- * One use is during GPU reset where the fence register is lost and we need to
- * revoke concurrent userspace access via GTT mmaps until the hardware has been
- * reset and the fence registers have been restored.
- */
-void i915_gem_revoke_fences(struct drm_i915_private *dev_priv)
-{
-	int i;
-
-	lockdep_assert_held(&dev_priv->drm.struct_mutex);
-
-	for (i = 0; i < dev_priv->num_fence_regs; i++) {
-		struct drm_i915_fence_reg *fence = &dev_priv->fence_regs[i];
-
-		GEM_BUG_ON(fence->vma && fence->vma->fence != fence);
-
-		if (fence->vma)
-			i915_vma_revoke_mmap(fence->vma);
-	}
-}
-
-/**
  * i915_gem_restore_fences - restore fence state
  * @dev_priv: i915 device private
  *
@@ -471,9 +462,10 @@ void i915_gem_restore_fences(struct drm_i915_private *dev_priv)
 {
 	int i;
 
+	rcu_read_lock(); /* keep obj alive as we dereference */
 	for (i = 0; i < dev_priv->num_fence_regs; i++) {
 		struct drm_i915_fence_reg *reg = &dev_priv->fence_regs[i];
-		struct i915_vma *vma = reg->vma;
+		struct i915_vma *vma = READ_ONCE(reg->vma);
 
 		GEM_BUG_ON(vma && vma->fence != reg);
 
@@ -481,18 +473,12 @@ void i915_gem_restore_fences(struct drm_i915_private *dev_priv)
 		 * Commit delayed tiling changes if we have an object still
 		 * attached to the fence, otherwise just clear the fence.
 		 */
-		if (vma && !i915_gem_object_is_tiled(vma->obj)) {
-			GEM_BUG_ON(!reg->dirty);
-			GEM_BUG_ON(i915_vma_has_userfault(vma));
-
-			list_move(&reg->link, &dev_priv->mm.fence_list);
-			vma->fence = NULL;
+		if (vma && !i915_gem_object_is_tiled(vma->obj))
 			vma = NULL;
-		}
 
 		fence_write(reg, vma);
-		reg->vma = vma;
 	}
+	rcu_read_unlock();
 }
 
 /**
@@ -553,8 +539,8 @@ void i915_gem_restore_fences(struct drm_i915_private *dev_priv)
 void
 i915_gem_detect_bit_6_swizzle(struct drm_i915_private *dev_priv)
 {
-	uint32_t swizzle_x = I915_BIT_6_SWIZZLE_UNKNOWN;
-	uint32_t swizzle_y = I915_BIT_6_SWIZZLE_UNKNOWN;
+	u32 swizzle_x = I915_BIT_6_SWIZZLE_UNKNOWN;
+	u32 swizzle_y = I915_BIT_6_SWIZZLE_UNKNOWN;
 
 	if (INTEL_GEN(dev_priv) >= 8 || IS_VALLEYVIEW(dev_priv)) {
 		/*
@@ -577,7 +563,7 @@ i915_gem_detect_bit_6_swizzle(struct drm_i915_private *dev_priv)
 				swizzle_y = I915_BIT_6_SWIZZLE_NONE;
 			}
 		} else {
-			uint32_t dimm_c0, dimm_c1;
+			u32 dimm_c0, dimm_c1;
 			dimm_c0 = I915_READ(MAD_DIMM_C0);
 			dimm_c1 = I915_READ(MAD_DIMM_C1);
 			dimm_c0 &= MAD_DIMM_A_SIZE_MASK | MAD_DIMM_B_SIZE_MASK;
@@ -609,7 +595,7 @@ i915_gem_detect_bit_6_swizzle(struct drm_i915_private *dev_priv)
 		swizzle_y = I915_BIT_6_SWIZZLE_NONE;
 	} else if (IS_MOBILE(dev_priv) ||
 		   IS_I915G(dev_priv) || IS_I945G(dev_priv)) {
-		uint32_t dcc;
+		u32 dcc;
 
 		/* On 9xx chipsets, channel interleave by the CPU is
 		 * determined by DCC.  For single-channel, neither the CPU
