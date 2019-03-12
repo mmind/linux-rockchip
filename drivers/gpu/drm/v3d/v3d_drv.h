@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /* Copyright (C) 2015-2018 Broadcom */
 
-#include <linux/reservation.h>
 #include <linux/mm_types.h>
 #include <drm/drmP.h>
 #include <drm/drm_encoder.h>
@@ -34,6 +33,7 @@ struct v3d_dev {
 	 * and revision.
 	 */
 	int ver;
+	bool single_irq_line;
 
 	struct device *dev;
 	struct platform_device *pdev;
@@ -42,6 +42,7 @@ struct v3d_dev {
 	void __iomem *bridge_regs;
 	void __iomem *gca_regs;
 	struct clk *clk;
+	struct reset_control *reset;
 
 	/* Virtual and DMA addresses of the single shared page table. */
 	volatile u32 *pt;
@@ -133,10 +134,6 @@ struct v3d_bo {
 	 * v3d_exec_info->unref_list
 	 */
 	struct list_head unref_head;
-
-	/* normally (resv == &_resv) except for imported bo's */
-	struct reservation_object *resv;
-	struct reservation_object _resv;
 };
 
 static inline struct v3d_bo *
@@ -281,7 +278,6 @@ int v3d_get_bo_offset_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *file_priv);
 vm_fault_t v3d_gem_fault(struct vm_fault *vmf);
 int v3d_mmap(struct file *filp, struct vm_area_struct *vma);
-struct reservation_object *v3d_prime_res_obj(struct drm_gem_object *obj);
 int v3d_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
 struct sg_table *v3d_prime_get_sg_table(struct drm_gem_object *obj);
 struct drm_gem_object *v3d_prime_import_sg_table(struct drm_device *dev,
@@ -310,7 +306,7 @@ void v3d_reset(struct v3d_dev *v3d);
 void v3d_invalidate_caches(struct v3d_dev *v3d);
 
 /* v3d_irq.c */
-void v3d_irq_init(struct v3d_dev *v3d);
+int v3d_irq_init(struct v3d_dev *v3d);
 void v3d_irq_enable(struct v3d_dev *v3d);
 void v3d_irq_disable(struct v3d_dev *v3d);
 void v3d_irq_reset(struct v3d_dev *v3d);

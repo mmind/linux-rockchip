@@ -49,11 +49,7 @@ static int imx_drm_atomic_check(struct drm_device *dev,
 {
 	int ret;
 
-	ret = drm_atomic_helper_check_modeset(dev, state);
-	if (ret)
-		return ret;
-
-	ret = drm_atomic_helper_check_planes(dev, state);
+	ret = drm_atomic_helper_check(dev, state);
 	if (ret)
 		return ret;
 
@@ -189,7 +185,7 @@ static int compare_of(struct device *dev, void *data)
 	}
 
 	/* Special case for LDB, one device for two channels */
-	if (of_node_cmp(np->name, "lvds-channel") == 0) {
+	if (of_node_name_eq(np, "lvds-channel")) {
 		np = of_get_parent(np);
 		of_node_put(np);
 	}
@@ -229,6 +225,7 @@ static int imx_drm_bind(struct device *dev)
 	drm->mode_config.funcs = &imx_drm_mode_config_funcs;
 	drm->mode_config.helper_private = &imx_drm_mode_config_helpers;
 	drm->mode_config.allow_fb_modifiers = true;
+	drm->mode_config.normalize_zpos = true;
 
 	drm_mode_config_init(drm);
 

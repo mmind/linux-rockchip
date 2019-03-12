@@ -630,7 +630,6 @@ static struct regulator_init_data cn12_power_init_data = {
 static struct fixed_voltage_config cn12_power_info = {
 	.supply_name = "CN12 SD/MMC Vdd",
 	.microvolts = 3300000,
-	.enable_high = 1,
 	.init_data = &cn12_power_init_data,
 };
 
@@ -671,7 +670,6 @@ static struct regulator_init_data sdhi0_power_init_data = {
 static struct fixed_voltage_config sdhi0_power_info = {
 	.supply_name = "CN11 SD/MMC Vdd",
 	.microvolts = 3300000,
-	.enable_high = 1,
 	.init_data = &sdhi0_power_init_data,
 };
 
@@ -1440,8 +1438,7 @@ static int __init arch_setup(void)
 	dma_declare_coherent_memory(&ecovec_ceu_devices[0]->dev,
 				    ceu0_dma_membase, ceu0_dma_membase,
 				    ceu0_dma_membase +
-				    CEU_BUFFER_MEMORY_SIZE - 1,
-				    DMA_MEMORY_EXCLUSIVE);
+				    CEU_BUFFER_MEMORY_SIZE - 1);
 	platform_device_add(ecovec_ceu_devices[0]);
 
 	device_initialize(&ecovec_ceu_devices[1]->dev);
@@ -1449,8 +1446,7 @@ static int __init arch_setup(void)
 	dma_declare_coherent_memory(&ecovec_ceu_devices[1]->dev,
 				    ceu1_dma_membase, ceu1_dma_membase,
 				    ceu1_dma_membase +
-				    CEU_BUFFER_MEMORY_SIZE - 1,
-				    DMA_MEMORY_EXCLUSIVE);
+				    CEU_BUFFER_MEMORY_SIZE - 1);
 	platform_device_add(ecovec_ceu_devices[1]);
 
 	gpiod_add_lookup_table(&cn12_power_gpiod_table);

@@ -77,12 +77,6 @@ enum msm_mdp_plane_property {
 	PLANE_PROP_MAX_NUM
 };
 
-struct msm_vblank_ctrl {
-	struct kthread_work work;
-	struct list_head event_list;
-	spinlock_t lock;
-};
-
 #define MSM_GPU_MAX_RINGS 4
 #define MAX_H_TILES_PER_DISPLAY 2
 
@@ -126,7 +120,7 @@ struct msm_display_topology {
 
 /**
  * struct msm_display_info - defines display properties
- * @intf_type:          DRM_MODE_CONNECTOR_ display type
+ * @intf_type:          DRM_MODE_ENCODER_ type
  * @capabilities:       Bitmask of display flags
  * @num_of_h_tiles:     Number of horizontal tiles in case of split interface
  * @h_tile_instance:    Controller instance used per tile. Number of elements is
@@ -199,7 +193,6 @@ struct msm_drm_private {
 	unsigned int num_crtcs;
 	struct drm_crtc *crtcs[MAX_CRTCS];
 
-	struct msm_drm_thread disp_thread[MAX_CRTCS];
 	struct msm_drm_thread event_thread[MAX_CRTCS];
 
 	unsigned int num_encoders;
@@ -228,7 +221,6 @@ struct msm_drm_private {
 	struct notifier_block vmap_notifier;
 	struct shrinker shrinker;
 
-	struct msm_vblank_ctrl vblank_ctrl;
 	struct drm_atomic_state *pm_state;
 };
 
@@ -300,7 +292,6 @@ struct sg_table *msm_gem_prime_get_sg_table(struct drm_gem_object *obj);
 void *msm_gem_prime_vmap(struct drm_gem_object *obj);
 void msm_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
 int msm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
-struct reservation_object *msm_gem_prime_res_obj(struct drm_gem_object *obj);
 struct drm_gem_object *msm_gem_prime_import_sg_table(struct drm_device *dev,
 		struct dma_buf_attachment *attach, struct sg_table *sg);
 int msm_gem_prime_pin(struct drm_gem_object *obj);

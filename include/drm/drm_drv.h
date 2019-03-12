@@ -718,6 +718,9 @@ extern unsigned int drm_debug;
 int drm_dev_init(struct drm_device *dev,
 		 struct drm_driver *driver,
 		 struct device *parent);
+int devm_drm_dev_init(struct device *parent,
+		      struct drm_device *dev,
+		      struct drm_driver *driver);
 void drm_dev_fini(struct drm_device *dev);
 
 struct drm_device *drm_dev_alloc(struct drm_driver *driver,
@@ -767,7 +770,7 @@ static inline bool drm_dev_is_unplugged(struct drm_device *dev)
  *
  * Returns true if the @feature is supported, false otherwise.
  */
-static inline bool drm_core_check_feature(struct drm_device *dev, u32 feature)
+static inline bool drm_core_check_feature(const struct drm_device *dev, u32 feature)
 {
 	return dev->driver->driver_features & dev->driver_features & feature;
 }

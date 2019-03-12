@@ -726,8 +726,7 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 		int i;
 
 		priolist_for_each_request_consume(rq, rn, p, i) {
-			GEM_BUG_ON(last &&
-				   need_preempt(engine, last, rq_prio(rq)));
+			GEM_BUG_ON(!assert_priority_queue(execlists, last, rq));
 
 			/*
 			 * Can we combine this request with the current port?

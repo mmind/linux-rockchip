@@ -7,9 +7,9 @@
  * This driver supports the Broadcom V3D 3.3 and 4.1 OpenGL ES GPUs.
  * For V3D 2.x support, see the VC4 driver.
  *
- * Currently only single-core rendering using the binner and renderer
- * is supported.  The TFU (texture formatting unit) and V3D 4.x's CSD
- * (compute shader dispatch) are not yet supported.
+ * Currently only single-core rendering using the binner and renderer,
+ * along with TFU (texture formatting unit) rendering is supported.
+ * V3D 4.x's CSD (compute shader dispatch) is not yet supported.
  */
 
 #include <linux/clk.h>
@@ -19,6 +19,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset.h>
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_fb_helper.h>
 
@@ -214,7 +215,6 @@ static struct drm_driver v3d_drm_driver = {
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
 	.gem_prime_import = drm_gem_prime_import,
 	.gem_prime_export = drm_gem_prime_export,
-	.gem_prime_res_obj = v3d_prime_res_obj,
 	.gem_prime_get_sg_table	= v3d_prime_get_sg_table,
 	.gem_prime_import_sg_table = v3d_prime_import_sg_table,
 	.gem_prime_mmap = v3d_prime_mmap,
@@ -265,10 +265,6 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 	v3d->pdev = pdev;
 	drm = &v3d->drm;
 
-	ret = map_regs(v3d, &v3d->bridge_regs, "bridge");
-	if (ret)
-		goto dev_free;
-
 	ret = map_regs(v3d, &v3d->hub_regs, "hub");
 	if (ret)
 		goto dev_free;
@@ -282,6 +278,22 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 		    V3D_GET_FIELD(ident1, V3D_HUB_IDENT1_REV));
 	v3d->cores = V3D_GET_FIELD(ident1, V3D_HUB_IDENT1_NCORES);
 	WARN_ON(v3d->cores > 1); /* multicore not yet implemented */
+
+	v3d->reset = devm_reset_control_get_exclusive(dev, NULL);
+	if (IS_ERR(v3d->reset)) {
+		ret = PTR_ERR(v3d->reset);
+
+		if (ret == -EPROBE_DEFER)
+			goto dev_free;
+
+		v3d->reset = NULL;
+		ret = map_regs(v3d, &v3d->bridge_regs, "bridge");
+		if (ret) {
+			dev_err(dev,
+				"Failed to get reset control or bridge regs\n");
+			goto dev_free;
+		}
+	}
 
 	if (v3d->ver < 41) {
 		ret = map_regs(v3d, &v3d->gca_regs, "gca");
@@ -312,14 +324,18 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 	if (ret)
 		goto dev_destroy;
 
-	v3d_irq_init(v3d);
-
-	ret = drm_dev_register(drm, 0);
+	ret = v3d_irq_init(v3d);
 	if (ret)
 		goto gem_destroy;
 
+	ret = drm_dev_register(drm, 0);
+	if (ret)
+		goto irq_disable;
+
 	return 0;
 
+irq_disable:
+	v3d_irq_disable(v3d);
 gem_destroy:
 	v3d_gem_destroy(drm);
 dev_destroy:
