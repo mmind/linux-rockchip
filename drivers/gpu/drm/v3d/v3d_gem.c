@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/sched/signal.h>
@@ -24,7 +25,8 @@ v3d_init_core(struct v3d_dev *v3d, int core)
 	 * type.  If you want the default behavior, you can still put
 	 * "2" in the indirect texture state's output_type field.
 	 */
-	V3D_CORE_WRITE(core, V3D_CTL_MISCCFG, V3D_MISCCFG_OVRTMUOUT);
+	if (v3d->ver < 40)
+		V3D_CORE_WRITE(core, V3D_CTL_MISCCFG, V3D_MISCCFG_OVRTMUOUT);
 
 	/* Whenever we flush the L2T cache, we always want to flush
 	 * the whole thing.
@@ -69,7 +71,7 @@ v3d_idle_gca(struct v3d_dev *v3d)
 }
 
 static void
-v3d_reset_v3d(struct v3d_dev *v3d)
+v3d_reset_by_bridge(struct v3d_dev *v3d)
 {
 	int version = V3D_BRIDGE_READ(V3D_TOP_GR_BRIDGE_REVISION);
 
@@ -89,6 +91,15 @@ v3d_reset_v3d(struct v3d_dev *v3d)
 				 V3D_TOP_GR_BRIDGE_SW_INIT_1_V3D_CLK_108_SW_INIT);
 		V3D_BRIDGE_WRITE(V3D_TOP_GR_BRIDGE_SW_INIT_1, 0);
 	}
+}
+
+static void
+v3d_reset_v3d(struct v3d_dev *v3d)
+{
+	if (v3d->reset)
+		reset_control_reset(v3d->reset);
+	else
+		v3d_reset_by_bridge(v3d);
 
 	v3d_init_hw_state(v3d);
 }
@@ -190,7 +201,7 @@ v3d_attach_object_fences(struct v3d_bo **bos, int bo_count,
 
 	for (i = 0; i < bo_count; i++) {
 		/* XXX: Use shared fences for read-only objects. */
-		reservation_object_add_excl_fence(bos[i]->resv, fence);
+		reservation_object_add_excl_fence(bos[i]->base.resv, fence);
 	}
 }
 
@@ -202,7 +213,7 @@ v3d_unlock_bo_reservations(struct v3d_bo **bos,
 	int i;
 
 	for (i = 0; i < bo_count; i++)
-		ww_mutex_unlock(&bos[i]->resv->lock);
+		ww_mutex_unlock(&bos[i]->base.resv->lock);
 
 	ww_acquire_fini(acquire_ctx);
 }
@@ -228,7 +239,7 @@ retry:
 	if (contended_lock != -1) {
 		struct v3d_bo *bo = bos[contended_lock];
 
-		ret = ww_mutex_lock_slow_interruptible(&bo->resv->lock,
+		ret = ww_mutex_lock_slow_interruptible(&bo->base.resv->lock,
 						       acquire_ctx);
 		if (ret) {
 			ww_acquire_done(acquire_ctx);
@@ -240,18 +251,18 @@ retry:
 		if (i == contended_lock)
 			continue;
 
-		ret = ww_mutex_lock_interruptible(&bos[i]->resv->lock,
+		ret = ww_mutex_lock_interruptible(&bos[i]->base.resv->lock,
 						  acquire_ctx);
 		if (ret) {
 			int j;
 
 			for (j = 0; j < i; j++)
-				ww_mutex_unlock(&bos[j]->resv->lock);
+				ww_mutex_unlock(&bos[j]->base.resv->lock);
 
 			if (contended_lock != -1 && contended_lock >= i) {
 				struct v3d_bo *bo = bos[contended_lock];
 
-				ww_mutex_unlock(&bo->resv->lock);
+				ww_mutex_unlock(&bo->base.resv->lock);
 			}
 
 			if (ret == -EDEADLK) {
@@ -270,7 +281,7 @@ retry:
 	 * before we commit the CL to the hardware.
 	 */
 	for (i = 0; i < bo_count; i++) {
-		ret = reservation_object_reserve_shared(bos[i]->resv, 1);
+		ret = reservation_object_reserve_shared(bos[i]->base.resv, 1);
 		if (ret) {
 			v3d_unlock_bo_reservations(bos, bo_count,
 						   acquire_ctx);
@@ -429,8 +440,6 @@ v3d_wait_bo_ioctl(struct drm_device *dev, void *data,
 {
 	int ret;
 	struct drm_v3d_wait_bo *args = data;
-	struct drm_gem_object *gem_obj;
-	struct v3d_bo *bo;
 	ktime_t start = ktime_get();
 	u64 delta_ns;
 	unsigned long timeout_jiffies =
@@ -439,21 +448,8 @@ v3d_wait_bo_ioctl(struct drm_device *dev, void *data,
 	if (args->pad != 0)
 		return -EINVAL;
 
-	gem_obj = drm_gem_object_lookup(file_priv, args->handle);
-	if (!gem_obj) {
-		DRM_DEBUG("Failed to look up GEM BO %d\n", args->handle);
-		return -EINVAL;
-	}
-	bo = to_v3d_bo(gem_obj);
-
-	ret = reservation_object_wait_timeout_rcu(bo->resv,
-						  true, true,
-						  timeout_jiffies);
-
-	if (ret == 0)
-		ret = -ETIME;
-	else if (ret > 0)
-		ret = 0;
+	ret = drm_gem_reservation_object_wait(file_priv, args->handle,
+					      true, timeout_jiffies);
 
 	/* Decrement the user's timeout, in case we got interrupted
 	 * such that the ioctl will be restarted.
@@ -467,8 +463,6 @@ v3d_wait_bo_ioctl(struct drm_device *dev, void *data,
 	/* Asked to wait beyond the jiffie/scheduler precision? */
 	if (ret == -ETIME && args->timeout_ns)
 		ret = -EAGAIN;
-
-	drm_gem_object_put_unlocked(gem_obj);
 
 	return ret;
 }

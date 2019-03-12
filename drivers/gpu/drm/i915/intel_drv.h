@@ -1800,6 +1800,7 @@ int intel_ddc_get_modes(struct drm_connector *c, struct i2c_adapter *adapter);
 void intel_attach_force_audio_property(struct drm_connector *connector);
 void intel_attach_broadcast_rgb_property(struct drm_connector *connector);
 void intel_attach_aspect_ratio_property(struct drm_connector *connector);
+void intel_attach_colorspace_property(struct drm_connector *connector);
 
 /* intel_csr.c */
 void intel_csr_ucode_init(struct drm_i915_private *);
@@ -2304,6 +2305,7 @@ bool intel_sdvo_init(struct drm_i915_private *dev_priv,
 
 
 /* intel_sprite.c */
+bool is_planar_yuv_format(u32 pixelformat);
 int intel_usecs_to_scanlines(const struct drm_display_mode *adjusted_mode,
 			     int usecs);
 struct intel_plane *intel_sprite_plane_create(struct drm_i915_private *dev_priv,
