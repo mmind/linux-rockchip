@@ -31,6 +31,8 @@
 #include "base.h"
 #include "power/power.h"
 
+#define dev_dbg dev_info
+#define pr_debug pr_info
 /*
  * Deferred Probe infrastructure.
  *

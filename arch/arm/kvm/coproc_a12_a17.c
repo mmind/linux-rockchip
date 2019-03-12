@@ -42,6 +42,7 @@ static bool access_scuctlr(struct kvm_vcpu *vcpu,
 	/* this register supports only up to 4 CPUs */
 	ncores = atomic_read(&vcpu->kvm->online_vcpus);
 	ncores = min(ncores, 4U);
+printk("%s: ncores %d\n", __func__, ncores);
 
 	scuctlr |= ncores - 1;
 	/* one SMP bit for each online CPU */
