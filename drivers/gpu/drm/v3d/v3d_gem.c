@@ -201,7 +201,8 @@ v3d_attach_object_fences(struct v3d_bo **bos, int bo_count,
 
 	for (i = 0; i < bo_count; i++) {
 		/* XXX: Use shared fences for read-only objects. */
-		reservation_object_add_excl_fence(bos[i]->base.resv, fence);
+		reservation_object_add_excl_fence(bos[i]->base.base.resv,
+						  fence);
 	}
 }
 
@@ -210,12 +211,8 @@ v3d_unlock_bo_reservations(struct v3d_bo **bos,
 			   int bo_count,
 			   struct ww_acquire_ctx *acquire_ctx)
 {
-	int i;
-
-	for (i = 0; i < bo_count; i++)
-		ww_mutex_unlock(&bos[i]->base.resv->lock);
-
-	ww_acquire_fini(acquire_ctx);
+	drm_gem_unlock_reservations((struct drm_gem_object **)bos, bo_count,
+				    acquire_ctx);
 }
 
 /* Takes the reservation lock on all the BOs being referenced, so that
@@ -230,58 +227,19 @@ v3d_lock_bo_reservations(struct v3d_bo **bos,
 			 int bo_count,
 			 struct ww_acquire_ctx *acquire_ctx)
 {
-	int contended_lock = -1;
 	int i, ret;
 
-	ww_acquire_init(acquire_ctx, &reservation_ww_class);
-
-retry:
-	if (contended_lock != -1) {
-		struct v3d_bo *bo = bos[contended_lock];
-
-		ret = ww_mutex_lock_slow_interruptible(&bo->base.resv->lock,
-						       acquire_ctx);
-		if (ret) {
-			ww_acquire_done(acquire_ctx);
-			return ret;
-		}
-	}
-
-	for (i = 0; i < bo_count; i++) {
-		if (i == contended_lock)
-			continue;
-
-		ret = ww_mutex_lock_interruptible(&bos[i]->base.resv->lock,
-						  acquire_ctx);
-		if (ret) {
-			int j;
-
-			for (j = 0; j < i; j++)
-				ww_mutex_unlock(&bos[j]->base.resv->lock);
-
-			if (contended_lock != -1 && contended_lock >= i) {
-				struct v3d_bo *bo = bos[contended_lock];
-
-				ww_mutex_unlock(&bo->base.resv->lock);
-			}
-
-			if (ret == -EDEADLK) {
-				contended_lock = i;
-				goto retry;
-			}
-
-			ww_acquire_done(acquire_ctx);
-			return ret;
-		}
-	}
-
-	ww_acquire_done(acquire_ctx);
+	ret = drm_gem_lock_reservations((struct drm_gem_object **)bos,
+					bo_count, acquire_ctx);
+	if (ret)
+		return ret;
 
 	/* Reserve space for our shared (read-only) fence references,
 	 * before we commit the CL to the hardware.
 	 */
 	for (i = 0; i < bo_count; i++) {
-		ret = reservation_object_reserve_shared(bos[i]->base.resv, 1);
+		ret = reservation_object_reserve_shared(bos[i]->base.base.resv,
+							1);
 		if (ret) {
 			v3d_unlock_bo_reservations(bos, bo_count,
 						   acquire_ctx);
@@ -389,11 +347,11 @@ v3d_exec_cleanup(struct kref *ref)
 	dma_fence_put(exec->render_done_fence);
 
 	for (i = 0; i < exec->bo_count; i++)
-		drm_gem_object_put_unlocked(&exec->bo[i]->base);
+		drm_gem_object_put_unlocked(&exec->bo[i]->base.base);
 	kvfree(exec->bo);
 
 	list_for_each_entry_safe(bo, save, &exec->unref_list, unref_head) {
-		drm_gem_object_put_unlocked(&bo->base);
+		drm_gem_object_put_unlocked(&bo->base.base);
 	}
 
 	pm_runtime_mark_last_busy(v3d->dev);
@@ -420,7 +378,7 @@ v3d_tfu_job_cleanup(struct kref *ref)
 
 	for (i = 0; i < ARRAY_SIZE(job->bo); i++) {
 		if (job->bo[i])
-			drm_gem_object_put_unlocked(&job->bo[i]->base);
+			drm_gem_object_put_unlocked(&job->bo[i]->base.base);
 	}
 
 	pm_runtime_mark_last_busy(v3d->dev);
