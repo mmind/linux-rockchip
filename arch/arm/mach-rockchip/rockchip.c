@@ -22,6 +22,7 @@
 #include <linux/clk-provider.h>
 #include <linux/clocksource.h>
 #include <linux/mfd/syscon.h>
+#include <linux/psci.h>
 #include <linux/regmap.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -33,7 +34,8 @@
 
 static void __init rockchip_timer_init(void)
 {
-	if (of_machine_is_compatible("rockchip,rk3288")) {
+	if (of_machine_is_compatible("rockchip,rk3288") &&
+	    !psci_ops.cpu_suspend) {
 		void __iomem *reg_base;
 
 		/*

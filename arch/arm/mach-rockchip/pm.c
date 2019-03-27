@@ -21,6 +21,7 @@
 #include <linux/regmap.h>
 #include <linux/suspend.h>
 #include <linux/mfd/syscon.h>
+#include <linux/psci.h>
 #include <linux/regulator/machine.h>
 
 #include <asm/cacheflush.h>
@@ -313,6 +314,10 @@ void __init rockchip_suspend_init(void)
 	const struct of_device_id *match;
 	struct device_node *np;
 	int ret;
+
+	/* if psci is present, it should also handle suspend */
+	if (psci_ops.cpu_suspend)
+		return;
 
 	np = of_find_matching_node_and_match(NULL, rockchip_pmu_of_device_ids,
 					     &match);
