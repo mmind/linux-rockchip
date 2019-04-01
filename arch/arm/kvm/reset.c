@@ -56,7 +56,6 @@ int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 
 	switch (vcpu->arch.target) {
 	case KVM_ARM_TARGET_CORTEX_A7:
-	case KVM_ARM_TARGET_CORTEX_A12:
 	case KVM_ARM_TARGET_CORTEX_A15:
 		reset_regs = &cortexa_regs_reset;
 		vcpu->arch.midr = read_cpuid_id();

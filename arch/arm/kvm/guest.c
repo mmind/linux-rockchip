@@ -289,8 +289,6 @@ int __attribute_const__ kvm_target_cpu(void)
 	switch (read_cpuid_part()) {
 	case ARM_CPU_PART_CORTEX_A7:
 		return KVM_ARM_TARGET_CORTEX_A7;
-	case ARM_CPU_PART_CORTEX_A12:
-		return KVM_ARM_TARGET_CORTEX_A12;
 	case ARM_CPU_PART_CORTEX_A15:
 		return KVM_ARM_TARGET_CORTEX_A15;
 	default:
