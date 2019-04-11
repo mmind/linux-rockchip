@@ -16,6 +16,7 @@
 #include <linux/clk-provider.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/psci.h>
 #include <linux/syscore_ops.h>
 #include <dt-bindings/clock/rk3288-cru.h>
 #include "clk.h"
@@ -970,7 +971,10 @@ static void __init rk3288_clk_init(struct device_node *np)
 
 	rockchip_register_restart_notifier(ctx, RK3288_GLB_SRST_FST,
 					   rk3288_clk_shutdown);
-	register_syscore_ops(&rk3288_clk_syscore_ops);
+
+	/* if psci is present, it should also handle saving clk-regs */
+	if (!psci_ops.cpu_suspend)
+		register_syscore_ops(&rk3288_clk_syscore_ops);
 
 	rockchip_clk_of_add_provider(np, ctx);
 }
