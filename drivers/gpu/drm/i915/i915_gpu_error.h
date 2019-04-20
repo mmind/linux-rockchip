@@ -94,8 +94,6 @@ struct i915_gpu_state {
 		u32 cpu_ring_head;
 		u32 cpu_ring_tail;
 
-		u32 last_seqno;
-
 		/* Register state */
 		u32 start;
 		u32 tail;
@@ -108,24 +106,19 @@ struct i915_gpu_state {
 		u32 bbstate;
 		u32 instpm;
 		u32 instps;
-		u32 seqno;
 		u64 bbaddr;
 		u64 acthd;
 		u32 fault_reg;
 		u64 faddr;
 		u32 rc_psmi; /* sleep state */
-		u32 semaphore_mboxes[I915_NUM_ENGINES - 1];
 		struct intel_instdone instdone;
 
 		struct drm_i915_error_context {
 			char comm[TASK_COMM_LEN];
 			pid_t pid;
-			u32 handle;
 			u32 hw_id;
-			int ban_score;
 			int active;
 			int guilty;
-			bool bannable;
 			struct i915_sched_attr sched_attr;
 		} context;
 
@@ -149,7 +142,6 @@ struct i915_gpu_state {
 			long jiffies;
 			pid_t pid;
 			u32 context;
-			int ban_score;
 			u32 seqno;
 			u32 start;
 			u32 head;
@@ -170,7 +162,6 @@ struct i915_gpu_state {
 	struct drm_i915_error_buffer {
 		u32 size;
 		u32 name;
-		u32 wseqno;
 		u64 gtt_offset;
 		u32 read_domains;
 		u32 write_domain;
@@ -179,7 +170,6 @@ struct i915_gpu_state {
 		u32 dirty:1;
 		u32 purgeable:1;
 		u32 userptr:1;
-		s32 engine:4;
 		u32 cache_level:3;
 	} *active_bo[I915_NUM_ENGINES], *pinned_bo;
 	u32 active_bo_count[I915_NUM_ENGINES], pinned_bo_count;

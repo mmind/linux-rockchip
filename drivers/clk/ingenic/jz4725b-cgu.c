@@ -102,7 +102,7 @@ static const struct ingenic_cgu_clk_info jz4725b_cgu_clocks[] = {
 
 	[JZ4725B_CLK_LCD] = {
 		"lcd", CGU_CLK_DIV | CGU_CLK_GATE,
-		.parents = { JZ4725B_CLK_PLL_HALF, -1, -1, -1 },
+		.parents = { JZ4725B_CLK_PLL, -1, -1, -1 },
 		.div = { CGU_REG_LPCDR, 0, 1, 11, -1, -1, -1 },
 		.gate = { CGU_REG_CLKGR, 9 },
 	},
@@ -204,6 +204,12 @@ static const struct ingenic_cgu_clk_info jz4725b_cgu_clocks[] = {
 		"rtc", CGU_CLK_MUX,
 		.parents = { JZ4725B_CLK_EXT512, JZ4725B_CLK_OSC32K, -1, -1 },
 		.mux = { CGU_REG_OPCR, 2, 1},
+	},
+
+	[JZ4725B_CLK_UDC_PHY] = {
+		"udc_phy", CGU_CLK_GATE,
+		.parents = { JZ4725B_CLK_EXT, -1, -1, -1 },
+		.gate = { CGU_REG_OPCR, 6, true },
 	},
 };
 
