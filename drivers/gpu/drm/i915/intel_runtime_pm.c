@@ -32,6 +32,10 @@
 #include <drm/drm_print.h>
 
 #include "i915_drv.h"
+#include "intel_cdclk.h"
+#include "intel_crt.h"
+#include "intel_csr.h"
+#include "intel_dp.h"
 #include "intel_drv.h"
 
 /**
@@ -147,7 +151,7 @@ static void cancel_intel_runtime_pm_wakeref(struct drm_i915_private *i915,
 		 rpm->debug.count, atomic_read(&rpm->wakeref_count))) {
 		char *buf;
 
-		buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		buf = kmalloc(PAGE_SIZE, GFP_NOWAIT | __GFP_NOWARN);
 		if (!buf)
 			return;
 
@@ -183,7 +187,7 @@ __print_intel_runtime_pm_wakeref(struct drm_printer *p,
 	unsigned long i;
 	char *buf;
 
-	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	buf = kmalloc(PAGE_SIZE, GFP_NOWAIT | __GFP_NOWARN);
 	if (!buf)
 		return;
 
@@ -267,7 +271,9 @@ void print_intel_runtime_pm_wakeref(struct drm_i915_private *i915,
 		if (dbg.count <= alloc)
 			break;
 
-		s = krealloc(dbg.owners, dbg.count * sizeof(*s), GFP_KERNEL);
+		s = krealloc(dbg.owners,
+			     dbg.count * sizeof(*s),
+			     GFP_NOWAIT | __GFP_NOWARN);
 		if (!s)
 			goto out;
 
@@ -3431,7 +3437,7 @@ int intel_power_domains_init(struct drm_i915_private *dev_priv)
 	 * The enabling order will be from lower to higher indexed wells,
 	 * the disabling order is reversed.
 	 */
-	if (IS_ICELAKE(dev_priv)) {
+	if (IS_GEN(dev_priv, 11)) {
 		err = set_power_wells(power_domains, icl_power_wells);
 	} else if (IS_CANNONLAKE(dev_priv)) {
 		err = set_power_wells(power_domains, cnl_power_wells);
@@ -3649,7 +3655,7 @@ static void skl_display_core_init(struct drm_i915_private *dev_priv,
 
 	mutex_unlock(&power_domains->lock);
 
-	skl_init_cdclk(dev_priv);
+	intel_cdclk_init(dev_priv);
 
 	gen9_dbuf_enable(dev_priv);
 
@@ -3666,7 +3672,7 @@ static void skl_display_core_uninit(struct drm_i915_private *dev_priv)
 
 	gen9_dbuf_disable(dev_priv);
 
-	skl_uninit_cdclk(dev_priv);
+	intel_cdclk_uninit(dev_priv);
 
 	/* The spec doesn't call for removing the reset handshake flag */
 	/* disable PG1 and Misc I/O */
@@ -3711,7 +3717,7 @@ void bxt_display_core_init(struct drm_i915_private *dev_priv,
 
 	mutex_unlock(&power_domains->lock);
 
-	bxt_init_cdclk(dev_priv);
+	intel_cdclk_init(dev_priv);
 
 	gen9_dbuf_enable(dev_priv);
 
@@ -3728,7 +3734,7 @@ void bxt_display_core_uninit(struct drm_i915_private *dev_priv)
 
 	gen9_dbuf_disable(dev_priv);
 
-	bxt_uninit_cdclk(dev_priv);
+	intel_cdclk_uninit(dev_priv);
 
 	/* The spec doesn't call for removing the reset handshake flag */
 
@@ -3770,7 +3776,7 @@ static void cnl_display_core_init(struct drm_i915_private *dev_priv, bool resume
 	mutex_unlock(&power_domains->lock);
 
 	/* 5. Enable CD clock */
-	cnl_init_cdclk(dev_priv);
+	intel_cdclk_init(dev_priv);
 
 	/* 6. Enable DBUF */
 	gen9_dbuf_enable(dev_priv);
@@ -3792,7 +3798,7 @@ static void cnl_display_core_uninit(struct drm_i915_private *dev_priv)
 	gen9_dbuf_disable(dev_priv);
 
 	/* 3. Disable CD clock */
-	cnl_uninit_cdclk(dev_priv);
+	intel_cdclk_uninit(dev_priv);
 
 	/*
 	 * 4. Disable Power Well 1 (PG1).
@@ -3834,7 +3840,7 @@ void icl_display_core_init(struct drm_i915_private *dev_priv,
 	mutex_unlock(&power_domains->lock);
 
 	/* 5. Enable CDCLK. */
-	icl_init_cdclk(dev_priv);
+	intel_cdclk_init(dev_priv);
 
 	/* 6. Enable DBUF. */
 	icl_dbuf_enable(dev_priv);
@@ -3859,7 +3865,7 @@ void icl_display_core_uninit(struct drm_i915_private *dev_priv)
 	icl_dbuf_disable(dev_priv);
 
 	/* 3. Disable CD clock */
-	icl_uninit_cdclk(dev_priv);
+	intel_cdclk_uninit(dev_priv);
 
 	/*
 	 * 4. Disable Power Well 1 (PG1).
@@ -4044,7 +4050,7 @@ void intel_power_domains_init_hw(struct drm_i915_private *i915, bool resume)
 
 	power_domains->initializing = true;
 
-	if (IS_ICELAKE(i915)) {
+	if (INTEL_GEN(i915) >= 11) {
 		icl_display_core_init(i915, resume);
 	} else if (IS_CANNONLAKE(i915)) {
 		cnl_display_core_init(i915, resume);
@@ -4192,7 +4198,7 @@ void intel_power_domains_suspend(struct drm_i915_private *i915,
 		intel_power_domains_verify_state(i915);
 	}
 
-	if (IS_ICELAKE(i915))
+	if (INTEL_GEN(i915) >= 11)
 		icl_display_core_uninit(i915);
 	else if (IS_CANNONLAKE(i915))
 		cnl_display_core_uninit(i915);
