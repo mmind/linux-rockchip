@@ -26,6 +26,11 @@ static const struct v3d_reg_def v3d_hub_reg_defs[] = {
 	REGDEF(V3D_HUB_IDENT3),
 	REGDEF(V3D_HUB_INT_STS),
 	REGDEF(V3D_HUB_INT_MSK_STS),
+
+	REGDEF(V3D_MMU_CTL),
+	REGDEF(V3D_MMU_VIO_ADDR),
+	REGDEF(V3D_MMU_VIO_ID),
+	REGDEF(V3D_MMU_DEBUG_INFO),
 };
 
 static const struct v3d_reg_def v3d_gca_reg_defs[] = {
@@ -50,12 +55,14 @@ static const struct v3d_reg_def v3d_core_reg_defs[] = {
 	REGDEF(V3D_PTB_BPCA),
 	REGDEF(V3D_PTB_BPCS),
 
-	REGDEF(V3D_MMU_CTL),
-	REGDEF(V3D_MMU_VIO_ADDR),
-
 	REGDEF(V3D_GMP_STATUS),
 	REGDEF(V3D_GMP_CFG),
 	REGDEF(V3D_GMP_VIO_ADDR),
+
+	REGDEF(V3D_ERR_FDBGO),
+	REGDEF(V3D_ERR_FDBGB),
+	REGDEF(V3D_ERR_FDBGS),
+	REGDEF(V3D_ERR_STAT),
 };
 
 static const struct v3d_reg_def v3d_csd_reg_defs[] = {
