@@ -235,6 +235,55 @@ int drm_gem_vram_pin(struct drm_gem_vram_object *gbo, unsigned long pl_flag)
 	int i, ret;
 	struct ttm_operation_ctx ctx = { false, false };
 
+	ret = ttm_bo_reserve(&gbo->bo, true, false, NULL);
+	if (ret < 0)
+		return ret;
+
+	if (gbo->pin_count)
+		goto out;
+
+	drm_gem_vram_placement(gbo, pl_flag);
+	for (i = 0; i < gbo->placement.num_placement; ++i)
+		gbo->placements[i].flags |= TTM_PL_FLAG_NO_EVICT;
+
+	ret = ttm_bo_validate(&gbo->bo, &gbo->placement, &ctx);
+	if (ret < 0)
+		goto err_ttm_bo_unreserve;
+
+out:
+	++gbo->pin_count;
+	ttm_bo_unreserve(&gbo->bo);
+
+	return 0;
+
+err_ttm_bo_unreserve:
+	ttm_bo_unreserve(&gbo->bo);
+	return ret;
+}
+EXPORT_SYMBOL(drm_gem_vram_pin);
+
+/**
+ * drm_gem_vram_pin_reserved() - Pins a GEM VRAM object in a region.
+ * @gbo:	the GEM VRAM object
+ * @pl_flag:	a bitmask of possible memory regions
+ *
+ * Pinning a buffer object ensures that it is not evicted from
+ * a memory region. A pinned buffer object has to be unpinned before
+ * it can be pinned to another region.
+ *
+ * This function pins a GEM VRAM object that has already been
+ * reserved. Use drm_gem_vram_pin() if possible.
+ *
+ * Returns:
+ * 0 on success, or
+ * a negative error code otherwise.
+ */
+int drm_gem_vram_pin_reserved(struct drm_gem_vram_object *gbo,
+			      unsigned long pl_flag)
+{
+	int i, ret;
+	struct ttm_operation_ctx ctx = { false, false };
+
 	if (gbo->pin_count) {
 		++gbo->pin_count;
 		return 0;
@@ -252,7 +301,7 @@ int drm_gem_vram_pin(struct drm_gem_vram_object *gbo, unsigned long pl_flag)
 
 	return 0;
 }
-EXPORT_SYMBOL(drm_gem_vram_pin);
+EXPORT_SYMBOL(drm_gem_vram_pin_reserved);
 
 /**
  * drm_gem_vram_unpin() - Unpins a GEM VRAM object
@@ -263,6 +312,51 @@ EXPORT_SYMBOL(drm_gem_vram_pin);
  * a negative error code otherwise.
  */
 int drm_gem_vram_unpin(struct drm_gem_vram_object *gbo)
+{
+	int i, ret;
+	struct ttm_operation_ctx ctx = { false, false };
+
+	ret = ttm_bo_reserve(&gbo->bo, true, false, NULL);
+	if (ret < 0)
+		return ret;
+
+	if (WARN_ON_ONCE(!gbo->pin_count))
+		goto out;
+
+	--gbo->pin_count;
+	if (gbo->pin_count)
+		goto out;
+
+	for (i = 0; i < gbo->placement.num_placement ; ++i)
+		gbo->placements[i].flags &= ~TTM_PL_FLAG_NO_EVICT;
+
+	ret = ttm_bo_validate(&gbo->bo, &gbo->placement, &ctx);
+	if (ret < 0)
+		goto err_ttm_bo_unreserve;
+
+out:
+	ttm_bo_unreserve(&gbo->bo);
+
+	return 0;
+
+err_ttm_bo_unreserve:
+	ttm_bo_unreserve(&gbo->bo);
+	return ret;
+}
+EXPORT_SYMBOL(drm_gem_vram_unpin);
+
+/**
+ * drm_gem_vram_unpin_reserved() - Unpins a GEM VRAM object
+ * @gbo:	the GEM VRAM object
+ *
+ * This function unpins a GEM VRAM object that has already been
+ * reserved. Use drm_gem_vram_unpin() if possible.
+ *
+ * Returns:
+ * 0 on success, or
+ * a negative error code otherwise.
+ */
+int drm_gem_vram_unpin_reserved(struct drm_gem_vram_object *gbo)
 {
 	int i, ret;
 	struct ttm_operation_ctx ctx = { false, false };
@@ -283,7 +377,7 @@ int drm_gem_vram_unpin(struct drm_gem_vram_object *gbo)
 
 	return 0;
 }
-EXPORT_SYMBOL(drm_gem_vram_unpin);
+EXPORT_SYMBOL(drm_gem_vram_unpin_reserved);
 
 /**
  * drm_gem_vram_push_to_system() - \
@@ -302,12 +396,16 @@ int drm_gem_vram_push_to_system(struct drm_gem_vram_object *gbo)
 	int i, ret;
 	struct ttm_operation_ctx ctx = { false, false };
 
+	ret = ttm_bo_reserve(&gbo->bo, true, false, NULL);
+	if (ret < 0)
+		return ret;
+
 	if (WARN_ON_ONCE(!gbo->pin_count))
-		return 0;
+		goto out;
 
 	--gbo->pin_count;
 	if (gbo->pin_count)
-		return 0;
+		goto out;
 
 	if (gbo->kmap.virtual)
 		ttm_bo_kunmap(&gbo->kmap);
@@ -318,9 +416,16 @@ int drm_gem_vram_push_to_system(struct drm_gem_vram_object *gbo)
 
 	ret = ttm_bo_validate(&gbo->bo, &gbo->placement, &ctx);
 	if (ret)
-		return ret;
+		goto err_ttm_bo_unreserve;
+
+out:
+	ttm_bo_unreserve(&gbo->bo);
 
 	return 0;
+
+err_ttm_bo_unreserve:
+	ttm_bo_unreserve(&gbo->bo);
+	return ret;
 }
 EXPORT_SYMBOL(drm_gem_vram_push_to_system);
 
