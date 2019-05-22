@@ -64,11 +64,23 @@
 	temperature = <70000>;
 };
 
+&cpu_crit {
+	temperature = <90000>;
+};
+
 &edp {
 	/delete-property/pinctrl-names;
 	/delete-property/pinctrl-0;
 
 	force-hpd;
+};
+
+&gpu_alert0 {
+	temperature = <80000>;
+};
+
+&gpu_crit {
+	temperature = <90000>;
 };
 
 &panel {
