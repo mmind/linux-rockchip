@@ -29,17 +29,23 @@
  * registers; newer ones are much simpler and we can use the new DRM plane
  * support.
  */
+
+#include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_color_mgmt.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_fourcc.h>
-#include <drm/drm_rect.h>
-#include <drm/drm_atomic.h>
 #include <drm/drm_plane_helper.h>
+#include <drm/drm_rect.h>
+#include <drm/i915_drm.h>
+
+#include "i915_drv.h"
+#include "intel_atomic_plane.h"
 #include "intel_drv.h"
 #include "intel_frontbuffer.h"
-#include <drm/i915_drm.h>
-#include "i915_drv.h"
-#include <drm/drm_color_mgmt.h>
+#include "intel_pm.h"
+#include "intel_psr.h"
+#include "intel_sprite.h"
 
 bool is_planar_yuv_format(u32 pixelformat)
 {
@@ -319,7 +325,8 @@ skl_plane_max_stride(struct intel_plane *plane,
 		     u32 pixel_format, u64 modifier,
 		     unsigned int rotation)
 {
-	int cpp = drm_format_plane_cpp(pixel_format, 0);
+	const struct drm_format_info *info = drm_format_info(pixel_format);
+	int cpp = info->cpp[0];
 
 	/*
 	 * "The stride in bytes must not exceed the

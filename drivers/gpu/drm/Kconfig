@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Drm device configuration
 #
@@ -160,6 +161,13 @@ config DRM_TTM
 	  GPU memory types. Will be enabled automatically if a device driver
 	  uses it.
 
+config DRM_VRAM_HELPER
+	tristate
+	depends on DRM
+	select DRM_TTM
+	help
+	  Helpers for VRAM memory management
+
 config DRM_GEM_CMA_HELPER
 	bool
 	depends on DRM
@@ -200,7 +208,6 @@ config DRM_RADEON
 	select POWER_SUPPLY
 	select HWMON
 	select BACKLIGHT_CLASS_DEVICE
-	select BACKLIGHT_LCD_SUPPORT
 	select INTERVAL_TREE
 	help
 	  Choose this option if you have an ATI Radeon graphics card.  There
@@ -221,7 +228,6 @@ config DRM_AMDGPU
 	select POWER_SUPPLY
 	select HWMON
 	select BACKLIGHT_CLASS_DEVICE
-	select BACKLIGHT_LCD_SUPPORT
 	select INTERVAL_TREE
 	select CHASH
 	help
@@ -254,6 +260,9 @@ config DRM_VKMS
 	  a VKMS.
 
 	  If M is selected the module will be called vkms.
+
+config DRM_ATI_PCIGART
+        bool
 
 source "drivers/gpu/drm/exynos/Kconfig"
 
@@ -347,6 +356,7 @@ menuconfig DRM_LEGACY
 	bool "Enable legacy drivers (DANGEROUS)"
 	depends on DRM && MMU
 	select DRM_VM
+	select DRM_ATI_PCIGART if PCI
 	help
 	  Enable legacy DRI1 drivers. Those drivers expose unsafe and dangerous
 	  APIs to user-space, which can be used to circumvent access

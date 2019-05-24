@@ -850,13 +850,13 @@ static void update_guest_context(struct intel_vgpu_workload *workload)
 }
 
 void intel_vgpu_clean_workloads(struct intel_vgpu *vgpu,
-				unsigned long engine_mask)
+				intel_engine_mask_t engine_mask)
 {
 	struct intel_vgpu_submission *s = &vgpu->submission;
 	struct drm_i915_private *dev_priv = vgpu->gvt->dev_priv;
 	struct intel_engine_cs *engine;
 	struct intel_vgpu_workload *pos, *n;
-	unsigned int tmp;
+	intel_engine_mask_t tmp;
 
 	/* free the unsubmited workloads in the queues. */
 	for_each_engine_masked(engine, dev_priv, engine_mask, tmp) {
@@ -1149,7 +1149,7 @@ void intel_vgpu_clean_submission(struct intel_vgpu *vgpu)
  *
  */
 void intel_vgpu_reset_submission(struct intel_vgpu *vgpu,
-		unsigned long engine_mask)
+				 intel_engine_mask_t engine_mask)
 {
 	struct intel_vgpu_submission *s = &vgpu->submission;
 
@@ -1239,7 +1239,7 @@ out_shadow_ctx:
  *
  */
 int intel_vgpu_select_submission_ops(struct intel_vgpu *vgpu,
-				     unsigned long engine_mask,
+				     intel_engine_mask_t engine_mask,
 				     unsigned int interface)
 {
 	struct intel_vgpu_submission *s = &vgpu->submission;
@@ -1343,7 +1343,7 @@ static int prepare_mm(struct intel_vgpu_workload *workload)
 	struct execlist_ctx_descriptor_format *desc = &workload->ctx_desc;
 	struct intel_vgpu_mm *mm;
 	struct intel_vgpu *vgpu = workload->vgpu;
-	intel_gvt_gtt_type_t root_entry_type;
+	enum intel_gvt_gtt_type root_entry_type;
 	u64 pdps[GVT_RING_CTX_NR_PDPS];
 
 	switch (desc->addressing_mode) {

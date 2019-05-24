@@ -8,6 +8,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/io.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/slab.h>
@@ -167,7 +168,7 @@ struct clk_hw *clk_hw_register_fractional_divider(struct device *dev,
 
 	init.name = name;
 	init.ops = &clk_fractional_divider_ops;
-	init.flags = flags | CLK_IS_BASIC;
+	init.flags = flags;
 	init.parent_names = parent_name ? &parent_name : NULL;
 	init.num_parents = parent_name ? 1 : 0;
 

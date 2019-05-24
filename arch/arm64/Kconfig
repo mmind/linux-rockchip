@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 config ARM64
 	def_bool y
 	select ACPI_CCA_REQUIRED if ACPI
@@ -13,13 +14,15 @@ config ARM64
 	select ARCH_HAS_DEVMEM_IS_ALLOWED
 	select ARCH_HAS_DMA_COHERENT_TO_PFN
 	select ARCH_HAS_DMA_MMAP_PGPROT
+	select ARCH_HAS_DMA_PREP_COHERENT
 	select ARCH_HAS_ACPI_TABLE_UPGRADE if ACPI
 	select ARCH_HAS_ELF_RANDOMIZE
 	select ARCH_HAS_FAST_MULTIPLIER
 	select ARCH_HAS_FORTIFY_SOURCE
 	select ARCH_HAS_GCOV_PROFILE_ALL
-	select ARCH_HAS_GIGANTIC_PAGE if (MEMORY_ISOLATION && COMPACTION) || CMA
+	select ARCH_HAS_GIGANTIC_PAGE
 	select ARCH_HAS_KCOV
+	select ARCH_HAS_KEEPINITRD
 	select ARCH_HAS_MEMBARRIER_SYNC_CORE
 	select ARCH_HAS_PTE_SPECIAL
 	select ARCH_HAS_SETUP_DMA_OPS
@@ -58,6 +61,7 @@ config ARM64
 	select ARCH_INLINE_SPIN_UNLOCK_BH if !PREEMPT
 	select ARCH_INLINE_SPIN_UNLOCK_IRQ if !PREEMPT
 	select ARCH_INLINE_SPIN_UNLOCK_IRQRESTORE if !PREEMPT
+	select ARCH_KEEP_MEMBLOCK
 	select ARCH_USE_CMPXCHG_LOCKREF
 	select ARCH_USE_QUEUED_RWLOCKS
 	select ARCH_USE_QUEUED_SPINLOCKS
@@ -65,7 +69,7 @@ config ARM64
 	select ARCH_SUPPORTS_ATOMIC_RMW
 	select ARCH_SUPPORTS_INT128 if GCC_VERSION >= 50000 || CC_IS_CLANG
 	select ARCH_SUPPORTS_NUMA_BALANCING
-	select ARCH_WANT_COMPAT_IPC_PARSE_VERSION
+	select ARCH_WANT_COMPAT_IPC_PARSE_VERSION if COMPAT
 	select ARCH_WANT_FRAME_POINTERS
 	select ARCH_HAS_UBSAN_SANITIZE_ALL
 	select ARM_AMBA
@@ -1338,6 +1342,7 @@ menu "ARMv8.3 architectural features"
 config ARM64_PTR_AUTH
 	bool "Enable support for pointer authentication"
 	default y
+	depends on !KVM || ARM64_VHE
 	help
 	  Pointer authentication (part of the ARMv8.3 Extensions) provides
 	  instructions for signing and authenticating pointers against secret
@@ -1351,8 +1356,9 @@ config ARM64_PTR_AUTH
 	  context-switched along with the process.
 
 	  The feature is detected at runtime. If the feature is not present in
-	  hardware it will not be advertised to userspace nor will it be
-	  enabled.
+	  hardware it will not be advertised to userspace/KVM guest nor will it
+	  be enabled. However, KVM guest also require VHE mode and hence
+	  CONFIG_ARM64_VHE=y option to use this feature.
 
 endmenu
 

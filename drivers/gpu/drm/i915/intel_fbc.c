@@ -40,8 +40,10 @@
 
 #include <drm/drm_fourcc.h>
 
-#include "intel_drv.h"
 #include "i915_drv.h"
+#include "intel_drv.h"
+#include "intel_fbc.h"
+#include "intel_frontbuffer.h"
 
 static inline bool fbc_supported(struct drm_i915_private *dev_priv)
 {
@@ -1276,6 +1278,10 @@ static int intel_sanitize_fbc_option(struct drm_i915_private *dev_priv)
 		return !!i915_modparams.enable_fbc;
 
 	if (!HAS_FBC(dev_priv))
+		return 0;
+
+	/* https://bugs.freedesktop.org/show_bug.cgi?id=108085 */
+	if (IS_GEMINILAKE(dev_priv))
 		return 0;
 
 	if (IS_BROADWELL(dev_priv) || INTEL_GEN(dev_priv) >= 9)

@@ -152,7 +152,8 @@
 # define V3D_MMU_CTL_PT_INVALID_ABORT                  BIT(19)
 # define V3D_MMU_CTL_PT_INVALID_INT                    BIT(18)
 # define V3D_MMU_CTL_PT_INVALID_EXCEPTION              BIT(17)
-# define V3D_MMU_CTL_WRITE_VIOLATION                   BIT(16)
+# define V3D_MMU_CTL_PT_INVALID_ENABLE                 BIT(16)
+# define V3D_MMU_CTL_WRITE_VIOLATION                   BIT(12)
 # define V3D_MMU_CTL_WRITE_VIOLATION_ABORT             BIT(11)
 # define V3D_MMU_CTL_WRITE_VIOLATION_INT               BIT(10)
 # define V3D_MMU_CTL_WRITE_VIOLATION_EXCEPTION         BIT(9)
@@ -190,6 +191,14 @@
 
 /* Address that faulted */
 #define V3D_MMU_VIO_ADDR                               0x01234
+
+#define V3D_MMU_DEBUG_INFO                             0x01238
+# define V3D_MMU_PA_WIDTH_MASK                         V3D_MASK(11, 8)
+# define V3D_MMU_PA_WIDTH_SHIFT                        8
+# define V3D_MMU_VA_WIDTH_MASK                         V3D_MASK(7, 4)
+# define V3D_MMU_VA_WIDTH_SHIFT                        4
+# define V3D_MMU_VERSION_MASK                          V3D_MASK(3, 0)
+# define V3D_MMU_VERSION_SHIFT                         0
 
 /* Per-V3D-core registers */
 
@@ -446,5 +455,43 @@
 # define V3D_CSD_CURRENT_ID0_WG_Z_SHIFT                16
 # define V3D_CSD_CURRENT_ID0_WG_Y_MASK                 V3D_MASK(15, 0)
 # define V3D_CSD_CURRENT_ID0_WG_Y_SHIFT                0
+
+#define V3D_ERR_FDBGO                                  0x00f04
+#define V3D_ERR_FDBGB                                  0x00f08
+#define V3D_ERR_FDBGR                                  0x00f0c
+
+#define V3D_ERR_FDBGS                                  0x00f10
+# define V3D_ERR_FDBGS_INTERPZ_IP_STALL                BIT(17)
+# define V3D_ERR_FDBGS_DEPTHO_FIFO_IP_STALL            BIT(16)
+# define V3D_ERR_FDBGS_XYNRM_IP_STALL                  BIT(14)
+# define V3D_ERR_FDBGS_EZREQ_FIFO_OP_VALID             BIT(13)
+# define V3D_ERR_FDBGS_QXYF_FIFO_OP_VALID              BIT(12)
+# define V3D_ERR_FDBGS_QXYF_FIFO_OP_LAST               BIT(11)
+# define V3D_ERR_FDBGS_EZTEST_ANYQVALID                BIT(7)
+# define V3D_ERR_FDBGS_EZTEST_PASS                     BIT(6)
+# define V3D_ERR_FDBGS_EZTEST_QREADY                   BIT(5)
+# define V3D_ERR_FDBGS_EZTEST_VLF_OKNOVALID            BIT(4)
+# define V3D_ERR_FDBGS_EZTEST_QSTALL                   BIT(3)
+# define V3D_ERR_FDBGS_EZTEST_IP_VLFSTALL              BIT(2)
+# define V3D_ERR_FDBGS_EZTEST_IP_PRSTALL               BIT(1)
+# define V3D_ERR_FDBGS_EZTEST_IP_QSTALL                BIT(0)
+
+#define V3D_ERR_STAT                                   0x00f20
+# define V3D_ERR_L2CARE                                BIT(15)
+# define V3D_ERR_VCMBE                                 BIT(14)
+# define V3D_ERR_VCMRE                                 BIT(13)
+# define V3D_ERR_VCDI                                  BIT(12)
+# define V3D_ERR_VCDE                                  BIT(11)
+# define V3D_ERR_VDWE                                  BIT(10)
+# define V3D_ERR_VPMEAS                                BIT(9)
+# define V3D_ERR_VPMEFNA                               BIT(8)
+# define V3D_ERR_VPMEWNA                               BIT(7)
+# define V3D_ERR_VPMERNA                               BIT(6)
+# define V3D_ERR_VPMERR                                BIT(5)
+# define V3D_ERR_VPMEWR                                BIT(4)
+# define V3D_ERR_VPAERRGL                              BIT(3)
+# define V3D_ERR_VPAEBRGL                              BIT(2)
+# define V3D_ERR_VPAERGS                               BIT(1)
+# define V3D_ERR_VPAEABB                               BIT(0)
 
 #endif /* V3D_REGS_H */
