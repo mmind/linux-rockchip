@@ -396,7 +396,6 @@ static void dwc2_wakeup_from_lpm_l1(struct dwc2_hsotg *hsotg)
 static void dwc2_handle_wakeup_detected_intr(struct dwc2_hsotg *hsotg)
 {
 	int ret;
-	struct device_node *np = hsotg->dev->of_node;
 
 	/* Clear interrupt */
 	dwc2_writel(hsotg, GINTSTS_WKUPINT, GINTSTS);
