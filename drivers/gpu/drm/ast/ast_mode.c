@@ -521,7 +521,6 @@ static void ast_crtc_dpms(struct drm_crtc *crtc, int mode)
 	}
 }
 
-/* ast is different - we will force move buffers out of VRAM */
 static int ast_crtc_do_set_base(struct drm_crtc *crtc,
 				struct drm_framebuffer *fb,
 				int x, int y, int atomic)
@@ -534,12 +533,15 @@ static int ast_crtc_do_set_base(struct drm_crtc *crtc,
 	s64 gpu_addr;
 	void *base;
 
-	/* push the previous fb to system ram */
 	if (!atomic && fb) {
 		ast_fb = to_ast_framebuffer(fb);
 		obj = ast_fb->obj;
 		gbo = drm_gem_vram_of_gem(obj);
-		drm_gem_vram_push_to_system(gbo);
+
+		/* unmap if console */
+		if (&ast->fbdev->afb == ast_fb)
+			drm_gem_vram_kunmap(gbo);
+		drm_gem_vram_unpin(gbo);
 	}
 
 	ast_fb = to_ast_framebuffer(crtc->primary->fb);
@@ -622,11 +624,15 @@ static void ast_crtc_disable(struct drm_crtc *crtc)
 	DRM_DEBUG_KMS("\n");
 	ast_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
 	if (crtc->primary->fb) {
+		struct ast_private *ast = crtc->dev->dev_private;
 		struct ast_framebuffer *ast_fb = to_ast_framebuffer(crtc->primary->fb);
 		struct drm_gem_object *obj = ast_fb->obj;
 		struct drm_gem_vram_object *gbo = drm_gem_vram_of_gem(obj);
 
-		drm_gem_vram_push_to_system(gbo);
+		/* unmap if console */
+		if (&ast->fbdev->afb == ast_fb)
+			drm_gem_vram_kunmap(gbo);
+		drm_gem_vram_unpin(gbo);
 	}
 	crtc->primary->fb = NULL;
 }
@@ -1195,7 +1201,7 @@ static int ast_cursor_set(struct drm_crtc *crtc,
 	}
 	gbo = drm_gem_vram_of_gem(obj);
 
-	ret = drm_gem_vram_reserve(gbo, false);
+	ret = drm_gem_vram_lock(gbo, false);
 	if (ret)
 		goto fail;
 
@@ -1203,7 +1209,7 @@ static int ast_cursor_set(struct drm_crtc *crtc,
 	src = drm_gem_vram_kmap_at(gbo, true, &src_isiomem, &uobj_map);
 	if (IS_ERR(src)) {
 		ret = PTR_ERR(src);
-		goto fail_unreserve;
+		goto fail_unlock;
 	}
 	if (src_isiomem == true)
 		DRM_ERROR("src cursor bo should be in main memory\n");
@@ -1212,7 +1218,7 @@ static int ast_cursor_set(struct drm_crtc *crtc,
 				   false, &dst_isiomem, &ast->cache_kmap);
 	if (IS_ERR(dst)) {
 		ret = PTR_ERR(dst);
-		goto fail_unreserve;
+		goto fail_unlock;
 	}
 	if (dst_isiomem == false)
 		DRM_ERROR("dst bo should be in VRAM\n");
@@ -1223,7 +1229,7 @@ static int ast_cursor_set(struct drm_crtc *crtc,
 	csum = copy_cursor_image(src, dst, width, height);
 
 	drm_gem_vram_kunmap_at(gbo, &uobj_map);
-	drm_gem_vram_unreserve(gbo);
+	drm_gem_vram_unlock(gbo);
 
 	/* write checksum + signature */
 	{
@@ -1256,8 +1262,8 @@ static int ast_cursor_set(struct drm_crtc *crtc,
 	drm_gem_object_put_unlocked(obj);
 	return 0;
 
-fail_unreserve:
-	drm_gem_vram_unreserve(gbo);
+fail_unlock:
+	drm_gem_vram_unlock(gbo);
 fail:
 	drm_gem_object_put_unlocked(obj);
 	return ret;
