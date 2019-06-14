@@ -351,33 +351,19 @@ static const struct file_operations drm_crtc_crc_data_fops = {
 	.release = crtc_crc_release,
 };
 
-int drm_debugfs_crtc_crc_add(struct drm_crtc *crtc)
+void drm_debugfs_crtc_crc_add(struct drm_crtc *crtc)
 {
-	struct dentry *crc_ent, *ent;
+	struct dentry *crc_ent;
 
 	if (!crtc->funcs->set_crc_source || !crtc->funcs->verify_crc_source)
-		return 0;
+		return;
 
 	crc_ent = debugfs_create_dir("crc", crtc->debugfs_entry);
-	if (!crc_ent)
-		return -ENOMEM;
 
-	ent = debugfs_create_file("control", S_IRUGO, crc_ent, crtc,
-				  &drm_crtc_crc_control_fops);
-	if (!ent)
-		goto error;
-
-	ent = debugfs_create_file("data", S_IRUGO, crc_ent, crtc,
-				  &drm_crtc_crc_data_fops);
-	if (!ent)
-		goto error;
-
-	return 0;
-
-error:
-	debugfs_remove_recursive(crc_ent);
-
-	return -ENOMEM;
+	debugfs_create_file("control", S_IRUGO, crc_ent, crtc,
+			    &drm_crtc_crc_control_fops);
+	debugfs_create_file("data", S_IRUGO, crc_ent, crtc,
+			    &drm_crtc_crc_data_fops);
 }
 
 /**
@@ -402,7 +388,7 @@ int drm_crtc_add_crc_entry(struct drm_crtc *crtc, bool has_frame,
 
 	/* Caller may not have noticed yet that userspace has stopped reading */
 	if (!crc->entries) {
-		spin_unlock(&crc->lock);
+		spin_unlock_irqrestore(&crc->lock, flags);
 		return -EINVAL;
 	}
 
@@ -413,7 +399,7 @@ int drm_crtc_add_crc_entry(struct drm_crtc *crtc, bool has_frame,
 		bool was_overflow = crc->overflow;
 
 		crc->overflow = true;
-		spin_unlock(&crc->lock);
+		spin_unlock_irqrestore(&crc->lock, flags);
 
 		if (!was_overflow)
 			DRM_ERROR("Overflow of CRC buffer, userspace reads too slow.\n");
