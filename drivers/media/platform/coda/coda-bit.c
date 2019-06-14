@@ -98,6 +98,8 @@ static int coda_command_sync(struct coda_ctx *ctx, int cmd)
 	struct coda_dev *dev = ctx->dev;
 	int ret;
 
+	lockdep_assert_held(&dev->coda_mutex);
+
 	coda_command_async(ctx, cmd);
 	ret = coda_wait_timeout(dev);
 	trace_coda_bit_done(ctx);
@@ -111,6 +113,8 @@ int coda_hw_reset(struct coda_ctx *ctx)
 	unsigned long timeout;
 	unsigned int idx;
 	int ret;
+
+	lockdep_assert_held(&dev->coda_mutex);
 
 	if (!dev->rstc)
 		return -ENOENT;
@@ -1039,7 +1043,7 @@ static int coda_start_encoding(struct coda_ctx *ctx)
 		case V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE:
 			value = 0;
 			break;
-		case V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_MB:
+		case V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_MB:
 			value  = (ctx->params.slice_max_mb &
 				  CODA_SLICING_SIZE_MASK)
 				 << CODA_SLICING_SIZE_OFFSET;
@@ -1047,7 +1051,7 @@ static int coda_start_encoding(struct coda_ctx *ctx)
 				 << CODA_SLICING_UNIT_OFFSET;
 			value |=  1 & CODA_SLICING_MODE_MASK;
 			break;
-		case V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES:
+		case V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES:
 			value  = (ctx->params.slice_max_bits &
 				  CODA_SLICING_SIZE_MASK)
 				 << CODA_SLICING_SIZE_OFFSET;
@@ -1452,6 +1456,13 @@ static int coda_prepare_encode(struct coda_ctx *ctx)
 	return 0;
 }
 
+static char coda_frame_type_char(u32 flags)
+{
+	return (flags & V4L2_BUF_FLAG_KEYFRAME) ? 'I' :
+	       (flags & V4L2_BUF_FLAG_PFRAME) ? 'P' :
+	       (flags & V4L2_BUF_FLAG_BFRAME) ? 'B' : '?';
+}
+
 static void coda_finish_encode(struct coda_ctx *ctx)
 {
 	struct vb2_v4l2_buffer *src_buf, *dst_buf;
@@ -1491,12 +1502,7 @@ static void coda_finish_encode(struct coda_ctx *ctx)
 		dst_buf->flags &= ~V4L2_BUF_FLAG_KEYFRAME;
 	}
 
-	dst_buf->vb2_buf.timestamp = src_buf->vb2_buf.timestamp;
-	dst_buf->field = src_buf->field;
-	dst_buf->flags &= ~V4L2_BUF_FLAG_TSTAMP_SRC_MASK;
-	dst_buf->flags |=
-		src_buf->flags & V4L2_BUF_FLAG_TSTAMP_SRC_MASK;
-	dst_buf->timecode = src_buf->timecode;
+	v4l2_m2m_buf_copy_metadata(src_buf, dst_buf, false);
 
 	v4l2_m2m_buf_done(src_buf, VB2_BUF_STATE_DONE);
 
@@ -1508,8 +1514,7 @@ static void coda_finish_encode(struct coda_ctx *ctx)
 		ctx->gopcounter = ctx->params.gop_size - 1;
 
 	coda_dbg(1, ctx, "job finished: encoded %c frame (%d)\n",
-		 (dst_buf->flags & V4L2_BUF_FLAG_KEYFRAME) ? 'I' : 'P',
-		 dst_buf->sequence);
+		 coda_frame_type_char(dst_buf->flags), dst_buf->sequence);
 }
 
 static void coda_seq_end_work(struct work_struct *work)
@@ -1666,6 +1671,8 @@ static int __coda_start_decoding(struct coda_ctx *ctx)
 	u32 val;
 	int ret;
 
+	lockdep_assert_held(&dev->coda_mutex);
+
 	coda_dbg(1, ctx, "Video Data Order Adapter: %s\n",
 		 ctx->use_vdoa ? "Enabled" : "Disabled");
 
@@ -1802,6 +1809,17 @@ static int __coda_start_decoding(struct coda_ctx *ctx)
 					 (left_right & 0x3ff);
 		q_data_dst->rect.height = height - q_data_dst->rect.top -
 					  (top_bottom & 0x3ff);
+	}
+
+	if (dev->devtype->product != CODA_DX6) {
+		u8 profile, level;
+
+		val = coda_read(dev, CODA7_RET_DEC_SEQ_HEADER_REPORT);
+		profile = val & 0xff;
+		level = (val >> 8) & 0x7f;
+
+		if (profile || level)
+			coda_update_profile_level_ctrls(ctx, profile, level);
 	}
 
 	ret = coda_alloc_framebuffers(ctx, q_data_dst, src_fourcc);
@@ -2236,13 +2254,36 @@ static void coda_finish_decode(struct coda_ctx *ctx)
 		else
 			coda_m2m_buf_done(ctx, dst_buf, VB2_BUF_STATE_DONE);
 
-		coda_dbg(1, ctx, "job finished: decoded %c frame (%u/%u)\n",
-			 (dst_buf->flags & V4L2_BUF_FLAG_KEYFRAME) ? 'I' :
-			 ((dst_buf->flags & V4L2_BUF_FLAG_PFRAME) ? 'P' : 'B'),
-			 dst_buf->sequence, ctx->qsequence);
+		if (decoded_idx >= 0 &&
+		    decoded_idx < ctx->num_internal_frames) {
+			coda_dbg(1, ctx, "job finished: decoded %c frame %u, returned %c frame %u (%u/%u)%s\n",
+				 coda_frame_type_char(ctx->frame_types[decoded_idx]),
+				 ctx->frame_metas[decoded_idx].sequence,
+				 coda_frame_type_char(dst_buf->flags),
+				 ctx->frame_metas[ctx->display_idx].sequence,
+				 dst_buf->sequence, ctx->qsequence,
+				 (dst_buf->flags & V4L2_BUF_FLAG_LAST) ?
+				 " (last)" : "");
+		} else {
+			coda_dbg(1, ctx, "job finished: no frame decoded (%d), returned %c frame %u (%u/%u)%s\n",
+				 decoded_idx,
+				 coda_frame_type_char(dst_buf->flags),
+				 ctx->frame_metas[ctx->display_idx].sequence,
+				 dst_buf->sequence, ctx->qsequence,
+				 (dst_buf->flags & V4L2_BUF_FLAG_LAST) ?
+				 " (last)" : "");
+		}
 	} else {
-		coda_dbg(1, ctx, "job finished: no frame decoded (%u/%u)\n",
-			 ctx->osequence, ctx->qsequence);
+		if (decoded_idx >= 0 &&
+		    decoded_idx < ctx->num_internal_frames) {
+			coda_dbg(1, ctx, "job finished: decoded %c frame %u, no frame returned (%d)\n",
+				 coda_frame_type_char(ctx->frame_types[decoded_idx]),
+				 ctx->frame_metas[decoded_idx].sequence,
+				 ctx->display_idx);
+		} else {
+			coda_dbg(1, ctx, "job finished: no frame decoded (%d) or returned (%d)\n",
+				 decoded_idx, ctx->display_idx);
+		}
 	}
 
 	/* The rotator will copy the current display frame next time */
@@ -2297,6 +2338,7 @@ irqreturn_t coda_irq_handler(int irq, void *data)
 
 	/* read status register to attend the IRQ */
 	coda_read(dev, CODA_REG_BIT_INT_STATUS);
+	coda_write(dev, 0, CODA_REG_BIT_INT_REASON);
 	coda_write(dev, CODA_REG_BIT_INT_CLEAR_SET,
 		      CODA_REG_BIT_INT_CLEAR);
 
@@ -2304,7 +2346,6 @@ irqreturn_t coda_irq_handler(int irq, void *data)
 	if (ctx == NULL) {
 		v4l2_err(&dev->v4l2_dev,
 			 "Instance released before the end of transaction\n");
-		mutex_unlock(&dev->coda_mutex);
 		return IRQ_HANDLED;
 	}
 
