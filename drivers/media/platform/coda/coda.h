@@ -70,7 +70,7 @@ struct coda_aux_buf {
 struct coda_dev {
 	struct v4l2_device	v4l2_dev;
 	struct video_device	vfd[5];
-	struct platform_device	*plat_dev;
+	struct device		*dev;
 	const struct coda_devtype *devtype;
 	int			firmware;
 	struct vdoa_data	*vdoa;
@@ -137,6 +137,12 @@ struct coda_params {
 	u32			slice_max_bits;
 	u32			slice_max_mb;
 	bool			force_ipicture;
+	bool			gop_size_changed;
+	bool			bitrate_changed;
+	bool			framerate_changed;
+	bool			h264_intra_qp_changed;
+	bool			intra_refresh_changed;
+	bool			slice_mode_changed;
 };
 
 struct coda_buffer_meta {
@@ -146,6 +152,7 @@ struct coda_buffer_meta {
 	u64			timestamp;
 	unsigned int		start;
 	unsigned int		end;
+	bool			last;
 };
 
 /* Per-queue, driver-specific private data */
@@ -185,14 +192,23 @@ struct coda_context_ops {
 	int (*prepare_run)(struct coda_ctx *ctx);
 	void (*finish_run)(struct coda_ctx *ctx);
 	void (*run_timeout)(struct coda_ctx *ctx);
+	void (*seq_init_work)(struct work_struct *work);
 	void (*seq_end_work)(struct work_struct *work);
 	void (*release)(struct coda_ctx *ctx);
+};
+
+struct coda_internal_frame {
+	struct coda_aux_buf		buf;
+	struct coda_buffer_meta		meta;
+	u32				type;
+	u32				error;
 };
 
 struct coda_ctx {
 	struct coda_dev			*dev;
 	struct mutex			buffer_mutex;
 	struct work_struct		pic_run_work;
+	struct work_struct		seq_init_work;
 	struct work_struct		seq_end_work;
 	struct completion		completion;
 	const struct coda_video_device	*cvd;
@@ -231,10 +247,7 @@ struct coda_ctx {
 	struct coda_aux_buf		parabuf;
 	struct coda_aux_buf		psbuf;
 	struct coda_aux_buf		slicebuf;
-	struct coda_aux_buf		internal_frames[CODA_MAX_FRAMEBUFFERS];
-	u32				frame_types[CODA_MAX_FRAMEBUFFERS];
-	struct coda_buffer_meta		frame_metas[CODA_MAX_FRAMEBUFFERS];
-	u32				frame_errors[CODA_MAX_FRAMEBUFFERS];
+	struct coda_internal_frame	internal_frames[CODA_MAX_FRAMEBUFFERS];
 	struct list_head		buffer_meta_list;
 	spinlock_t			buffer_meta_lock;
 	int				num_metas;
@@ -247,11 +260,18 @@ struct coda_ctx {
 	u32				bit_stream_param;
 	u32				frm_dis_flg;
 	u32				frame_mem_ctrl;
+	u32				para_change;
 	int				display_idx;
 	struct dentry			*debugfs_entry;
 	bool				use_bit;
 	bool				use_vdoa;
 	struct vdoa_ctx			*vdoa;
+	/*
+	 * wakeup mutex used to serialize encoder stop command and finish_run,
+	 * ensures that finish_run always either flags the last returned buffer
+	 * or wakes up the capture queue to signal EOS afterwards.
+	 */
+	struct mutex			wakeup_mutex;
 };
 
 extern int coda_debug;
@@ -316,6 +336,7 @@ static inline bool coda_bitstream_can_fetch_past(struct coda_ctx *ctx,
 }
 
 bool coda_bitstream_can_fetch_past(struct coda_ctx *ctx, unsigned int pos);
+int coda_bitstream_flush(struct coda_ctx *ctx);
 
 void coda_bit_stream_end_flag(struct coda_ctx *ctx);
 
@@ -332,8 +353,10 @@ int coda_h264_sps_fixup(struct coda_ctx *ctx, int width, int height, char *buf,
 
 int coda_mpeg2_profile(int profile_idc);
 int coda_mpeg2_level(int level_idc);
+u32 coda_mpeg2_parse_headers(struct coda_ctx *ctx, u8 *buf, u32 size);
 int coda_mpeg4_profile(int profile_idc);
 int coda_mpeg4_level(int level_idc);
+u32 coda_mpeg4_parse_headers(struct coda_ctx *ctx, u8 *buf, u32 size);
 
 void coda_update_profile_level_ctrls(struct coda_ctx *ctx, u8 profile_idc,
 				     u8 level_idc);

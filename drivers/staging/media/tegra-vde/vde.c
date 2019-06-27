@@ -11,6 +11,7 @@
 #include <linux/genalloc.h>
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
+#include <linux/list.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
@@ -22,6 +23,10 @@
 #include <soc/tegra/pmc.h>
 
 #include "uapi.h"
+#include "vde.h"
+
+#define CREATE_TRACE_POINTS
+#include "trace.h"
 
 #define ICMDQUE_WR		0x00
 #define CMDQUE_CONTROL		0x08
@@ -37,10 +42,6 @@ struct video_frame {
 	struct dma_buf_attachment *cb_dmabuf_attachment;
 	struct dma_buf_attachment *cr_dmabuf_attachment;
 	struct dma_buf_attachment *aux_dmabuf_attachment;
-	struct sg_table *y_sgt;
-	struct sg_table *cb_sgt;
-	struct sg_table *cr_sgt;
-	struct sg_table *aux_sgt;
 	dma_addr_t y_addr;
 	dma_addr_t cb_addr;
 	dma_addr_t cr_addr;
@@ -48,63 +49,6 @@ struct video_frame {
 	u32 frame_num;
 	u32 flags;
 };
-
-struct tegra_vde {
-	void __iomem *sxe;
-	void __iomem *bsev;
-	void __iomem *mbe;
-	void __iomem *ppe;
-	void __iomem *mce;
-	void __iomem *tfe;
-	void __iomem *ppb;
-	void __iomem *vdma;
-	void __iomem *frameid;
-	struct mutex lock;
-	struct miscdevice miscdev;
-	struct reset_control *rst;
-	struct reset_control *rst_mc;
-	struct gen_pool *iram_pool;
-	struct completion decode_completion;
-	struct clk *clk;
-	dma_addr_t iram_lists_addr;
-	u32 *iram;
-};
-
-static __maybe_unused char const *
-tegra_vde_reg_base_name(struct tegra_vde *vde, void __iomem *base)
-{
-	if (vde->sxe == base)
-		return "SXE";
-
-	if (vde->bsev == base)
-		return "BSEV";
-
-	if (vde->mbe == base)
-		return "MBE";
-
-	if (vde->ppe == base)
-		return "PPE";
-
-	if (vde->mce == base)
-		return "MCE";
-
-	if (vde->tfe == base)
-		return "TFE";
-
-	if (vde->ppb == base)
-		return "PPB";
-
-	if (vde->vdma == base)
-		return "VDMA";
-
-	if (vde->frameid == base)
-		return "FRAMEID";
-
-	return "???";
-}
-
-#define CREATE_TRACE_POINTS
-#include "trace.h"
 
 static void tegra_vde_writel(struct tegra_vde *vde,
 			     u32 value, void __iomem *base, u32 offset)
@@ -543,31 +487,18 @@ static void tegra_vde_decode_frame(struct tegra_vde *vde,
 			 vde->sxe, 0x00);
 }
 
-static void tegra_vde_detach_and_put_dmabuf(struct dma_buf_attachment *a,
-					    struct sg_table *sgt,
-					    enum dma_data_direction dma_dir)
-{
-	struct dma_buf *dmabuf = a->dmabuf;
-
-	dma_buf_unmap_attachment(a, sgt, dma_dir);
-	dma_buf_detach(dmabuf, a);
-	dma_buf_put(dmabuf);
-}
-
-static int tegra_vde_attach_dmabuf(struct device *dev,
+static int tegra_vde_attach_dmabuf(struct tegra_vde *vde,
 				   int fd,
 				   unsigned long offset,
 				   size_t min_size,
 				   size_t align_size,
 				   struct dma_buf_attachment **a,
-				   dma_addr_t *addr,
-				   struct sg_table **s,
+				   dma_addr_t *addrp,
 				   size_t *size,
 				   enum dma_data_direction dma_dir)
 {
-	struct dma_buf_attachment *attachment;
+	struct device *dev = vde->miscdev.parent;
 	struct dma_buf *dmabuf;
-	struct sg_table *sgt;
 	int err;
 
 	dmabuf = dma_buf_get(fd);
@@ -588,46 +519,24 @@ static int tegra_vde_attach_dmabuf(struct device *dev,
 		return -EINVAL;
 	}
 
-	attachment = dma_buf_attach(dmabuf, dev);
-	if (IS_ERR(attachment)) {
-		dev_err(dev, "Failed to attach dmabuf\n");
-		err = PTR_ERR(attachment);
+	err = tegra_vde_dmabuf_cache_map(vde, dmabuf, dma_dir, a, addrp);
+	if (err)
 		goto err_put;
-	}
 
-	sgt = dma_buf_map_attachment(attachment, dma_dir);
-	if (IS_ERR(sgt)) {
-		dev_err(dev, "Failed to get dmabufs sg_table\n");
-		err = PTR_ERR(sgt);
-		goto err_detach;
-	}
-
-	if (sgt->nents != 1) {
-		dev_err(dev, "Sparse DMA region is unsupported\n");
-		err = -EINVAL;
-		goto err_unmap;
-	}
-
-	*addr = sg_dma_address(sgt->sgl) + offset;
-	*a = attachment;
-	*s = sgt;
+	*addrp = *addrp + offset;
 
 	if (size)
 		*size = dmabuf->size - offset;
 
 	return 0;
 
-err_unmap:
-	dma_buf_unmap_attachment(attachment, sgt, dma_dir);
-err_detach:
-	dma_buf_detach(dmabuf, attachment);
 err_put:
 	dma_buf_put(dmabuf);
 
 	return err;
 }
 
-static int tegra_vde_attach_dmabufs_to_frame(struct device *dev,
+static int tegra_vde_attach_dmabufs_to_frame(struct tegra_vde *vde,
 					     struct video_frame *frame,
 					     struct tegra_vde_h264_frame *src,
 					     enum dma_data_direction dma_dir,
@@ -636,29 +545,26 @@ static int tegra_vde_attach_dmabufs_to_frame(struct device *dev,
 {
 	int err;
 
-	err = tegra_vde_attach_dmabuf(dev, src->y_fd,
+	err = tegra_vde_attach_dmabuf(vde, src->y_fd,
 				      src->y_offset, lsize, SZ_256,
 				      &frame->y_dmabuf_attachment,
 				      &frame->y_addr,
-				      &frame->y_sgt,
 				      NULL, dma_dir);
 	if (err)
 		return err;
 
-	err = tegra_vde_attach_dmabuf(dev, src->cb_fd,
+	err = tegra_vde_attach_dmabuf(vde, src->cb_fd,
 				      src->cb_offset, csize, SZ_256,
 				      &frame->cb_dmabuf_attachment,
 				      &frame->cb_addr,
-				      &frame->cb_sgt,
 				      NULL, dma_dir);
 	if (err)
 		goto err_release_y;
 
-	err = tegra_vde_attach_dmabuf(dev, src->cr_fd,
+	err = tegra_vde_attach_dmabuf(vde, src->cr_fd,
 				      src->cr_offset, csize, SZ_256,
 				      &frame->cr_dmabuf_attachment,
 				      &frame->cr_addr,
-				      &frame->cr_sgt,
 				      NULL, dma_dir);
 	if (err)
 		goto err_release_cb;
@@ -668,11 +574,10 @@ static int tegra_vde_attach_dmabufs_to_frame(struct device *dev,
 		return 0;
 	}
 
-	err = tegra_vde_attach_dmabuf(dev, src->aux_fd,
+	err = tegra_vde_attach_dmabuf(vde, src->aux_fd,
 				      src->aux_offset, csize, SZ_256,
 				      &frame->aux_dmabuf_attachment,
 				      &frame->aux_addr,
-				      &frame->aux_sgt,
 				      NULL, dma_dir);
 	if (err)
 		goto err_release_cr;
@@ -680,34 +585,28 @@ static int tegra_vde_attach_dmabufs_to_frame(struct device *dev,
 	return 0;
 
 err_release_cr:
-	tegra_vde_detach_and_put_dmabuf(frame->cr_dmabuf_attachment,
-					frame->cr_sgt, dma_dir);
+	tegra_vde_dmabuf_cache_unmap(vde, frame->cr_dmabuf_attachment, true);
 err_release_cb:
-	tegra_vde_detach_and_put_dmabuf(frame->cb_dmabuf_attachment,
-					frame->cb_sgt, dma_dir);
+	tegra_vde_dmabuf_cache_unmap(vde, frame->cb_dmabuf_attachment, true);
 err_release_y:
-	tegra_vde_detach_and_put_dmabuf(frame->y_dmabuf_attachment,
-					frame->y_sgt, dma_dir);
+	tegra_vde_dmabuf_cache_unmap(vde, frame->y_dmabuf_attachment, true);
 
 	return err;
 }
 
-static void tegra_vde_release_frame_dmabufs(struct video_frame *frame,
+static void tegra_vde_release_frame_dmabufs(struct tegra_vde *vde,
+					    struct video_frame *frame,
 					    enum dma_data_direction dma_dir,
-					    bool baseline_profile)
+					    bool baseline_profile,
+					    bool release)
 {
 	if (!baseline_profile)
-		tegra_vde_detach_and_put_dmabuf(frame->aux_dmabuf_attachment,
-						frame->aux_sgt, dma_dir);
+		tegra_vde_dmabuf_cache_unmap(vde, frame->aux_dmabuf_attachment,
+					     release);
 
-	tegra_vde_detach_and_put_dmabuf(frame->cr_dmabuf_attachment,
-					frame->cr_sgt, dma_dir);
-
-	tegra_vde_detach_and_put_dmabuf(frame->cb_dmabuf_attachment,
-					frame->cb_sgt, dma_dir);
-
-	tegra_vde_detach_and_put_dmabuf(frame->y_dmabuf_attachment,
-					frame->y_sgt, dma_dir);
+	tegra_vde_dmabuf_cache_unmap(vde, frame->cr_dmabuf_attachment, release);
+	tegra_vde_dmabuf_cache_unmap(vde, frame->cb_dmabuf_attachment, release);
+	tegra_vde_dmabuf_cache_unmap(vde, frame->y_dmabuf_attachment, release);
 }
 
 static int tegra_vde_validate_frame(struct device *dev,
@@ -795,11 +694,10 @@ static int tegra_vde_ioctl_decode_h264(struct tegra_vde *vde,
 {
 	struct device *dev = vde->miscdev.parent;
 	struct tegra_vde_h264_decoder_ctx ctx;
-	struct tegra_vde_h264_frame frames[17];
+	struct tegra_vde_h264_frame *frames;
 	struct tegra_vde_h264_frame __user *frames_user;
 	struct video_frame *dpb_frames;
 	struct dma_buf_attachment *bitstream_data_dmabuf_attachment;
-	struct sg_table *bitstream_sgt;
 	enum dma_data_direction dma_dir;
 	dma_addr_t bitstream_data_addr;
 	dma_addr_t bsev_ptr;
@@ -819,22 +717,27 @@ static int tegra_vde_ioctl_decode_h264(struct tegra_vde *vde,
 	if (ret)
 		return ret;
 
-	ret = tegra_vde_attach_dmabuf(dev, ctx.bitstream_data_fd,
+	ret = tegra_vde_attach_dmabuf(vde, ctx.bitstream_data_fd,
 				      ctx.bitstream_data_offset,
 				      SZ_16K, SZ_16K,
 				      &bitstream_data_dmabuf_attachment,
 				      &bitstream_data_addr,
-				      &bitstream_sgt,
 				      &bitstream_data_size,
 				      DMA_TO_DEVICE);
 	if (ret)
 		return ret;
 
+	frames = kmalloc_array(ctx.dpb_frames_nb, sizeof(*frames), GFP_KERNEL);
+	if (!frames) {
+		ret = -ENOMEM;
+		goto release_bitstream_dmabuf;
+	}
+
 	dpb_frames = kcalloc(ctx.dpb_frames_nb, sizeof(*dpb_frames),
 			     GFP_KERNEL);
 	if (!dpb_frames) {
 		ret = -ENOMEM;
-		goto release_bitstream_dmabuf;
+		goto free_frames;
 	}
 
 	macroblocks_nb = ctx.pic_width_in_mbs * ctx.pic_height_in_mbs;
@@ -860,7 +763,7 @@ static int tegra_vde_ioctl_decode_h264(struct tegra_vde *vde,
 
 		dma_dir = (i == 0) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
 
-		ret = tegra_vde_attach_dmabufs_to_frame(dev, &dpb_frames[i],
+		ret = tegra_vde_attach_dmabufs_to_frame(vde, &dpb_frames[i],
 							&frames[i], dma_dir,
 							ctx.baseline_profile,
 							lsize, csize);
@@ -948,16 +851,19 @@ release_dpb_frames:
 	while (i--) {
 		dma_dir = (i == 0) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
 
-		tegra_vde_release_frame_dmabufs(&dpb_frames[i], dma_dir,
-						ctx.baseline_profile);
+		tegra_vde_release_frame_dmabufs(vde, &dpb_frames[i], dma_dir,
+						ctx.baseline_profile, ret != 0);
 	}
 
 free_dpb_frames:
 	kfree(dpb_frames);
 
+free_frames:
+	kfree(frames);
+
 release_bitstream_dmabuf:
-	tegra_vde_detach_and_put_dmabuf(bitstream_data_dmabuf_attachment,
-					bitstream_sgt, DMA_TO_DEVICE);
+	tegra_vde_dmabuf_cache_unmap(vde, bitstream_data_dmabuf_attachment,
+				     ret != 0);
 
 	return ret;
 }
@@ -979,9 +885,21 @@ static long tegra_vde_unlocked_ioctl(struct file *filp,
 	return -ENOTTY;
 }
 
+static int tegra_vde_release_file(struct inode *inode, struct file *filp)
+{
+	struct miscdevice *miscdev = filp->private_data;
+	struct tegra_vde *vde = container_of(miscdev, struct tegra_vde,
+					     miscdev);
+
+	tegra_vde_dmabuf_cache_unmap_sync(vde);
+
+	return 0;
+}
+
 static const struct file_operations tegra_vde_fops = {
 	.owner		= THIS_MODULE,
 	.unlocked_ioctl	= tegra_vde_unlocked_ioctl,
+	.release	= tegra_vde_release_file,
 };
 
 static irqreturn_t tegra_vde_isr(int irq, void *data)
@@ -1159,6 +1077,8 @@ static int tegra_vde_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	INIT_LIST_HEAD(&vde->map_list);
+	mutex_init(&vde->map_lock);
 	mutex_init(&vde->lock);
 	init_completion(&vde->decode_completion);
 
@@ -1167,10 +1087,16 @@ static int tegra_vde_probe(struct platform_device *pdev)
 	vde->miscdev.fops = &tegra_vde_fops;
 	vde->miscdev.parent = dev;
 
+	err = tegra_vde_iommu_init(vde);
+	if (err) {
+		dev_err(dev, "Failed to initialize IOMMU: %d\n", err);
+		goto err_gen_free;
+	}
+
 	err = misc_register(&vde->miscdev);
 	if (err) {
 		dev_err(dev, "Failed to register misc device: %d\n", err);
-		goto err_gen_free;
+		goto err_deinit_iommu;
 	}
 
 	pm_runtime_enable(dev);
@@ -1187,6 +1113,9 @@ static int tegra_vde_probe(struct platform_device *pdev)
 
 err_misc_unreg:
 	misc_deregister(&vde->miscdev);
+
+err_deinit_iommu:
+	tegra_vde_iommu_deinit(vde);
 
 err_gen_free:
 	gen_pool_free(vde->iram_pool, (unsigned long)vde->iram,
@@ -1211,6 +1140,9 @@ static int tegra_vde_remove(struct platform_device *pdev)
 	pm_runtime_disable(dev);
 
 	misc_deregister(&vde->miscdev);
+
+	tegra_vde_dmabuf_cache_unmap_all(vde);
+	tegra_vde_iommu_deinit(vde);
 
 	gen_pool_free(vde->iram_pool, (unsigned long)vde->iram,
 		      gen_pool_size(vde->iram_pool));
