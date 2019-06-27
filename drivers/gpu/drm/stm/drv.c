@@ -54,8 +54,7 @@ static int stm_gem_cma_dumb_create(struct drm_file *file,
 DEFINE_DRM_GEM_CMA_FOPS(drv_driver_fops);
 
 static struct drm_driver drv_driver = {
-	.driver_features = DRIVER_MODESET | DRIVER_GEM | DRIVER_PRIME |
-			   DRIVER_ATOMIC,
+	.driver_features = DRIVER_MODESET | DRIVER_GEM | DRIVER_ATOMIC,
 	.name = "stm",
 	.desc = "STMicroelectronics SoC DRM",
 	.date = "20170330",
@@ -68,8 +67,6 @@ static struct drm_driver drv_driver = {
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
 	.gem_free_object_unlocked = drm_gem_cma_free_object,
 	.gem_vm_ops = &drm_gem_cma_vm_ops,
-	.gem_prime_export = drm_gem_prime_export,
-	.gem_prime_import = drm_gem_prime_import,
 	.gem_prime_get_sg_table = drm_gem_cma_prime_get_sg_table,
 	.gem_prime_import_sg_table = drm_gem_cma_prime_import_sg_table,
 	.gem_prime_vmap = drm_gem_cma_prime_vmap,
@@ -136,8 +133,7 @@ static __maybe_unused int drv_suspend(struct device *dev)
 	struct ltdc_device *ldev = ddev->dev_private;
 	struct drm_atomic_state *state;
 
-	if (WARN_ON(!ldev->suspend_state))
-		return -ENOENT;
+	WARN_ON(ldev->suspend_state);
 
 	state = drm_atomic_helper_suspend(ddev);
 	if (IS_ERR(state))
@@ -155,15 +151,17 @@ static __maybe_unused int drv_resume(struct device *dev)
 	struct ltdc_device *ldev = ddev->dev_private;
 	int ret;
 
+	if (WARN_ON(!ldev->suspend_state))
+		return -ENOENT;
+
 	pm_runtime_force_resume(dev);
 	ret = drm_atomic_helper_resume(ddev, ldev->suspend_state);
-	if (ret) {
+	if (ret)
 		pm_runtime_force_suspend(dev);
-		ldev->suspend_state = NULL;
-		return ret;
-	}
 
-	return 0;
+	ldev->suspend_state = NULL;
+
+	return ret;
 }
 
 static __maybe_unused int drv_runtime_suspend(struct device *dev)
