@@ -1,9 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2015 Broadcom
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 /**
@@ -23,6 +20,7 @@
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_atomic_uapi.h>
+#include <drm/drm_gem_framebuffer_helper.h>
 
 #include "uapi/drm/vc4_drm.h"
 #include "vc4_drv.h"
@@ -1126,7 +1124,6 @@ static int vc4_prepare_fb(struct drm_plane *plane,
 			  struct drm_plane_state *state)
 {
 	struct vc4_bo *bo;
-	struct dma_fence *fence;
 	int ret;
 
 	if (!state->fb)
@@ -1134,8 +1131,7 @@ static int vc4_prepare_fb(struct drm_plane *plane,
 
 	bo = to_vc4_bo(&drm_fb_cma_get_gem_obj(state->fb, 0)->base);
 
-	fence = reservation_object_get_excl_rcu(bo->base.base.resv);
-	drm_atomic_set_fence_for_plane(state, fence);
+	drm_gem_fb_prepare_fb(plane, state);
 
 	if (plane->state->fb == state->fb)
 		return 0;

@@ -101,10 +101,6 @@ struct ast_private {
 	int fb_mtrr;
 
 	struct drm_gem_object *cursor_cache;
-	uint64_t cursor_cache_gpu_addr;
-	/* Acces to this cache is protected by the crtc->mutex of the only crtc
-	 * we have. */
-	struct ttm_bo_kmap_obj cache_kmap;
 	int next_cursor;
 	bool support_wide_screen;
 	enum {
@@ -236,9 +232,6 @@ struct ast_connector {
 
 struct ast_crtc {
 	struct drm_crtc base;
-	struct drm_gem_object *cursor_bo;
-	uint64_t cursor_addr;
-	int cursor_width, cursor_height;
 	u8 offset_x, offset_y;
 };
 
@@ -246,14 +239,8 @@ struct ast_encoder {
 	struct drm_encoder base;
 };
 
-struct ast_framebuffer {
-	struct drm_framebuffer base;
-	struct drm_gem_object *obj;
-};
-
 struct ast_fbdev {
 	struct drm_fb_helper helper; /* must be first */
-	struct ast_framebuffer afb;
 	void *sysram;
 	int size;
 	int x1, y1, x2, y2; /* dirty rect */
@@ -263,7 +250,6 @@ struct ast_fbdev {
 #define to_ast_crtc(x) container_of(x, struct ast_crtc, base)
 #define to_ast_connector(x) container_of(x, struct ast_connector, base)
 #define to_ast_encoder(x) container_of(x, struct ast_encoder, base)
-#define to_ast_framebuffer(x) container_of(x, struct ast_framebuffer, base)
 
 struct ast_vbios_stdtable {
 	u8 misc;
@@ -302,11 +288,6 @@ struct ast_vbios_mode_info {
 
 extern int ast_mode_init(struct drm_device *dev);
 extern void ast_mode_fini(struct drm_device *dev);
-
-int ast_framebuffer_init(struct drm_device *dev,
-			 struct ast_framebuffer *ast_fb,
-			 const struct drm_mode_fb_cmd2 *mode_cmd,
-			 struct drm_gem_object *obj);
 
 int ast_fbdev_init(struct drm_device *dev);
 void ast_fbdev_fini(struct drm_device *dev);

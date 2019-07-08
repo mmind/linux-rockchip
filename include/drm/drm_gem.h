@@ -101,7 +101,7 @@ struct drm_gem_object_funcs {
 	/**
 	 * @pin:
 	 *
-	 * Pin backing buffer in memory.
+	 * Pin backing buffer in memory. Used by the drm_gem_map_attach() helper.
 	 *
 	 * This callback is optional.
 	 */
@@ -110,7 +110,7 @@ struct drm_gem_object_funcs {
 	/**
 	 * @unpin:
 	 *
-	 * Unpin backing buffer.
+	 * Unpin backing buffer. Used by the drm_gem_map_detach() helper.
 	 *
 	 * This callback is optional.
 	 */
@@ -120,16 +120,21 @@ struct drm_gem_object_funcs {
 	 * @get_sg_table:
 	 *
 	 * Returns a Scatter-Gather table representation of the buffer.
-	 * Used when exporting a buffer.
+	 * Used when exporting a buffer by the drm_gem_map_dma_buf() helper.
+	 * Releasing is done by calling dma_unmap_sg_attrs() and sg_free_table()
+	 * in drm_gem_unmap_buf(), therefore these helpers and this callback
+	 * here cannot be used for sg tables pointing at driver private memory
+	 * ranges.
 	 *
-	 * This callback is mandatory if buffer export is supported.
+	 * See also drm_prime_pages_to_sg().
 	 */
 	struct sg_table *(*get_sg_table)(struct drm_gem_object *obj);
 
 	/**
 	 * @vmap:
 	 *
-	 * Returns a virtual address for the buffer.
+	 * Returns a virtual address for the buffer. Used by the
+	 * drm_gem_dmabuf_vmap() helper.
 	 *
 	 * This callback is optional.
 	 */
@@ -138,7 +143,8 @@ struct drm_gem_object_funcs {
 	/**
 	 * @vunmap:
 	 *
-	 * Releases the the address previously returned by @vmap.
+	 * Releases the the address previously returned by @vmap. Used by the
+	 * drm_gem_dmabuf_vunmap() helper.
 	 *
 	 * This callback is optional.
 	 */
@@ -400,10 +406,5 @@ int drm_gem_dumb_map_offset(struct drm_file *file, struct drm_device *dev,
 int drm_gem_dumb_destroy(struct drm_file *file,
 			 struct drm_device *dev,
 			 uint32_t handle);
-
-int drm_gem_pin(struct drm_gem_object *obj);
-void drm_gem_unpin(struct drm_gem_object *obj);
-void *drm_gem_vmap(struct drm_gem_object *obj);
-void drm_gem_vunmap(struct drm_gem_object *obj, void *vaddr);
 
 #endif /* __DRM_GEM_H__ */
