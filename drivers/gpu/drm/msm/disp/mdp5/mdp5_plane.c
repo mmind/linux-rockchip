@@ -5,6 +5,7 @@
  * Author: Rob Clark <robdclark@gmail.com>
  */
 
+#include <drm/drm_damage_helper.h>
 #include <drm/drm_print.h>
 #include "mdp5_kms.h"
 
@@ -1087,6 +1088,8 @@ struct drm_plane *mdp5_plane_init(struct drm_device *dev,
 	drm_plane_helper_add(plane, &mdp5_plane_helper_funcs);
 
 	mdp5_plane_install_properties(plane, &plane->base);
+
+	drm_plane_enable_fb_damage_clips(plane);
 
 	return plane;
 
