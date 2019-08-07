@@ -127,7 +127,7 @@ static int jh057n_init_sequence(struct jh057n *ctx)
 
 	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
 	if (ret < 0) {
-		DRM_DEV_ERROR(dev, "Failed to exit sleep mode\n");
+		DRM_DEV_ERROR(dev, "Failed to exit sleep mode: %d\n", ret);
 		return ret;
 	}
 	/* Panel is operational 120 msec after reset */
@@ -143,6 +143,14 @@ static int jh057n_init_sequence(struct jh057n *ctx)
 static int jh057n_enable(struct drm_panel *panel)
 {
 	struct jh057n *ctx = panel_to_jh057n(panel);
+	int ret;
+
+	ret = jh057n_init_sequence(ctx);
+	if (ret < 0) {
+		DRM_DEV_ERROR(ctx->dev, "Panel init sequence failed: %d\n",
+			      ret);
+		return ret;
+	}
 
 	return backlight_enable(ctx->backlight);
 }
@@ -150,19 +158,19 @@ static int jh057n_enable(struct drm_panel *panel)
 static int jh057n_disable(struct drm_panel *panel)
 {
 	struct jh057n *ctx = panel_to_jh057n(panel);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 
-	return backlight_disable(ctx->backlight);
+	backlight_disable(ctx->backlight);
+	return mipi_dsi_dcs_set_display_off(dsi);
 }
 
 static int jh057n_unprepare(struct drm_panel *panel)
 {
 	struct jh057n *ctx = panel_to_jh057n(panel);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 
 	if (!ctx->prepared)
 		return 0;
 
-	mipi_dsi_dcs_set_display_off(dsi);
 	regulator_disable(ctx->iovcc);
 	regulator_disable(ctx->vcc);
 	ctx->prepared = false;
@@ -196,13 +204,6 @@ static int jh057n_prepare(struct drm_panel *panel)
 	usleep_range(20, 40);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 	msleep(20);
-
-	ret = jh057n_init_sequence(ctx);
-	if (ret < 0) {
-		DRM_DEV_ERROR(ctx->dev, "Panel init sequence failed: %d\n",
-			      ret);
-		return ret;
-	}
 
 	ctx->prepared = true;
 
@@ -350,7 +351,9 @@ static int jh057n_probe(struct mipi_dsi_device *dsi)
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {
-		DRM_DEV_ERROR(dev, "mipi_dsi_attach failed. Is host ready?\n");
+		DRM_DEV_ERROR(dev,
+			      "mipi_dsi_attach failed (%d). Is host ready?\n",
+			      ret);
 		drm_panel_remove(&ctx->panel);
 		return ret;
 	}
@@ -369,12 +372,12 @@ static void jh057n_shutdown(struct mipi_dsi_device *dsi)
 	struct jh057n *ctx = mipi_dsi_get_drvdata(dsi);
 	int ret;
 
-	ret = jh057n_unprepare(&ctx->panel);
+	ret = drm_panel_unprepare(&ctx->panel);
 	if (ret < 0)
 		DRM_DEV_ERROR(&dsi->dev, "Failed to unprepare panel: %d\n",
 			      ret);
 
-	ret = jh057n_disable(&ctx->panel);
+	ret = drm_panel_disable(&ctx->panel);
 	if (ret < 0)
 		DRM_DEV_ERROR(&dsi->dev, "Failed to disable panel: %d\n",
 			      ret);

@@ -10,12 +10,19 @@
  */
 
 #include <linux/module.h>
-#include <drm/drm_gem.h>
+#include <linux/platform_device.h>
+
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_fb_helper.h>
+#include <drm/drm_file.h>
+#include <drm/drm_gem.h>
+#include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_ioctl.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_vblank.h>
+
 #include "vkms_drv.h"
 
 #define DRIVER_NAME	"vkms"
@@ -56,7 +63,7 @@ static void vkms_release(struct drm_device *dev)
 	drm_atomic_helper_shutdown(&vkms->drm);
 	drm_mode_config_cleanup(&vkms->drm);
 	drm_dev_fini(&vkms->drm);
-	destroy_workqueue(vkms->output.crc_workq);
+	destroy_workqueue(vkms->output.composer_workq);
 }
 
 static void vkms_atomic_commit_tail(struct drm_atomic_state *old_state)
@@ -82,7 +89,7 @@ static void vkms_atomic_commit_tail(struct drm_atomic_state *old_state)
 		struct vkms_crtc_state *vkms_state =
 			to_vkms_crtc_state(old_crtc_state);
 
-		flush_work(&vkms_state->crc_work);
+		flush_work(&vkms_state->composer_work);
 	}
 
 	drm_atomic_helper_cleanup_planes(dev, old_state);
@@ -127,7 +134,7 @@ static int vkms_modeset_init(struct vkms_device *vkmsdev)
 	dev->mode_config.preferred_depth = 24;
 	dev->mode_config.helper_private = &vkms_mode_config_helpers;
 
-	return vkms_output_init(vkmsdev);
+	return vkms_output_init(vkmsdev, 0);
 }
 
 static int __init vkms_init(void)

@@ -30,6 +30,7 @@
 #include <linux/dma-buf.h>
 #include <linux/rbtree.h>
 
+#include <drm/drm.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
 #include <drm/drm_framebuffer.h>
@@ -834,9 +835,6 @@ struct dma_buf *drm_gem_prime_export(struct drm_gem_object *obj,
 		.priv = obj,
 		.resv = obj->resv,
 	};
-
-	if (dev->driver->gem_prime_res_obj)
-		exp_info.resv = dev->driver->gem_prime_res_obj(obj);
 
 	return drm_gem_dmabuf_export(dev, &exp_info);
 }

@@ -27,14 +27,18 @@
 /*
  * Authors: Dave Airlie <airlied@redhat.com>
  */
+
 #include <linux/export.h>
-#include <drm/drmP.h>
+#include <linux/pci.h>
+
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/drm_fourcc.h>
+#include <drm/drm_gem_vram_helper.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
-#include "ast_drv.h"
 
+#include "ast_drv.h"
 #include "ast_tables.h"
 
 static struct ast_i2c_chan *ast_i2c_create(struct drm_device *dev);
@@ -863,7 +867,14 @@ static int ast_connector_init(struct drm_device *dev)
 		return -ENOMEM;
 
 	connector = &ast_connector->base;
-	drm_connector_init(dev, connector, &ast_connector_funcs, DRM_MODE_CONNECTOR_VGA);
+	ast_connector->i2c = ast_i2c_create(dev);
+	if (!ast_connector->i2c)
+		DRM_ERROR("failed to add ddc bus for connector\n");
+
+	drm_connector_init_with_ddc(dev, connector,
+				    &ast_connector_funcs,
+				    DRM_MODE_CONNECTOR_VGA,
+				    &ast_connector->i2c->adapter);
 
 	drm_connector_helper_add(connector, &ast_connector_helper_funcs);
 
@@ -876,10 +887,6 @@ static int ast_connector_init(struct drm_device *dev)
 
 	encoder = list_first_entry(&dev->mode_config.encoder_list, struct drm_encoder, head);
 	drm_connector_attach_encoder(connector, encoder);
-
-	ast_connector->i2c = ast_i2c_create(dev);
-	if (!ast_connector->i2c)
-		DRM_ERROR("failed to add ddc bus for connector\n");
 
 	return 0;
 }
