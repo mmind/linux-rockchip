@@ -7,19 +7,30 @@
 /* LCDC DRM driver, based on da8xx-fb */
 
 #include <linux/component.h>
+#include <linux/mod_devicetable.h>
+#include <linux/module.h>
 #include <linux/pinctrl/consumer.h>
-#include <linux/suspend.h>
-#include <drm/drm_atomic.h>
+#include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
+
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_debugfs.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_fb_helper.h>
+#include <drm/drm_fourcc.h>
+#include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_irq.h>
+#include <drm/drm_mm.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_vblank.h>
+
 
 #include "tilcdc_drv.h"
+#include "tilcdc_external.h"
+#include "tilcdc_panel.h"
 #include "tilcdc_regs.h"
 #include "tilcdc_tfp410.h"
-#include "tilcdc_panel.h"
-#include "tilcdc_external.h"
 
 static LIST_HEAD(module_list);
 
@@ -188,7 +199,6 @@ static void tilcdc_fini(struct drm_device *dev)
 	drm_kms_helper_poll_fini(dev);
 	drm_irq_uninstall(dev);
 	drm_mode_config_cleanup(dev);
-	tilcdc_remove_external_device(dev);
 
 	if (priv->clk)
 		clk_put(priv->clk);

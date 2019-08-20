@@ -1564,10 +1564,8 @@ sh_mobile_lcdc_overlay_fb_init(struct sh_mobile_lcdc_overlay *ovl)
 
 	/* Allocate and initialize the frame buffer device. */
 	info = framebuffer_alloc(0, priv->dev);
-	if (info == NULL) {
-		dev_err(priv->dev, "unable to allocate fb_info\n");
+	if (!info)
 		return -ENOMEM;
-	}
 
 	ovl->info = info;
 
@@ -1596,6 +1594,7 @@ sh_mobile_lcdc_overlay_fb_init(struct sh_mobile_lcdc_overlay *ovl)
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
 		info->fix.ypanstep = 2;
+		/* Fall through */
 	case V4L2_PIX_FMT_NV16:
 	case V4L2_PIX_FMT_NV61:
 		info->fix.xpanstep = 2;
@@ -2049,10 +2048,8 @@ sh_mobile_lcdc_channel_fb_init(struct sh_mobile_lcdc_chan *ch,
 	 * list and allocate the color map.
 	 */
 	info = framebuffer_alloc(0, priv->dev);
-	if (info == NULL) {
-		dev_err(priv->dev, "unable to allocate fb_info\n");
+	if (!info)
 		return -ENOMEM;
-	}
 
 	ch->info = info;
 
@@ -2088,6 +2085,7 @@ sh_mobile_lcdc_channel_fb_init(struct sh_mobile_lcdc_chan *ch,
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
 		info->fix.ypanstep = 2;
+		/* Fall through */
 	case V4L2_PIX_FMT_NV16:
 	case V4L2_PIX_FMT_NV61:
 		info->fix.xpanstep = 2;

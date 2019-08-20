@@ -136,11 +136,6 @@ static int amdgpu_ras_reserve_vram(struct amdgpu_device *adev,
 static int amdgpu_ras_release_vram(struct amdgpu_device *adev,
 		struct amdgpu_bo **bo_ptr);
 
-static void amdgpu_ras_self_test(struct amdgpu_device *adev)
-{
-	/* TODO */
-}
-
 static ssize_t amdgpu_ras_debugfs_read(struct file *f, char __user *buf,
 					size_t size, loff_t *pos)
 {
@@ -335,12 +330,13 @@ static ssize_t amdgpu_ras_debugfs_ctrl_write(struct file *f, const char __user *
 	case 2:
 		ret = amdgpu_ras_reserve_vram(adev,
 				data.inject.address, PAGE_SIZE, &bo);
-		/* This address might be used already on failure. In fact we can
-		 * perform an injection in such case.
-		 */
-		if (ret)
-			break;
-		data.inject.address = amdgpu_bo_gpu_offset(bo);
+		if (ret) {
+			/* address was offset, now it is absolute.*/
+			data.inject.address += adev->gmc.vram_start;
+			if (data.inject.address > adev->gmc.vram_end)
+				break;
+		} else
+			data.inject.address = amdgpu_bo_gpu_offset(bo);
 		ret = amdgpu_ras_error_inject(adev, &data.inject);
 		amdgpu_ras_release_vram(adev, &bo);
 		break;
@@ -688,6 +684,12 @@ int amdgpu_ras_error_inject(struct amdgpu_device *adev,
 	if (!obj)
 		return -EINVAL;
 
+	if (block_info.block_id != TA_RAS_BLOCK__UMC) {
+		DRM_INFO("%s error injection is not supported yet\n",
+			 ras_block_str(info->head.block));
+		return -EINVAL;
+	}
+
 	ret = psp_ras_trigger_error(&adev->psp, &block_info);
 	if (ret)
 		DRM_ERROR("RAS ERROR: inject %s error failed ret %d\n",
@@ -969,40 +971,24 @@ static int amdgpu_ras_sysfs_remove_all(struct amdgpu_device *adev)
 /* sysfs end */
 
 /* debugfs begin */
-static int amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *adev)
+static void amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *adev)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct drm_minor *minor = adev->ddev->primary;
-	struct dentry *root = minor->debugfs_root, *dir;
-	struct dentry *ent;
 
-	dir = debugfs_create_dir("ras", root);
-	if (IS_ERR(dir))
-		return -EINVAL;
-
-	con->dir = dir;
-
-	ent = debugfs_create_file("ras_ctrl",
-			S_IWUGO | S_IRUGO, con->dir,
-			adev, &amdgpu_ras_debugfs_ctrl_ops);
-	if (IS_ERR(ent)) {
-		debugfs_remove(con->dir);
-		return -EINVAL;
-	}
-
-	con->ent = ent;
-	return 0;
+	con->dir = debugfs_create_dir("ras", minor->debugfs_root);
+	con->ent = debugfs_create_file("ras_ctrl", S_IWUGO | S_IRUGO, con->dir,
+				       adev, &amdgpu_ras_debugfs_ctrl_ops);
 }
 
-int amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
+void amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 		struct ras_fs_if *head)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, &head->head);
-	struct dentry *ent;
 
 	if (!obj || obj->ent)
-		return -EINVAL;
+		return;
 
 	get_obj(obj);
 
@@ -1010,34 +996,25 @@ int amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 			head->debugfs_name,
 			sizeof(obj->fs_data.debugfs_name));
 
-	ent = debugfs_create_file(obj->fs_data.debugfs_name,
-			S_IWUGO | S_IRUGO, con->dir,
-			obj, &amdgpu_ras_debugfs_ops);
-
-	if (IS_ERR(ent))
-		return -EINVAL;
-
-	obj->ent = ent;
-
-	return 0;
+	obj->ent = debugfs_create_file(obj->fs_data.debugfs_name,
+				       S_IWUGO | S_IRUGO, con->dir, obj,
+				       &amdgpu_ras_debugfs_ops);
 }
 
-int amdgpu_ras_debugfs_remove(struct amdgpu_device *adev,
+void amdgpu_ras_debugfs_remove(struct amdgpu_device *adev,
 		struct ras_common_if *head)
 {
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, head);
 
 	if (!obj || !obj->ent)
-		return 0;
+		return;
 
 	debugfs_remove(obj->ent);
 	obj->ent = NULL;
 	put_obj(obj);
-
-	return 0;
 }
 
-static int amdgpu_ras_debugfs_remove_all(struct amdgpu_device *adev)
+static void amdgpu_ras_debugfs_remove_all(struct amdgpu_device *adev)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct ras_manager *obj, *tmp;
@@ -1050,8 +1027,6 @@ static int amdgpu_ras_debugfs_remove_all(struct amdgpu_device *adev)
 	debugfs_remove(con->dir);
 	con->dir = NULL;
 	con->ent = NULL;
-
-	return 0;
 }
 /* debugfs end */
 
@@ -1583,6 +1558,12 @@ int amdgpu_ras_init(struct amdgpu_device *adev)
 
 	amdgpu_ras_check_supported(adev, &con->hw_supported,
 			&con->supported);
+	if (!con->hw_supported) {
+		amdgpu_ras_set_context(adev, NULL);
+		kfree(con);
+		return 0;
+	}
+
 	con->features = 0;
 	INIT_LIST_HEAD(&con->head);
 	/* Might need get this flag from vbios. */
@@ -1595,8 +1576,6 @@ int amdgpu_ras_init(struct amdgpu_device *adev)
 
 	if (amdgpu_ras_fs_init(adev))
 		goto fs_out;
-
-	amdgpu_ras_self_test(adev);
 
 	DRM_INFO("RAS INFO: ras initialized successfully, "
 			"hardware ability[%x] ras_mask[%x]\n",

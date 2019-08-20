@@ -196,15 +196,6 @@ Might be good to also have some igt testcases for this.
 
 Contact: Daniel Vetter, Noralf Tronnes
 
-Remove the ->gem_prime_res_obj callback
---------------------------------------------
-
-The ->gem_prime_res_obj callback can be removed from drivers by using the
-reservation_object in the drm_gem_object. It may also be possible to use the
-generic drm_gem_reservation_object_wait helper for waiting for a bo.
-
-Contact: Daniel Vetter
-
 idr_init_base()
 ---------------
 
@@ -305,19 +296,6 @@ the cleanup work here is to replace any ``#include <drm/drmP.h>`` by only the
 headers needed (and fixing up any missing pre-declarations in the headers).
 
 In the end no .c file should need to include ``drmP.h`` anymore.
-
-Contact: Daniel Vetter
-
-Add missing kerneldoc for exported functions
---------------------------------------------
-
-The DRM reference documentation is still lacking kerneldoc in a few areas. The
-task would be to clean up interfaces like moving functions around between
-files to better group them and improving the interfaces like dropping return
-values for functions that never fail. Then write kerneldoc for all exported
-functions and an overview section and integrate it all into the drm book.
-
-See https://dri.freedesktop.org/docs/drm/ for what's there already.
 
 Contact: Daniel Vetter
 
@@ -449,22 +427,6 @@ Contact: Daniel Vetter
 
 Driver Specific
 ===============
-
-tinydrm
--------
-
-Tinydrm is the helper driver for really simple fb drivers. The goal is to make
-those drivers as simple as possible, so lots of room for refactoring:
-
-- spi helpers, probably best put into spi core/helper code. Thierry said
-  the spi maintainer is fast&reactive, so shouldn't be a big issue.
-
-- extract the mipi-dbi helper (well, the non-tinydrm specific parts at
-  least) into a separate helper, like we have for mipi-dsi already. Or follow
-  one of the ideas for having a shared dsi/dbi helper, abstracting away the
-  transport details more.
-
-Contact: Noralf Trønnes, Daniel Vetter
 
 AMD DC Display Driver
 ---------------------

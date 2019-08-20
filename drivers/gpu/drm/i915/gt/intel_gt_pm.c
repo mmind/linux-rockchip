@@ -5,6 +5,7 @@
  */
 
 #include "i915_drv.h"
+#include "intel_engine_pm.h"
 #include "intel_gt_pm.h"
 #include "intel_pm.h"
 #include "intel_wakeref.h"
@@ -52,7 +53,7 @@ static int intel_gt_unpark(struct intel_wakeref *wf)
 
 void intel_gt_pm_get(struct drm_i915_private *i915)
 {
-	intel_wakeref_get(i915, &i915->gt.wakeref, intel_gt_unpark);
+	intel_wakeref_get(&i915->runtime_pm, &i915->gt.wakeref, intel_gt_unpark);
 }
 
 static int intel_gt_park(struct intel_wakeref *wf)
@@ -77,7 +78,7 @@ static int intel_gt_park(struct intel_wakeref *wf)
 
 void intel_gt_pm_put(struct drm_i915_private *i915)
 {
-	intel_wakeref_put(i915, &i915->gt.wakeref, intel_gt_park);
+	intel_wakeref_put(&i915->runtime_pm, &i915->gt.wakeref, intel_gt_park);
 }
 
 void intel_gt_pm_init(struct drm_i915_private *i915)
@@ -118,10 +119,11 @@ void intel_gt_sanitize(struct drm_i915_private *i915, bool force)
 		intel_engine_reset(engine, false);
 }
 
-void intel_gt_resume(struct drm_i915_private *i915)
+int intel_gt_resume(struct drm_i915_private *i915)
 {
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
+	int err = 0;
 
 	/*
 	 * After resume, we may need to poke into the pinned kernel
@@ -129,8 +131,11 @@ void intel_gt_resume(struct drm_i915_private *i915)
 	 * Only the kernel contexts should remain pinned over suspend,
 	 * allowing us to fixup the user contexts on their first pin.
 	 */
+	intel_gt_pm_get(i915);
 	for_each_engine(engine, i915, id) {
 		struct intel_context *ce;
+
+		intel_engine_pm_get(engine);
 
 		ce = engine->kernel_context;
 		if (ce)
@@ -139,5 +144,19 @@ void intel_gt_resume(struct drm_i915_private *i915)
 		ce = engine->preempt_context;
 		if (ce)
 			ce->ops->reset(ce);
+
+		engine->serial++; /* kernel context lost */
+		err = engine->resume(engine);
+
+		intel_engine_pm_put(engine);
+		if (err) {
+			dev_err(i915->drm.dev,
+				"Failed to restart %s (%d)\n",
+				engine->name, err);
+			break;
+		}
 	}
+	intel_gt_pm_put(i915);
+
+	return err;
 }

@@ -218,14 +218,14 @@ void amdgpu_amdkfd_unreserve_memory_limit(struct amdgpu_bo *bo)
 static int amdgpu_amdkfd_remove_eviction_fence(struct amdgpu_bo *bo,
 					struct amdgpu_amdkfd_fence *ef)
 {
-	struct reservation_object *resv = bo->tbo.resv;
-	struct reservation_object_list *old, *new;
+	struct dma_resv *resv = bo->tbo.base.resv;
+	struct dma_resv_list *old, *new;
 	unsigned int i, j, k;
 
 	if (!ef)
 		return -EINVAL;
 
-	old = reservation_object_get_list(resv);
+	old = dma_resv_get_list(resv);
 	if (!old)
 		return 0;
 
@@ -241,7 +241,7 @@ static int amdgpu_amdkfd_remove_eviction_fence(struct amdgpu_bo *bo,
 		struct dma_fence *f;
 
 		f = rcu_dereference_protected(old->shared[i],
-					      reservation_object_held(resv));
+					      dma_resv_held(resv));
 
 		if (f->context == ef->base.context)
 			RCU_INIT_POINTER(new->shared[--j], f);
@@ -263,7 +263,7 @@ static int amdgpu_amdkfd_remove_eviction_fence(struct amdgpu_bo *bo,
 		struct dma_fence *f;
 
 		f = rcu_dereference_protected(new->shared[i],
-					      reservation_object_held(resv));
+					      dma_resv_held(resv));
 		dma_fence_put(f);
 	}
 	kfree_rcu(old, rcu);
@@ -504,7 +504,7 @@ static int init_user_pages(struct kgd_mem *mem, struct mm_struct *mm,
 		goto out;
 	}
 
-	ret = amdgpu_ttm_tt_get_user_pages(bo->tbo.ttm, bo->tbo.ttm->pages);
+	ret = amdgpu_ttm_tt_get_user_pages(bo, bo->tbo.ttm->pages);
 	if (ret) {
 		pr_err("%s: Failed to get user pages: %d\n", __func__, ret);
 		goto unregister_out;
@@ -812,8 +812,8 @@ static int process_sync_pds_resv(struct amdkfd_process_info *process_info,
 		struct amdgpu_bo *pd = peer_vm->root.base.bo;
 
 		ret = amdgpu_sync_resv(NULL,
-					sync, pd->tbo.resv,
-					AMDGPU_FENCE_OWNER_UNDEFINED, false);
+					sync, pd->tbo.base.resv,
+					AMDGPU_FENCE_OWNER_KFD, false);
 		if (ret)
 			return ret;
 	}
@@ -887,7 +887,7 @@ static int init_kfd_vm(struct amdgpu_vm *vm, void **process_info,
 				  AMDGPU_FENCE_OWNER_KFD, false);
 	if (ret)
 		goto wait_pd_fail;
-	ret = reservation_object_reserve_shared(vm->root.base.bo->tbo.resv, 1);
+	ret = dma_resv_reserve_shared(vm->root.base.bo->tbo.base.resv, 1);
 	if (ret)
 		goto reserve_shared_fail;
 	amdgpu_bo_fence(vm->root.base.bo,
@@ -1140,7 +1140,8 @@ int amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(
 			adev->asic_type != CHIP_FIJI &&
 			adev->asic_type != CHIP_POLARIS10 &&
 			adev->asic_type != CHIP_POLARIS11 &&
-			adev->asic_type != CHIP_POLARIS12) ?
+			adev->asic_type != CHIP_POLARIS12 &&
+			adev->asic_type != CHIP_VEGAM) ?
 			VI_BO_SIZE_ALIGN : 1;
 
 	mapping_flags = AMDGPU_VM_PAGE_READABLE;
@@ -1729,38 +1730,25 @@ static int update_invalid_user_pages(struct amdkfd_process_info *process_info,
 		bo = mem->bo;
 
 		/* Get updated user pages */
-		ret = amdgpu_ttm_tt_get_user_pages(bo->tbo.ttm,
-						   bo->tbo.ttm->pages);
+		ret = amdgpu_ttm_tt_get_user_pages(bo, bo->tbo.ttm->pages);
 		if (ret) {
-			bo->tbo.ttm->pages[0] = NULL;
-			pr_info("%s: Failed to get user pages: %d\n",
+			pr_debug("%s: Failed to get user pages: %d\n",
 				__func__, ret);
-			/* Pretend it succeeded. It will fail later
-			 * with a VM fault if the GPU tries to access
-			 * it. Better than hanging indefinitely with
-			 * stalled user mode queues.
-			 */
+
+			/* Return error -EBUSY or -ENOMEM, retry restore */
+			return ret;
 		}
+
+		amdgpu_ttm_tt_get_user_pages_done(bo->tbo.ttm);
+
+		/* Mark the BO as valid unless it was invalidated
+		 * again concurrently.
+		 */
+		if (atomic_cmpxchg(&mem->invalid, invalid, 0) != invalid)
+			return -EAGAIN;
 	}
 
 	return 0;
-}
-
-/* Remove invalid userptr BOs from hmm track list
- *
- * Stop HMM track the userptr update
- */
-static void untrack_invalid_user_pages(struct amdkfd_process_info *process_info)
-{
-	struct kgd_mem *mem, *tmp_mem;
-	struct amdgpu_bo *bo;
-
-	list_for_each_entry_safe(mem, tmp_mem,
-				 &process_info->userptr_inval_list,
-				 validate_list.head) {
-		bo = mem->bo;
-		amdgpu_ttm_tt_get_user_pages_done(bo->tbo.ttm);
-	}
 }
 
 /* Validate invalid userptr BOs
@@ -1841,13 +1829,6 @@ static int validate_invalid_user_pages(struct amdkfd_process_info *process_info)
 
 		list_move_tail(&mem->validate_list.head,
 			       &process_info->userptr_valid_list);
-
-		/* Stop HMM track the userptr update. We dont check the return
-		 * value for concurrent CPU page table update because we will
-		 * reschedule the restore worker if process_info->evicted_bos
-		 * is updated.
-		 */
-		amdgpu_ttm_tt_get_user_pages_done(bo->tbo.ttm);
 
 		/* Update mapping. If the BO was not validated
 		 * (because we couldn't get user pages), this will
@@ -1947,7 +1928,6 @@ static void amdgpu_amdkfd_restore_userptr_worker(struct work_struct *work)
 	}
 
 unlock_out:
-	untrack_invalid_user_pages(process_info);
 	mutex_unlock(&process_info->lock);
 	mmput(mm);
 	put_task_struct(usertask);
@@ -2153,12 +2133,16 @@ int amdgpu_amdkfd_add_gws_to_process(void *info, void *gws, struct kgd_mem **mem
 	 * Add process eviction fence to bo so they can
 	 * evict each other.
 	 */
+	ret = dma_resv_reserve_shared(gws_bo->tbo.base.resv, 1);
+	if (ret)
+		goto reserve_shared_fail;
 	amdgpu_bo_fence(gws_bo, &process_info->eviction_fence->base, true);
 	amdgpu_bo_unreserve(gws_bo);
 	mutex_unlock(&(*mem)->process_info->lock);
 
 	return ret;
 
+reserve_shared_fail:
 bo_validation_failure:
 	amdgpu_bo_unreserve(gws_bo);
 bo_reservation_failure:
