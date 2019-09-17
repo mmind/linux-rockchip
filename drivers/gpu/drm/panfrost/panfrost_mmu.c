@@ -310,12 +310,12 @@ void panfrost_mmu_unmap(struct panfrost_gem_object *bo)
 		size_t unmapped_page;
 		size_t pgsize = get_pgsize(iova, len - unmapped_len);
 
-		if (ops->iova_to_phys(ops, iova)) {
-			unmapped_page = ops->unmap(ops, iova, pgsize);
-			WARN_ON(unmapped_page != pgsize);
-		}
-		iova += pgsize;
-		unmapped_len += pgsize;
+		unmapped_page = ops->unmap(ops, iova, pgsize, NULL);
+		if (!unmapped_page)
+			break;
+
+		iova += unmapped_page;
+		unmapped_len += unmapped_page;
 	}
 
 	mmu_hw_do_operation(pfdev, bo->mmu, bo->node.start << PAGE_SHIFT,
@@ -335,20 +335,28 @@ static void mmu_tlb_inv_context_s1(void *cookie)
 	mmu_hw_do_operation(priv->pfdev, &priv->mmu, 0, ~0UL, AS_COMMAND_FLUSH_MEM);
 }
 
-static void mmu_tlb_inv_range_nosync(unsigned long iova, size_t size,
-				     size_t granule, bool leaf, void *cookie)
-{}
-
 static void mmu_tlb_sync_context(void *cookie)
 {
 	//struct panfrost_device *pfdev = cookie;
 	// TODO: Wait 1000 GPU cycles for HW_ISSUE_6367/T60X
 }
 
-static const struct iommu_gather_ops mmu_tlb_ops = {
+static void mmu_tlb_flush_walk(unsigned long iova, size_t size, size_t granule,
+			       void *cookie)
+{
+	mmu_tlb_sync_context(cookie);
+}
+
+static void mmu_tlb_flush_leaf(unsigned long iova, size_t size, size_t granule,
+			       void *cookie)
+{
+	mmu_tlb_sync_context(cookie);
+}
+
+static const struct iommu_flush_ops mmu_tlb_ops = {
 	.tlb_flush_all	= mmu_tlb_inv_context_s1,
-	.tlb_add_flush	= mmu_tlb_inv_range_nosync,
-	.tlb_sync	= mmu_tlb_sync_context,
+	.tlb_flush_walk = mmu_tlb_flush_walk,
+	.tlb_flush_leaf = mmu_tlb_flush_leaf,
 };
 
 int panfrost_mmu_pgtable_alloc(struct panfrost_file_priv *priv)

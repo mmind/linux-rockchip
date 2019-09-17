@@ -341,8 +341,8 @@ int lima_gem_wait(struct drm_file *file, u32 handle, u32 op, s64 timeout_ns)
 
 	timeout = drm_timeout_abs_to_jiffies(timeout_ns);
 
-	ret = drm_gem_dma_resv_wait(file, handle, write, timeout);
-	if (ret == 0)
+	ret = drm_gem_reservation_object_wait(file, handle, write, timeout);
+	if (ret == -ETIME)
 		ret = timeout ? -ETIMEDOUT : -EBUSY;
 
 	return ret;
