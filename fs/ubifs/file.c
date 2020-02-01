@@ -67,7 +67,7 @@ static int read_block(struct inode *inode, void *addr, unsigned int block,
 
 	dlen = le32_to_cpu(dn->ch.len) - UBIFS_DATA_NODE_SZ;
 
-	if (ubifs_crypt_is_encrypted(inode)) {
+	if (IS_ENCRYPTED(inode)) {
 		err = ubifs_decrypt(inode, dn, &dlen, block);
 		if (err)
 			goto dump;
@@ -647,7 +647,7 @@ static int populate_page(struct ubifs_info *c, struct page *page,
 			dlen = le32_to_cpu(dn->ch.len) - UBIFS_DATA_NODE_SZ;
 			out_len = UBIFS_BLOCK_SIZE;
 
-			if (ubifs_crypt_is_encrypted(inode)) {
+			if (IS_ENCRYPTED(inode)) {
 				err = ubifs_decrypt(inode, dn, &dlen, page_block);
 				if (err)
 					goto out_err;
@@ -786,7 +786,9 @@ static int ubifs_do_bulk_read(struct ubifs_info *c, struct bu_info *bu,
 
 		if (page_offset > end_index)
 			break;
-		page = find_or_create_page(mapping, page_offset, ra_gfp_mask);
+		page = pagecache_get_page(mapping, page_offset,
+				 FGP_LOCK|FGP_ACCESSED|FGP_CREAT|FGP_NOWAIT,
+				 ra_gfp_mask);
 		if (!page)
 			break;
 		if (!PageUptodate(page))

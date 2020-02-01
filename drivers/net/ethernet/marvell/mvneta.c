@@ -324,8 +324,7 @@
 	      ETH_HLEN + ETH_FCS_LEN,			     \
 	      cache_line_size())
 
-#define MVNETA_SKB_HEADROOM	(max(XDP_PACKET_HEADROOM, NET_SKB_PAD) + \
-				 NET_IP_ALIGN)
+#define MVNETA_SKB_HEADROOM	max(XDP_PACKET_HEADROOM, NET_SKB_PAD)
 #define MVNETA_SKB_PAD	(SKB_DATA_ALIGN(sizeof(struct skb_shared_info) + \
 			 MVNETA_SKB_HEADROOM))
 #define MVNETA_SKB_SIZE(len)	(SKB_DATA_ALIGN(len) + MVNETA_SKB_PAD)
@@ -1167,6 +1166,7 @@ bm_mtu_err:
 	mvneta_bm_pool_destroy(pp->bm_priv, pp->pool_short, 1 << pp->id);
 
 	pp->bm_priv = NULL;
+	pp->rx_offset_correction = MVNETA_SKB_HEADROOM;
 	mvreg_write(pp, MVNETA_ACC_MODE, MVNETA_ACC_MODE_EXT1);
 	netdev_info(pp->dev, "fail to update MTU, fall back to software BM\n");
 }
@@ -3072,7 +3072,7 @@ static int mvneta_create_page_pool(struct mvneta_port *pp,
 		.order = 0,
 		.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
 		.pool_size = size,
-		.nid = cpu_to_node(0),
+		.nid = NUMA_NO_NODE,
 		.dev = pp->dev->dev.parent,
 		.dma_dir = xdp_prog ? DMA_BIDIRECTIONAL : DMA_FROM_DEVICE,
 		.offset = pp->rx_offset_correction,
@@ -4226,6 +4226,12 @@ static int mvneta_xdp_setup(struct net_device *dev, struct bpf_prog *prog,
 		return -EOPNOTSUPP;
 	}
 
+	if (pp->bm_priv) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Hardware Buffer Management not supported on XDP");
+		return -EOPNOTSUPP;
+	}
+
 	need_update = !!pp->xdp_prog != !!prog;
 	if (running && need_update)
 		mvneta_stop(dev);
@@ -4942,7 +4948,6 @@ static int mvneta_probe(struct platform_device *pdev)
 	SET_NETDEV_DEV(dev, &pdev->dev);
 
 	pp->id = global_port_id++;
-	pp->rx_offset_correction = MVNETA_SKB_HEADROOM;
 
 	/* Obtain access to BM resources if enabled and already initialized */
 	bm_node = of_parse_phandle(dn, "buffer-manager", 0);
@@ -4966,6 +4971,10 @@ static int mvneta_probe(struct platform_device *pdev)
 					       MVNETA_RX_PKT_OFFSET_CORRECTION);
 	}
 	of_node_put(bm_node);
+
+	/* sw buffer management */
+	if (!pp->bm_priv)
+		pp->rx_offset_correction = MVNETA_SKB_HEADROOM;
 
 	err = mvneta_init(&pdev->dev, pp);
 	if (err < 0)
@@ -5124,6 +5133,7 @@ static int mvneta_resume(struct device *device)
 		err = mvneta_bm_port_init(pdev, pp);
 		if (err < 0) {
 			dev_info(&pdev->dev, "use SW buffer management\n");
+			pp->rx_offset_correction = MVNETA_SKB_HEADROOM;
 			pp->bm_priv = NULL;
 		}
 	}

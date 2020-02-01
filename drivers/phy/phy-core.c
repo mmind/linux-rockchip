@@ -799,6 +799,7 @@ struct phy *devm_of_phy_get(struct device *dev, struct device_node *np,
 		devres_add(dev, ptr);
 	} else {
 		devres_free(ptr);
+		return phy;
 	}
 
 	link = device_link_add(dev, &phy->dev, DL_FLAG_STATELESS);
