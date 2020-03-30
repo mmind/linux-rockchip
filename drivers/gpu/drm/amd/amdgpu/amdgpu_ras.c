@@ -281,6 +281,11 @@ static ssize_t amdgpu_ras_debugfs_ctrl_write(struct file *f, const char __user *
 	struct ras_debug_if data;
 	int ret = 0;
 
+	if (amdgpu_ras_intr_triggered()) {
+		DRM_WARN("RAS WARN: error injection currently inaccessible\n");
+		return size;
+	}
+
 	ret = amdgpu_ras_debugfs_ctrl_parse_data(f, buf, size, pos, &data);
 	if (ret)
 		return -EINVAL;
@@ -393,6 +398,10 @@ static ssize_t amdgpu_ras_sysfs_read(struct device *dev,
 	struct ras_query_if info = {
 		.head = obj->head,
 	};
+
+	if (amdgpu_ras_intr_triggered())
+		return snprintf(buf, PAGE_SIZE,
+				"Query currently inaccessible\n");
 
 	if (amdgpu_ras_error_query(obj->adev, &info))
 		return -EINVAL;
@@ -1116,7 +1125,7 @@ void amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 void amdgpu_ras_debugfs_create_all(struct amdgpu_device *adev)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
-	struct ras_manager *obj, *tmp;
+	struct ras_manager *obj;
 	struct ras_fs_if fs_info;
 
 	/*
@@ -1128,10 +1137,7 @@ void amdgpu_ras_debugfs_create_all(struct amdgpu_device *adev)
 
 	amdgpu_ras_debugfs_create_ctrl_node(adev);
 
-	list_for_each_entry_safe(obj, tmp, &con->head, node) {
-		if (!obj)
-			continue;
-
+	list_for_each_entry(obj, &con->head, node) {
 		if (amdgpu_ras_is_supported(adev, obj->head.block) &&
 			(obj->attr_inuse == 1)) {
 			sprintf(fs_info.debugfs_name, "%s_err_inject",
@@ -1765,18 +1771,30 @@ static void amdgpu_ras_check_supported(struct amdgpu_device *adev,
 	*hw_supported = 0;
 	*supported = 0;
 
-	if (amdgpu_sriov_vf(adev) ||
+	if (amdgpu_sriov_vf(adev) || !adev->is_atom_fw ||
 	    (adev->asic_type != CHIP_VEGA20 &&
 	     adev->asic_type != CHIP_ARCTURUS))
 		return;
 
-	if (adev->is_atom_fw &&
-			(amdgpu_atomfirmware_mem_ecc_supported(adev) ||
-			 amdgpu_atomfirmware_sram_ecc_supported(adev)))
-		*hw_supported = AMDGPU_RAS_BLOCK_MASK;
+	if (amdgpu_atomfirmware_mem_ecc_supported(adev)) {
+		DRM_INFO("HBM ECC is active.\n");
+		*hw_supported |= (1 << AMDGPU_RAS_BLOCK__UMC |
+				1 << AMDGPU_RAS_BLOCK__DF);
+	} else
+		DRM_INFO("HBM ECC is not presented.\n");
+
+	if (amdgpu_atomfirmware_sram_ecc_supported(adev)) {
+		DRM_INFO("SRAM ECC is active.\n");
+		*hw_supported |= ~(1 << AMDGPU_RAS_BLOCK__UMC |
+				1 << AMDGPU_RAS_BLOCK__DF);
+	} else
+		DRM_INFO("SRAM ECC is not presented.\n");
+
+	/* hw_supported needs to be aligned with RAS block mask. */
+	*hw_supported &= AMDGPU_RAS_BLOCK_MASK;
 
 	*supported = amdgpu_ras_enable == 0 ?
-				0 : *hw_supported & amdgpu_ras_mask;
+			0 : *hw_supported & amdgpu_ras_mask;
 }
 
 int amdgpu_ras_init(struct amdgpu_device *adev)

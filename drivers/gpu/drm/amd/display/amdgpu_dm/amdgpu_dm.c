@@ -132,9 +132,6 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev);
 /* removes and deallocates the drm structures, created by the above function */
 static void amdgpu_dm_destroy_drm_device(struct amdgpu_display_manager *dm);
 
-static void
-amdgpu_dm_update_connector_after_detect(struct amdgpu_dm_connector *aconnector);
-
 static int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 				struct drm_plane *plane,
 				unsigned long possible_crtcs,
@@ -410,8 +407,9 @@ static void dm_vupdate_high_irq(void *interrupt_params)
 	if (acrtc) {
 		acrtc_state = to_dm_crtc_state(acrtc->base.state);
 
-		DRM_DEBUG_DRIVER("crtc:%d, vupdate-vrr:%d\n", acrtc->crtc_id,
-				 amdgpu_dm_vrr_active(acrtc_state));
+		DRM_DEBUG_VBL("crtc:%d, vupdate-vrr:%d\n",
+			      acrtc->crtc_id,
+			      amdgpu_dm_vrr_active(acrtc_state));
 
 		/* Core vblank handling is done here after end of front-porch in
 		 * vrr mode, as vblank timestamping will give valid results
@@ -461,8 +459,9 @@ static void dm_crtc_high_irq(void *interrupt_params)
 	if (acrtc) {
 		acrtc_state = to_dm_crtc_state(acrtc->base.state);
 
-		DRM_DEBUG_DRIVER("crtc:%d, vupdate-vrr:%d\n", acrtc->crtc_id,
-				 amdgpu_dm_vrr_active(acrtc_state));
+		DRM_DEBUG_VBL("crtc:%d, vupdate-vrr:%d\n",
+			      acrtc->crtc_id,
+			      amdgpu_dm_vrr_active(acrtc_state));
 
 		/* Core vblank handling at start of front-porch is only possible
 		 * in non-vrr mode, as only there vblank timestamping will give
@@ -525,7 +524,7 @@ static void dm_dcn_crtc_high_irq(void *interrupt_params)
 
 	acrtc_state = to_dm_crtc_state(acrtc->base.state);
 
-	DRM_DEBUG_DRIVER("crtc:%d, vupdate-vrr:%d, planes:%d\n", acrtc->crtc_id,
+	DRM_DEBUG_VBL("crtc:%d, vupdate-vrr:%d, planes:%d\n", acrtc->crtc_id,
 			 amdgpu_dm_vrr_active(acrtc_state),
 			 acrtc_state->active_planes);
 
@@ -1907,8 +1906,8 @@ static void update_connector_ext_caps(struct amdgpu_dm_connector *aconnector)
 	caps->aux_min_input_signal = min;
 }
 
-static void
-amdgpu_dm_update_connector_after_detect(struct amdgpu_dm_connector *aconnector)
+void amdgpu_dm_update_connector_after_detect(
+		struct amdgpu_dm_connector *aconnector)
 {
 	struct drm_connector *connector = &aconnector->base;
 	struct drm_device *dev = connector->dev;
@@ -2237,10 +2236,10 @@ static void handle_hpd_rx_irq(void *param)
 		}
 	}
 #ifdef CONFIG_DRM_AMD_DC_HDCP
-	    if (hpd_irq_data.bytes.device_service_irq.bits.CP_IRQ) {
-		    if (adev->dm.hdcp_workqueue)
-			    hdcp_handle_cpirq(adev->dm.hdcp_workqueue,  aconnector->base.index);
-	    }
+	if (hpd_irq_data.bytes.device_service_irq.bits.CP_IRQ) {
+		if (adev->dm.hdcp_workqueue)
+			hdcp_handle_cpirq(adev->dm.hdcp_workqueue,  aconnector->base.index);
+	}
 #endif
 	if ((dc_link->cur_link_settings.lane_count != LANE_COUNT_UNKNOWN) ||
 	    (dc_link->type == dc_connection_mst_branch))
@@ -3034,6 +3033,9 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 
 	if (adev->asic_type != CHIP_CARRIZO && adev->asic_type != CHIP_STONEY)
 		dm->dc->debug.disable_stutter = amdgpu_pp_feature_mask & PP_STUTTER_MODE ? false : true;
+
+	/* No userspace support. */
+	dm->dc->debug.disable_tri_buf = true;
 
 	return 0;
 fail:
@@ -4326,9 +4328,22 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 			struct dmcu *dmcu = core_dc->res_pool->dmcu;
 
 			stream->psr_version = dmcu->dmcu_version.psr_version;
-			mod_build_vsc_infopacket(stream,
-					&stream->vsc_infopacket,
-					&stream->use_vsc_sdp_for_colorimetry);
+
+			//
+			// should decide stream support vsc sdp colorimetry capability
+			// before building vsc info packet
+			//
+			stream->use_vsc_sdp_for_colorimetry = false;
+			if (aconnector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
+				stream->use_vsc_sdp_for_colorimetry =
+					aconnector->dc_sink->is_vsc_sdp_colorimetry_supported;
+			} else {
+				if (stream->link->dpcd_caps.dpcd_rev.raw >= 0x14 &&
+					stream->link->dpcd_caps.dprx_feature.bits.VSC_SDP_COLORIMETRY_SUPPORTED) {
+					stream->use_vsc_sdp_for_colorimetry = true;
+				}
+			}
+			mod_build_vsc_infopacket(stream, &stream->vsc_infopacket);
 		}
 	}
 finish:
@@ -6550,7 +6565,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 	uint32_t target_vblank, last_flip_vblank;
 	bool vrr_active = amdgpu_dm_vrr_active(acrtc_state);
 	bool pflip_present = false;
-	bool swizzle = true;
 	struct {
 		struct dc_surface_update surface_updates[MAX_SURFACES];
 		struct dc_plane_info plane_infos[MAX_SURFACES];
@@ -6595,9 +6609,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			continue;
 
 		dc_plane = dm_new_plane_state->dc_state;
-
-		if (dc_plane && !dc_plane->tiling_info.gfx9.swizzle)
-			swizzle = false;
 
 		bundle->surface_updates[planes_count].surface = dc_plane;
 		if (new_pcrtc_state->color_mgmt_changed) {
@@ -6807,8 +6818,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			amdgpu_dm_link_setup_psr(acrtc_state->stream);
 		else if ((acrtc_state->update_type == UPDATE_TYPE_FAST) &&
 						acrtc_state->stream->link->psr_feature_enabled &&
-						!acrtc_state->stream->link->psr_allow_active &&
-						swizzle) {
+						!acrtc_state->stream->link->psr_allow_active) {
 			amdgpu_dm_psr_enable(acrtc_state->stream);
 		}
 

@@ -33,6 +33,7 @@
 #include "amdgpu.h"
 #include "amdgpu_pm.h"
 #include "amdgpu_dm_debugfs.h"
+#include "amdgpu_ras.h"
 
 /**
  * amdgpu_debugfs_add_files - Add simple debugfs entries
@@ -178,7 +179,7 @@ static int  amdgpu_debugfs_process_reg_op(bool read, struct file *f,
 		} else {
 			r = get_user(value, (uint32_t *)buf);
 			if (!r)
-				WREG32(*pos >> 2, value);
+				amdgpu_mm_wreg_mmio_rlc(adev, *pos >> 2, value, 0);
 		}
 		if (r) {
 			result = r;
@@ -1294,7 +1295,6 @@ DEFINE_SIMPLE_ATTRIBUTE(fops_ib_preempt, NULL,
 DEFINE_SIMPLE_ATTRIBUTE(fops_sclk_set, NULL,
 			amdgpu_debugfs_sclk_set, "%llu\n");
 
-extern void amdgpu_ras_debugfs_create_all(struct amdgpu_device *adev);
 int amdgpu_debugfs_init(struct amdgpu_device *adev)
 {
 	int r, i;

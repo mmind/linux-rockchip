@@ -1405,8 +1405,10 @@ static void i915_oa_stream_destroy(struct i915_perf_stream *stream)
 	/*
 	 * Unset exclusive_stream first, it will be checked while disabling
 	 * the metric set on gen8+.
+	 *
+	 * See i915_oa_init_reg_state() and lrc_configure_all_contexts()
 	 */
-	perf->exclusive_stream = NULL;
+	WRITE_ONCE(perf->exclusive_stream, NULL);
 	perf->ops.disable_metric_set(stream);
 
 	free_oa_buffer(stream);
@@ -2200,7 +2202,9 @@ static int gen8_modify_self(struct intel_context *ce,
 	struct i915_request *rq;
 	int err;
 
+	intel_engine_pm_get(ce->engine);
 	rq = i915_request_create(ce);
+	intel_engine_pm_put(ce->engine);
 	if (IS_ERR(rq))
 		return PTR_ERR(rq);
 
@@ -2696,6 +2700,14 @@ static void gen12_oa_disable(struct i915_perf_stream *stream)
 				    50))
 		drm_err(&stream->perf->i915->drm,
 			"wait for OA to be disabled timed out\n");
+
+	intel_uncore_write(uncore, GEN12_OA_TLB_INV_CR, 1);
+	if (intel_wait_for_register(uncore,
+				    GEN12_OA_TLB_INV_CR,
+				    1, 0,
+				    50))
+		drm_err(&stream->perf->i915->drm,
+			"wait for OA tlb invalidate timed out\n");
 }
 
 /**
@@ -2869,7 +2881,7 @@ static int i915_oa_stream_init(struct i915_perf_stream *stream,
 		goto err_oa_buf_alloc;
 
 	stream->ops = &i915_oa_stream_ops;
-	perf->exclusive_stream = stream;
+	WRITE_ONCE(perf->exclusive_stream, stream);
 
 	ret = i915_perf_stream_enable_sync(stream);
 	if (ret) {
@@ -2889,7 +2901,7 @@ static int i915_oa_stream_init(struct i915_perf_stream *stream,
 	return 0;
 
 err_enable:
-	perf->exclusive_stream = NULL;
+	WRITE_ONCE(perf->exclusive_stream, NULL);
 	perf->ops.disable_metric_set(stream);
 
 	free_oa_buffer(stream);
@@ -2915,12 +2927,11 @@ void i915_oa_init_reg_state(const struct intel_context *ce,
 {
 	struct i915_perf_stream *stream;
 
-	/* perf.exclusive_stream serialised by lrc_configure_all_contexts() */
-
 	if (engine->class != RENDER_CLASS)
 		return;
 
-	stream = engine->i915->perf.exclusive_stream;
+	/* perf.exclusive_stream serialised by lrc_configure_all_contexts() */
+	stream = READ_ONCE(engine->i915->perf.exclusive_stream);
 	/*
 	 * For gen12, only CTX_R_PWR_CLK_STATE needs update, but the caller
 	 * is already doing that, so nothing to be done for gen12 here.

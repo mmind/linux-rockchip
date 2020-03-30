@@ -23,15 +23,12 @@
 #include <linux/firmware.h>
 #include <linux/pci.h>
 
-#include "pp_debug.h"
 #include "amdgpu.h"
 #include "amdgpu_smu.h"
 #include "smu_internal.h"
-#include "soc15_common.h"
 #include "smu_v11_0.h"
 #include "smu_v12_0.h"
 #include "atom.h"
-#include "amd_pcie.h"
 #include "vega20_ppt.h"
 #include "arcturus_ppt.h"
 #include "navi10_ppt.h"
@@ -935,6 +932,13 @@ static int smu_sw_init(void *handle)
 		return ret;
 	}
 
+	if (adev->smu.ppt_funcs->i2c_eeprom_init) {
+		ret = smu_i2c_eeprom_init(smu, &adev->pm.smu_i2c);
+
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -943,6 +947,9 @@ static int smu_sw_fini(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	struct smu_context *smu = &adev->smu;
 	int ret;
+
+	if (adev->smu.ppt_funcs->i2c_eeprom_fini)
+		smu_i2c_eeprom_fini(smu, &adev->pm.smu_i2c);
 
 	kfree(smu->irq_source);
 	smu->irq_source = NULL;
@@ -1145,6 +1152,21 @@ static int smu_smc_table_hw_init(struct smu_context *smu,
 					pr_err("Workaround failed to disable UMC CDR feature on 12Gbps SKU!\n");
 					return ret;
 				}
+			}
+		}
+
+		if (smu->ppt_funcs->set_power_source) {
+			/*
+			 * For Navi1X, manually switch it to AC mode as PMFW
+			 * may boot it with DC mode.
+			 */
+			if (adev->pm.ac_power)
+				ret = smu_set_power_source(smu, SMU_POWER_SOURCE_AC);
+			else
+				ret = smu_set_power_source(smu, SMU_POWER_SOURCE_DC);
+			if (ret) {
+				pr_err("Failed to switch to %s mode!\n", adev->pm.ac_power ? "AC" : "DC");
+				return ret;
 			}
 		}
 	}
@@ -1463,19 +1485,24 @@ static int smu_disable_dpm(struct smu_context *smu)
 	}
 
 	/*
-	 * For baco on Arcturus, this operation
-	 * (disable all smu feature) will be handled by SMU FW.
+	 * Disable all enabled SMU features.
+	 * This should be handled in SMU FW, as a backup
+	 * driver can issue call to SMU FW until sequence
+	 * in SMU FW is operational.
 	 */
-	if (adev->asic_type == CHIP_ARCTURUS) {
-		if (use_baco && (smu_version > 0x360e00))
-			return 0;
-	}
-
-	/* Disable all enabled SMU features */
 	ret = smu_system_features_control(smu, false);
 	if (ret) {
 		pr_err("Failed to disable smu features.\n");
 		return ret;
+	}
+
+	/*
+	 * Arcturus does not have BACO bit in disable feature mask.
+	 * Enablement of BACO bit on Arcturus should be skipped.
+	 */
+	if (adev->asic_type == CHIP_ARCTURUS) {
+		if (use_baco && (smu_version > 0x360e00))
+			return 0;
 	}
 
 	/* For baco, need to leave BACO feature enabled */
@@ -2058,6 +2085,29 @@ int smu_set_watermarks_for_clock_ranges(struct smu_context *smu,
 	mutex_unlock(&smu->mutex);
 
 	return 0;
+}
+
+int smu_set_ac_dc(struct smu_context *smu)
+{
+	int ret = 0;
+
+	/* controlled by firmware */
+	if (smu->dc_controlled_by_gpio)
+		return 0;
+
+	mutex_lock(&smu->mutex);
+	if (smu->ppt_funcs->set_power_source) {
+		if (smu->adev->pm.ac_power)
+			ret = smu_set_power_source(smu, SMU_POWER_SOURCE_AC);
+		else
+			ret = smu_set_power_source(smu, SMU_POWER_SOURCE_DC);
+		if (ret)
+			pr_err("Failed to switch to %s mode!\n",
+			       smu->adev->pm.ac_power ? "AC" : "DC");
+	}
+	mutex_unlock(&smu->mutex);
+
+	return ret;
 }
 
 const struct amd_ip_funcs smu_ip_funcs = {
