@@ -274,8 +274,6 @@ void intel_gvt_destroy_vgpu(struct intel_vgpu *vgpu)
 	struct intel_gvt *gvt = vgpu->gvt;
 	struct drm_i915_private *i915 = gvt->gt->i915;
 
-	mutex_lock(&vgpu->vgpu_lock);
-
 	drm_WARN(&i915->drm, vgpu->active, "vGPU is still active!\n");
 
 	/*

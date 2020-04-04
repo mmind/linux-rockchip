@@ -43,9 +43,15 @@ bool vt_dont_switch;
 
 static inline bool vt_in_use(unsigned int i)
 {
-	extern struct tty_driver *console_driver;
+	const struct vc_data *vc = vc_cons[i].d;
 
-	return console_driver->ttys[i] && console_driver->ttys[i]->count;
+	/*
+	 * console_lock must be held to prevent the vc from being deallocated
+	 * while we're checking whether it's in-use.
+	 */
+	WARN_CONSOLE_UNLOCKED();
+
+	return vc && kref_read(&vc->port.kref) > 1;
 }
 
 static inline bool vt_busy(int i)
@@ -310,10 +316,8 @@ static int vt_disallocate(unsigned int vc_num)
 		vc = vc_deallocate(vc_num);
 	console_unlock();
 
-	if (vc && vc_num >= MIN_NR_CONSOLES) {
-		tty_port_destroy(&vc->port);
-		kfree(vc);
-	}
+	if (vc && vc_num >= MIN_NR_CONSOLES)
+		tty_port_put(&vc->port);
 
 	return ret;
 }
@@ -333,10 +337,8 @@ static void vt_disallocate_all(void)
 	console_unlock();
 
 	for (i = 1; i < MAX_NR_CONSOLES; i++) {
-		if (vc[i] && i >= MIN_NR_CONSOLES) {
-			tty_port_destroy(&vc[i]->port);
-			kfree(vc[i]);
-		}
+		if (vc[i] && i >= MIN_NR_CONSOLES)
+			tty_port_put(&vc[i]->port);
 	}
 }
 
@@ -647,15 +649,16 @@ int vt_ioctl(struct tty_struct *tty,
 		struct vt_stat __user *vtstat = up;
 		unsigned short state, mask;
 
-		/* Review: FIXME: Console lock ? */
 		if (put_user(fg_console + 1, &vtstat->v_active))
 			ret = -EFAULT;
 		else {
 			state = 1;	/* /dev/tty0 is always open */
+			console_lock(); /* required by vt_in_use() */
 			for (i = 0, mask = 2; i < MAX_NR_CONSOLES && mask;
 							++i, mask <<= 1)
 				if (vt_in_use(i))
 					state |= mask;
+			console_unlock();
 			ret = put_user(state, &vtstat->v_state);
 		}
 		break;
@@ -665,10 +668,11 @@ int vt_ioctl(struct tty_struct *tty,
 	 * Returns the first available (non-opened) console.
 	 */
 	case VT_OPENQRY:
-		/* FIXME: locking ? - but then this is a stupid API */
+		console_lock(); /* required by vt_in_use() */
 		for (i = 0; i < MAX_NR_CONSOLES; ++i)
 			if (!vt_in_use(i))
 				break;
+		console_unlock();
 		uival = i < MAX_NR_CONSOLES ? (i+1) : -1;
 		goto setint;		 
 

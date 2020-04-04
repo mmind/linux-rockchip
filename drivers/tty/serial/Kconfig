@@ -3,8 +3,6 @@
 # Serial device configuration
 #
 
-if TTY
-
 menu "Serial drivers"
 	depends on HAS_IOMEM
 
@@ -1445,6 +1443,7 @@ config SERIAL_MEN_Z135
 config SERIAL_SPRD
 	tristate "Support for Spreadtrum serial"
 	select SERIAL_CORE
+	depends on COMMON_CLK
 	help
 	  This enables the driver for the Spreadtrum's serial.
 
@@ -1567,5 +1566,3 @@ endmenu
 
 config SERIAL_MCTRL_GPIO
 	tristate
-
-endif # TTY

@@ -141,6 +141,8 @@ patternProperties:
     description: Shenzhen AZW Technology Co., Ltd.
   "^bananapi,.*":
     description: BIPAI KEJI LIMITED
+  "^beacon,.*":
+    description: Compass Electronics Group, LLC
   "^bhf,.*":
     description: Beckhoff Automation GmbH & Co. KG
   "^bitmain,.*":
@@ -235,6 +237,8 @@ patternProperties:
     description: DataImage, Inc.
   "^davicom,.*":
     description: DAVICOM Semiconductor, Inc.
+  "^dell,.*":
+    description: Dell Inc.
   "^delta,.*":
     description: Delta Electronics, Inc.
   "^denx,.*":
@@ -269,6 +273,8 @@ patternProperties:
     description: Dragino Technology Co., Limited
   "^dserve,.*":
     description: dServe Technology B.V.
+  "^dynaimage,.*":
+    description: Dyna-Image
   "^ea,.*":
     description: Embedded Artists AB
   "^ebs-systart,.*":
@@ -301,6 +307,8 @@ patternProperties:
     description: emtrion GmbH
   "^endless,.*":
     description: Endless Mobile, Inc.
+  "^ene,.*":
+    description: ENE Technology, Inc.
   "^energymicro,.*":
     description: Silicon Laboratories (formerly Energy Micro AS)
   "^engicam,.*":
@@ -645,6 +653,9 @@ patternProperties:
     description: Monolithic Power Systems Inc.
   "^mqmaker,.*":
     description: mqmaker Inc.
+  "^mrvl,.*":
+    description: Marvell Technology Group Ltd.
+    deprecated: true
   "^mscc,.*":
     description: Microsemi Corporation
   "^msi,.*":
@@ -881,6 +892,8 @@ patternProperties:
     description: Small Form Factor Committee
   "^sgd,.*":
     description: Solomon Goldentek Display Corporation
+  "^sgmicro,.*":
+    description: SG Micro Corp
   "^sgx,.*":
     description: SGX Sensortech
   "^sharp,.*":
@@ -1004,6 +1017,8 @@ patternProperties:
   "^toppoly,.*":
     description: TPO (deprecated, use tpo)
     deprecated: true
+  "^topwise,.*":
+    description: Topwise Communication Co., Ltd.
   "^toradex,.*":
     description: Toradex AG
   "^toshiba,.*":
