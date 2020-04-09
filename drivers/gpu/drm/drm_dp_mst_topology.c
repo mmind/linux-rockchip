@@ -3703,7 +3703,8 @@ static bool drm_dp_get_one_sb_msg(struct drm_dp_mst_topology_mgr *mgr, bool up,
 	int basereg = up ? DP_SIDEBAND_MSG_UP_REQ_BASE :
 			   DP_SIDEBAND_MSG_DOWN_REP_BASE;
 
-	*mstb = NULL;
+	if (!up)
+		*mstb = NULL;
 	*seqno = -1;
 
 	len = min(mgr->max_dpcd_transaction_bytes, 16);
@@ -3813,7 +3814,6 @@ static int drm_dp_mst_handle_down_rep(struct drm_dp_mst_topology_mgr *mgr)
 			      txmsg->reply.u.nak.reason,
 			      drm_dp_mst_nak_reason_str(txmsg->reply.u.nak.reason),
 			      txmsg->reply.u.nak.nak_data);
-		goto out_clear_reply;
 	}
 
 	memset(msg, 0, sizeof(struct drm_dp_sideband_msg_rx));
@@ -4062,27 +4062,6 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL(drm_dp_mst_detect_port);
-
-/**
- * drm_dp_mst_port_has_audio() - Check whether port has audio capability or not
- * @mgr: manager for this port
- * @port: unverified pointer to a port.
- *
- * This returns whether the port supports audio or not.
- */
-bool drm_dp_mst_port_has_audio(struct drm_dp_mst_topology_mgr *mgr,
-					struct drm_dp_mst_port *port)
-{
-	bool ret = false;
-
-	port = drm_dp_mst_topology_get_port_validated(mgr, port);
-	if (!port)
-		return ret;
-	ret = port->has_audio;
-	drm_dp_mst_topology_put_port(port);
-	return ret;
-}
-EXPORT_SYMBOL(drm_dp_mst_port_has_audio);
 
 /**
  * drm_dp_mst_get_edid() - get EDID for an MST port
