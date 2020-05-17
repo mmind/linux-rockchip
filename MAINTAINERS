@@ -5040,28 +5040,7 @@ F:	drivers/dma-buf/
 F:	include/linux/*fence.h
 F:	include/linux/dma-buf*
 F:	include/linux/dma-resv.h
-F:	include/linux/*fence.h
-F:	Documentation/driver-api/dma-buf.rst
 K:	\bdma_(?:buf|fence|resv)\b
-T:	git git://anongit.freedesktop.org/drm/drm-misc
-
-DMA-BUF HEAPS FRAMEWORK
-M:	Sumit Semwal <sumit.semwal@linaro.org>
-R:	Andrew F. Davis <afd@ti.com>
-R:	Benjamin Gaignard <benjamin.gaignard@linaro.org>
-R:	Liam Mark <lmark@codeaurora.org>
-R:	Laura Abbott <labbott@redhat.com>
-R:	Brian Starkey <Brian.Starkey@arm.com>
-R:	John Stultz <john.stultz@linaro.org>
-S:	Maintained
-L:	linux-media@vger.kernel.org
-L:	dri-devel@lists.freedesktop.org
-L:	linaro-mm-sig@lists.linaro.org (moderated for non-subscribers)
-F:	include/uapi/linux/dma-heap.h
-F:	include/linux/dma-heap.h
-F:	drivers/dma-buf/dma-heap.c
-F:	drivers/dma-buf/heaps/*
-T:	git git://anongit.freedesktop.org/drm/drm-misc
 
 DMA GENERIC OFFLOAD ENGINE SUBSYSTEM
 M:	Vinod Koul <vkoul@kernel.org>
@@ -5272,13 +5251,9 @@ F:	drivers/gpu/drm/pl111/
 DRM DRIVER FOR ARM VERSATILE TFT PANELS
 M:	Linus Walleij <linus.walleij@linaro.org>
 S:	Maintained
-F:	drivers/gpu/drm/panel/panel-arm-versatile.c
+T:	git git://anongit.freedesktop.org/drm/drm-misc
 F:	Documentation/devicetree/bindings/display/panel/arm,versatile-tft-panel.yaml
-
-DRM DRIVER FOR AST SERVER GRAPHICS CHIPS
-M:	Dave Airlie <airlied@redhat.com>
-S:	Odd Fixes
-F:	drivers/gpu/drm/ast/
+F:	drivers/gpu/drm/panel/panel-arm-versatile.c
 
 DRM DRIVER FOR ASPEED BMC GFX
 M:	Joel Stanley <joel@jms.id.au>
@@ -5303,8 +5278,8 @@ F:	drivers/gpu/drm/bochs/
 DRM DRIVER FOR BOE HIMAX8279D PANELS
 M:	Jerry Han <hanxu5@huaqin.corp-partner.google.com>
 S:	Maintained
-F:	drivers/gpu/drm/panel/panel-boe-himax8279d.c
 F:	Documentation/devicetree/bindings/display/panel/boe,himax8279d.yaml
+F:	drivers/gpu/drm/panel/panel-boe-himax8279d.c
 
 DRM DRIVER FOR FARADAY TVE200 TV ENCODER
 M:	Linus Walleij <linus.walleij@linaro.org>
@@ -5321,8 +5296,8 @@ F:	drivers/gpu/drm/panel/panel-feixin-k101-im2ba02.c
 DRM DRIVER FOR FEIYANG FY07024DI26A30-D MIPI-DSI LCD PANELS
 M:	Jagan Teki <jagan@amarulasolutions.com>
 S:	Maintained
-F:	drivers/gpu/drm/panel/panel-feiyang-fy07024di26a30d.c
 F:	Documentation/devicetree/bindings/display/panel/feiyang,fy07024di26a30d.yaml
+F:	drivers/gpu/drm/panel/panel-feiyang-fy07024di26a30d.c
 
 DRM DRIVER FOR GRAIN MEDIA GM12U320 PROJECTORS
 M:	Hans de Goede <hdegoede@redhat.com>
@@ -5355,6 +5330,14 @@ DRM DRIVER FOR INTEL I810 VIDEO CARDS
 S:	Orphan / Obsolete
 F:	drivers/gpu/drm/i810/
 F:	include/uapi/drm/i810_drm.h
+
+DRM DRIVER FOR LVDS PANELS
+M:	Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+L:	dri-devel@lists.freedesktop.org
+T:	git git://anongit.freedesktop.org/drm/drm-misc
+S:	Maintained
+F:	drivers/gpu/drm/panel/panel-lvds.c
+F:	Documentation/devicetree/bindings/display/panel/lvds.yaml
 
 DRM DRIVER FOR MATROX G200/G400 GRAPHICS CARDS
 S:	Orphan / Obsolete
@@ -5404,8 +5387,8 @@ F:	include/uapi/drm/nouveau_drm.h
 DRM DRIVER FOR OLIMEX LCD-OLINUXINO PANELS
 M:	Stefan Mavrodiev <stefan@olimex.com>
 S:	Maintained
-F:	drivers/gpu/drm/panel/panel-olimex-lcd-olinuxino.c
 F:	Documentation/devicetree/bindings/display/panel/olimex,lcd-olinuxino.yaml
+F:	drivers/gpu/drm/panel/panel-olimex-lcd-olinuxino.c
 
 DRM DRIVER FOR PERVASIVE DISPLAYS REPAPER PANELS
 M:	Noralf Trønnes <noralf@tronnes.org>
@@ -5421,7 +5404,7 @@ L:	virtualization@lists.linux-foundation.org
 S:	Obsolete
 W:	https://www.kraxel.org/blog/2014/10/qemu-using-cirrus-considered-harmful/
 T:	git git://anongit.freedesktop.org/drm/drm-misc
-F:	drivers/gpu/drm/cirrus/
+F:	drivers/gpu/drm/tiny/cirrus.c
 
 DRM DRIVER FOR QXL VIRTUAL GPU
 M:	Dave Airlie <airlied@redhat.com>
@@ -5432,12 +5415,6 @@ S:	Maintained
 T:	git git://anongit.freedesktop.org/drm/drm-misc
 F:	drivers/gpu/drm/qxl/
 F:	include/uapi/drm/qxl_drm.h
-
-DRM DRIVER FOR RAYDIUM RM67191 PANELS
-M:	Robert Chiras <robert.chiras@nxp.com>
-S:	Maintained
-F:	drivers/gpu/drm/panel/panel-raydium-rm67191.c
-F:	Documentation/devicetree/bindings/display/panel/raydium,rm67191.yaml
 
 DRM DRIVER FOR RAGE 128 VIDEO CARDS
 S:	Orphan / Obsolete
@@ -5467,12 +5444,6 @@ S:	Orphan / Obsolete
 F:	drivers/gpu/drm/sis/
 F:	include/uapi/drm/sis_drm.h
 
-DRM DRIVER FOR SITRONIX ST7701 PANELS
-M:	Jagan Teki <jagan@amarulasolutions.com>
-S:	Maintained
-F:	drivers/gpu/drm/panel/panel-sitronix-st7701.c
-F:	Documentation/devicetree/bindings/display/panel/sitronix,st7701.yaml
-
 DRM DRIVER FOR SITRONIX ST7586 PANELS
 M:	David Lechner <david@lechnology.com>
 S:	Maintained
@@ -5483,7 +5454,7 @@ F:	drivers/gpu/drm/tiny/st7586.c
 DRM DRIVER FOR SITRONIX ST7701 PANELS
 M:	Jagan Teki <jagan@amarulasolutions.com>
 S:	Maintained
-F:	Documentation/devicetree/bindings/display/panel/sitronix,st7701.txt
+F:	Documentation/devicetree/bindings/display/panel/sitronix,st7701.yaml
 F:	drivers/gpu/drm/panel/panel-sitronix-st7701.c
 
 DRM DRIVER FOR SITRONIX ST7735R PANELS
@@ -14099,7 +14070,6 @@ F:	drivers/net/wireless/quantenna
 RADEON and AMDGPU DRM DRIVERS
 M:	Alex Deucher <alexander.deucher@amd.com>
 M:	Christian König <christian.koenig@amd.com>
-M:	David (ChunMing) Zhou <David1.Zhou@amd.com>
 L:	amd-gfx@lists.freedesktop.org
 S:	Supported
 T:	git git://people.freedesktop.org/~agd5f/linux
