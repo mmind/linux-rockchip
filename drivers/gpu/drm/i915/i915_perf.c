@@ -1612,10 +1612,7 @@ static int alloc_noa_wait(struct i915_perf_stream *stream)
 	struct drm_i915_gem_object *bo;
 	struct i915_vma *vma;
 	const u64 delay_ticks = 0xffffffffffffffff -
-		DIV64_U64_ROUND_UP(
-			atomic64_read(&stream->perf->noa_programming_delay) *
-			RUNTIME_INFO(i915)->cs_timestamp_frequency_khz,
-			1000000ull);
+		i915_cs_timestamp_ns_to_ticks(i915, atomic64_read(&stream->perf->noa_programming_delay));
 	const u32 base = stream->engine->mmio_base;
 #define CS_GPR(x) GEN8_RING_CS_GPR(base, x)
 	u32 *batch, *ts0, *cs, *jump;
@@ -3418,10 +3415,10 @@ i915_perf_open_ioctl_locked(struct i915_perf *perf,
 	/* Similar to perf's kernel.perf_paranoid_cpu sysctl option
 	 * we check a dev.i915.perf_stream_paranoid sysctl option
 	 * to determine if it's ok to access system wide OA counters
-	 * without CAP_SYS_ADMIN privileges.
+	 * without CAP_PERFMON or CAP_SYS_ADMIN privileges.
 	 */
 	if (privileged_op &&
-	    i915_perf_stream_paranoid && !capable(CAP_SYS_ADMIN)) {
+	    i915_perf_stream_paranoid && !perfmon_capable()) {
 		DRM_DEBUG("Insufficient privileges to open i915 perf stream\n");
 		ret = -EACCES;
 		goto err_ctx;
@@ -3485,8 +3482,7 @@ err:
 
 static u64 oa_exponent_to_ns(struct i915_perf *perf, int exponent)
 {
-	return div64_u64(1000000000ULL * (2ULL << exponent),
-			 1000ULL * RUNTIME_INFO(perf->i915)->cs_timestamp_frequency_khz);
+	return i915_cs_timestamp_ticks_to_ns(perf->i915, 2ULL << exponent);
 }
 
 /**
@@ -3616,9 +3612,8 @@ static int read_properties_unlocked(struct i915_perf *perf,
 			} else
 				oa_freq_hz = 0;
 
-			if (oa_freq_hz > i915_oa_max_sample_rate &&
-			    !capable(CAP_SYS_ADMIN)) {
-				DRM_DEBUG("OA exponent would exceed the max sampling frequency (sysctl dev.i915.oa_max_sample_rate) %uHz without root privileges\n",
+			if (oa_freq_hz > i915_oa_max_sample_rate && !perfmon_capable()) {
+				DRM_DEBUG("OA exponent would exceed the max sampling frequency (sysctl dev.i915.oa_max_sample_rate) %uHz without CAP_PERFMON or CAP_SYS_ADMIN privileges\n",
 					  i915_oa_max_sample_rate);
 				return -EACCES;
 			}
@@ -4004,7 +3999,7 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 	}
 
-	if (i915_perf_stream_paranoid && !capable(CAP_SYS_ADMIN)) {
+	if (i915_perf_stream_paranoid && !perfmon_capable()) {
 		DRM_DEBUG("Insufficient privileges to add i915 OA config\n");
 		return -EACCES;
 	}
@@ -4151,7 +4146,7 @@ int i915_perf_remove_config_ioctl(struct drm_device *dev, void *data,
 		return -ENOTSUPP;
 	}
 
-	if (i915_perf_stream_paranoid && !capable(CAP_SYS_ADMIN)) {
+	if (i915_perf_stream_paranoid && !perfmon_capable()) {
 		DRM_DEBUG("Insufficient privileges to remove i915 OA config\n");
 		return -EACCES;
 	}
@@ -4344,8 +4339,8 @@ void i915_perf_init(struct drm_i915_private *i915)
 	if (perf->ops.enable_metric_set) {
 		mutex_init(&perf->lock);
 
-		oa_sample_rate_hard_limit = 1000 *
-			(RUNTIME_INFO(i915)->cs_timestamp_frequency_khz / 2);
+		oa_sample_rate_hard_limit =
+			RUNTIME_INFO(i915)->cs_timestamp_frequency_hz / 2;
 
 		mutex_init(&perf->metrics_lock);
 		idr_init(&perf->metrics_idr);

@@ -1068,10 +1068,12 @@ void mlx5e_deactivate_priv_channels(struct mlx5e_priv *priv);
 
 void mlx5e_build_default_indir_rqt(u32 *indirection_rqt, int len,
 				   int num_channels);
-void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params,
-				 u8 cq_period_mode);
-void mlx5e_set_rx_cq_mode_params(struct mlx5e_params *params,
-				 u8 cq_period_mode);
+
+void mlx5e_reset_tx_moderation(struct mlx5e_params *params, u8 cq_period_mode);
+void mlx5e_reset_rx_moderation(struct mlx5e_params *params, u8 cq_period_mode);
+void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode);
+void mlx5e_set_rx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode);
+
 void mlx5e_set_rq_type(struct mlx5_core_dev *mdev, struct mlx5e_params *params);
 void mlx5e_init_rq_type_params(struct mlx5_core_dev *mdev,
 			       struct mlx5e_params *params);
@@ -1121,7 +1123,7 @@ void mlx5e_close_drop_rq(struct mlx5e_rq *drop_rq);
 int mlx5e_create_indirect_rqt(struct mlx5e_priv *priv);
 
 int mlx5e_create_indirect_tirs(struct mlx5e_priv *priv, bool inner_ttc);
-void mlx5e_destroy_indirect_tirs(struct mlx5e_priv *priv, bool inner_ttc);
+void mlx5e_destroy_indirect_tirs(struct mlx5e_priv *priv);
 
 int mlx5e_create_direct_rqts(struct mlx5e_priv *priv, struct mlx5e_tir *tirs);
 void mlx5e_destroy_direct_rqts(struct mlx5e_priv *priv, struct mlx5e_tir *tirs);

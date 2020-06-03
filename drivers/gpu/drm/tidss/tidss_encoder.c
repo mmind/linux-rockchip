@@ -8,9 +8,8 @@
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_of.h>
 #include <drm/drm_panel.h>
-#include <drm/drm_simple_kms_helper.h>
+#include <drm/drm_of.h>
 
 #include "tidss_crtc.h"
 #include "tidss_drv.h"

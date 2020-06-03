@@ -959,7 +959,7 @@ static void gfx_v9_0_init_golden_registers(struct amdgpu_device *adev)
 	case CHIP_RAVEN:
 		soc15_program_register_sequence(adev, golden_settings_gc_9_1,
 						ARRAY_SIZE(golden_settings_gc_9_1));
-		if (adev->rev_id >= 8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			soc15_program_register_sequence(adev,
 							golden_settings_gc_9_1_rv2,
 							ARRAY_SIZE(golden_settings_gc_9_1_rv2));
@@ -1274,7 +1274,8 @@ static void gfx_v9_0_check_if_need_gfxoff(struct amdgpu_device *adev)
 	case CHIP_VEGA20:
 		break;
 	case CHIP_RAVEN:
-		if (!(adev->rev_id >= 0x8 || adev->pdev->device == 0x15d8) &&
+		if (!((adev->apu_flags & AMD_APU_IS_RAVEN2) ||
+		      (adev->apu_flags & AMD_APU_IS_PICASSO)) &&
 		    ((!is_raven_kicker(adev) &&
 		      adev->gfx.rlc_fw_version < 531) ||
 		     (adev->gfx.rlc_feature_version < 1) ||
@@ -1617,9 +1618,9 @@ static int gfx_v9_0_init_microcode(struct amdgpu_device *adev)
 		chip_name = "vega20";
 		break;
 	case CHIP_RAVEN:
-		if (adev->rev_id >= 8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			chip_name = "raven2";
-		else if (adev->pdev->device == 0x15d8)
+		else if (adev->apu_flags & AMD_APU_IS_PICASSO)
 			chip_name = "picasso";
 		else
 			chip_name = "raven";
@@ -2119,7 +2120,7 @@ static int gfx_v9_0_gpu_early_init(struct amdgpu_device *adev)
 		adev->gfx.config.sc_prim_fifo_size_backend = 0x100;
 		adev->gfx.config.sc_hiz_tile_fifo_size = 0x30;
 		adev->gfx.config.sc_earlyz_tile_fifo_size = 0x4C0;
-		if (adev->rev_id >= 8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			gb_addr_config = RAVEN2_GB_ADDR_CONFIG_GOLDEN;
 		else
 			gb_addr_config = RAVEN_GB_ADDR_CONFIG_GOLDEN;
@@ -2968,8 +2969,7 @@ static void gfx_v9_0_init_pg(struct amdgpu_device *adev)
 	 */
 	if (adev->gfx.rlc.is_rlc_v2_1) {
 		if (adev->asic_type == CHIP_VEGA12 ||
-		    (adev->asic_type == CHIP_RAVEN &&
-		     adev->rev_id >= 8))
+		    (adev->apu_flags & AMD_APU_IS_RAVEN2))
 			gfx_v9_1_init_rlc_save_restore_list(adev);
 		gfx_v9_0_enable_save_restore_machine(adev);
 	}
@@ -6634,6 +6634,25 @@ static int gfx_v9_0_query_ras_error_count(struct amdgpu_device *adev,
 	return 0;
 }
 
+static void gfx_v9_0_emit_mem_sync(struct amdgpu_ring *ring)
+{
+	const unsigned int cp_coher_cntl =
+			PACKET3_ACQUIRE_MEM_CP_COHER_CNTL_SH_ICACHE_ACTION_ENA(1) |
+			PACKET3_ACQUIRE_MEM_CP_COHER_CNTL_SH_KCACHE_ACTION_ENA(1) |
+			PACKET3_ACQUIRE_MEM_CP_COHER_CNTL_TC_ACTION_ENA(1) |
+			PACKET3_ACQUIRE_MEM_CP_COHER_CNTL_TCL1_ACTION_ENA(1) |
+			PACKET3_ACQUIRE_MEM_CP_COHER_CNTL_TC_WB_ACTION_ENA(1);
+
+	/* ACQUIRE_MEM -make one or more surfaces valid for use by the subsequent operations */
+	amdgpu_ring_write(ring, PACKET3(PACKET3_ACQUIRE_MEM, 5));
+	amdgpu_ring_write(ring, cp_coher_cntl); /* CP_COHER_CNTL */
+	amdgpu_ring_write(ring, 0xffffffff);  /* CP_COHER_SIZE */
+	amdgpu_ring_write(ring, 0xffffff);  /* CP_COHER_SIZE_HI */
+	amdgpu_ring_write(ring, 0); /* CP_COHER_BASE */
+	amdgpu_ring_write(ring, 0);  /* CP_COHER_BASE_HI */
+	amdgpu_ring_write(ring, 0x0000000A); /* POLL_INTERVAL */
+}
+
 static const struct amd_ip_funcs gfx_v9_0_ip_funcs = {
 	.name = "gfx_v9_0",
 	.early_init = gfx_v9_0_early_init,
@@ -6680,7 +6699,8 @@ static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_gfx = {
 		3 + /* CNTX_CTRL */
 		5 + /* HDP_INVL */
 		8 + 8 + /* FENCE x2 */
-		2, /* SWITCH_BUFFER */
+		2 + /* SWITCH_BUFFER */
+		7, /* gfx_v9_0_emit_mem_sync */
 	.emit_ib_size =	4, /* gfx_v9_0_ring_emit_ib_gfx */
 	.emit_ib = gfx_v9_0_ring_emit_ib_gfx,
 	.emit_fence = gfx_v9_0_ring_emit_fence,
@@ -6701,6 +6721,7 @@ static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_gfx = {
 	.emit_reg_wait = gfx_v9_0_ring_emit_reg_wait,
 	.emit_reg_write_reg_wait = gfx_v9_0_ring_emit_reg_write_reg_wait,
 	.soft_recovery = gfx_v9_0_ring_soft_recovery,
+	.emit_mem_sync = gfx_v9_0_emit_mem_sync,
 };
 
 static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_compute = {
@@ -6720,7 +6741,8 @@ static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_compute = {
 		SOC15_FLUSH_GPU_TLB_NUM_WREG * 5 +
 		SOC15_FLUSH_GPU_TLB_NUM_REG_WAIT * 7 +
 		2 + /* gfx_v9_0_ring_emit_vm_flush */
-		8 + 8 + 8, /* gfx_v9_0_ring_emit_fence x3 for user fence, vm fence */
+		8 + 8 + 8 + /* gfx_v9_0_ring_emit_fence x3 for user fence, vm fence */
+		7, /* gfx_v9_0_emit_mem_sync */
 	.emit_ib_size =	7, /* gfx_v9_0_ring_emit_ib_compute */
 	.emit_ib = gfx_v9_0_ring_emit_ib_compute,
 	.emit_fence = gfx_v9_0_ring_emit_fence,
@@ -6735,6 +6757,7 @@ static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_compute = {
 	.emit_wreg = gfx_v9_0_ring_emit_wreg,
 	.emit_reg_wait = gfx_v9_0_ring_emit_reg_wait,
 	.emit_reg_write_reg_wait = gfx_v9_0_ring_emit_reg_write_reg_wait,
+	.emit_mem_sync = gfx_v9_0_emit_mem_sync,
 };
 
 static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_kiq = {
@@ -6858,7 +6881,7 @@ static void gfx_v9_0_set_gds_init(struct amdgpu_device *adev)
 		adev->gds.gds_compute_max_wave_id = 0x27f;
 		break;
 	case CHIP_RAVEN:
-		if (adev->rev_id >= 0x8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			adev->gds.gds_compute_max_wave_id = 0x77; /* raven2 */
 		else
 			adev->gds.gds_compute_max_wave_id = 0x15f; /* raven1 */

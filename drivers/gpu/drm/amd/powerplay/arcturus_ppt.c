@@ -128,6 +128,7 @@ static struct smu_11_0_cmn2aisc_mapping arcturus_message_map[SMU_MSG_MAX_COUNT] 
 	MSG_MAP(SetXgmiMode,			     PPSMC_MSG_SetXgmiMode),
 	MSG_MAP(SetMemoryChannelEnable,		     PPSMC_MSG_SetMemoryChannelEnable),
 	MSG_MAP(DFCstateControl,		     PPSMC_MSG_DFCstateControl),
+	MSG_MAP(GmiPwrDnControl,		     PPSMC_MSG_GmiPwrDnControl),
 };
 
 static struct smu_11_0_cmn2aisc_mapping arcturus_clk_map[SMU_CLK_COUNT] = {
@@ -622,6 +623,9 @@ static int arcturus_print_clk_levels(struct smu_context *smu,
 	struct smu_dpm_context *smu_dpm = &smu->smu_dpm;
 	struct arcturus_dpm_table *dpm_table = NULL;
 
+	if (amdgpu_ras_intr_triggered())
+		return snprintf(buf, PAGE_SIZE, "unavailable\n");
+
 	dpm_table = smu_dpm->dpm_context;
 
 	switch (type) {
@@ -996,6 +1000,9 @@ static int arcturus_read_sensor(struct smu_context *smu,
 	struct smu_table_context *table_context = &smu->smu_table;
 	PPTable_t *pptable = table_context->driver_pptable;
 	int ret = 0;
+
+	if (amdgpu_ras_intr_triggered())
+		return 0;
 
 	if (!data || !size)
 		return -EINVAL;
@@ -2286,6 +2293,35 @@ static int arcturus_set_df_cstate(struct smu_context *smu,
 	return smu_send_smc_msg_with_param(smu, SMU_MSG_DFCstateControl, state, NULL);
 }
 
+static int arcturus_allow_xgmi_power_down(struct smu_context *smu, bool en)
+{
+	uint32_t smu_version;
+	int ret;
+
+	ret = smu_get_smc_version(smu, NULL, &smu_version);
+	if (ret) {
+		pr_err("Failed to get smu version!\n");
+		return ret;
+	}
+
+	/* PPSMC_MSG_GmiPwrDnControl is supported by 54.23.0 and onwards */
+	if (smu_version < 0x00361700) {
+		pr_err("XGMI power down control is only supported by PMFW 54.23.0 and onwards\n");
+		return -EINVAL;
+	}
+
+	if (en)
+		return smu_send_smc_msg_with_param(smu,
+						   SMU_MSG_GmiPwrDnControl,
+						   1,
+						   NULL);
+
+	return smu_send_smc_msg_with_param(smu,
+					   SMU_MSG_GmiPwrDnControl,
+					   0,
+					   NULL);
+}
+
 static const struct pptable_funcs arcturus_ppt_funcs = {
 	/* translate smu index into arcturus specific index */
 	.get_smu_msg_index = arcturus_get_smu_msg_index,
@@ -2379,6 +2415,7 @@ static const struct pptable_funcs arcturus_ppt_funcs = {
 	.override_pcie_parameters = smu_v11_0_override_pcie_parameters,
 	.get_pptable_power_limit = arcturus_get_pptable_power_limit,
 	.set_df_cstate = arcturus_set_df_cstate,
+	.allow_xgmi_power_down = arcturus_allow_xgmi_power_down,
 };
 
 void arcturus_set_ppt_funcs(struct smu_context *smu)

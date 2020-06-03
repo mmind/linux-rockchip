@@ -2717,7 +2717,8 @@ void mlx5e_modify_tirs_hash(struct mlx5e_priv *priv, void *in, int inlen)
 		mlx5_core_modify_tir(mdev, priv->indir_tir[tt].tirn, in, inlen);
 	}
 
-	if (!mlx5e_tunnel_inner_ft_supported(priv->mdev))
+	/* Verify inner tirs resources allocated */
+	if (!priv->inner_indir_tir[0].tirn)
 		return;
 
 	for (tt = 0; tt < MLX5E_NUM_INDIR_TIRS; tt++) {
@@ -3408,14 +3409,15 @@ out:
 	return err;
 }
 
-void mlx5e_destroy_indirect_tirs(struct mlx5e_priv *priv, bool inner_ttc)
+void mlx5e_destroy_indirect_tirs(struct mlx5e_priv *priv)
 {
 	int i;
 
 	for (i = 0; i < MLX5E_NUM_INDIR_TIRS; i++)
 		mlx5e_destroy_tir(priv->mdev, &priv->indir_tir[i]);
 
-	if (!inner_ttc || !mlx5e_tunnel_inner_ft_supported(priv->mdev))
+	/* Verify inner tirs resources allocated */
+	if (!priv->inner_indir_tir[0].tirn)
 		return;
 
 	for (i = 0; i < MLX5E_NUM_INDIR_TIRS; i++)
@@ -4714,7 +4716,7 @@ static u8 mlx5_to_net_dim_cq_period_mode(u8 cq_period_mode)
 		DIM_CQ_PERIOD_MODE_START_FROM_EQE;
 }
 
-void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+void mlx5e_reset_tx_moderation(struct mlx5e_params *params, u8 cq_period_mode)
 {
 	if (params->tx_dim_enabled) {
 		u8 dim_period_mode = mlx5_to_net_dim_cq_period_mode(cq_period_mode);
@@ -4723,13 +4725,9 @@ void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
 	} else {
 		params->tx_cq_moderation = mlx5e_get_def_tx_moderation(cq_period_mode);
 	}
-
-	MLX5E_SET_PFLAG(params, MLX5E_PFLAG_TX_CQE_BASED_MODER,
-			params->tx_cq_moderation.cq_period_mode ==
-				MLX5_CQ_PERIOD_MODE_START_FROM_CQE);
 }
 
-void mlx5e_set_rx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+void mlx5e_reset_rx_moderation(struct mlx5e_params *params, u8 cq_period_mode)
 {
 	if (params->rx_dim_enabled) {
 		u8 dim_period_mode = mlx5_to_net_dim_cq_period_mode(cq_period_mode);
@@ -4738,7 +4736,19 @@ void mlx5e_set_rx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
 	} else {
 		params->rx_cq_moderation = mlx5e_get_def_rx_moderation(cq_period_mode);
 	}
+}
 
+void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+{
+	mlx5e_reset_tx_moderation(params, cq_period_mode);
+	MLX5E_SET_PFLAG(params, MLX5E_PFLAG_TX_CQE_BASED_MODER,
+			params->tx_cq_moderation.cq_period_mode ==
+				MLX5_CQ_PERIOD_MODE_START_FROM_CQE);
+}
+
+void mlx5e_set_rx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+{
+	mlx5e_reset_rx_moderation(params, cq_period_mode);
 	MLX5E_SET_PFLAG(params, MLX5E_PFLAG_RX_CQE_BASED_MODER,
 			params->rx_cq_moderation.cq_period_mode ==
 				MLX5_CQ_PERIOD_MODE_START_FROM_CQE);
@@ -5123,7 +5133,7 @@ err_destroy_xsk_rqts:
 err_destroy_direct_tirs:
 	mlx5e_destroy_direct_tirs(priv, priv->direct_tir);
 err_destroy_indirect_tirs:
-	mlx5e_destroy_indirect_tirs(priv, true);
+	mlx5e_destroy_indirect_tirs(priv);
 err_destroy_direct_rqts:
 	mlx5e_destroy_direct_rqts(priv, priv->direct_tir);
 err_destroy_indirect_rqts:
@@ -5142,7 +5152,7 @@ static void mlx5e_cleanup_nic_rx(struct mlx5e_priv *priv)
 	mlx5e_destroy_direct_tirs(priv, priv->xsk_tir);
 	mlx5e_destroy_direct_rqts(priv, priv->xsk_tir);
 	mlx5e_destroy_direct_tirs(priv, priv->direct_tir);
-	mlx5e_destroy_indirect_tirs(priv, true);
+	mlx5e_destroy_indirect_tirs(priv);
 	mlx5e_destroy_direct_rqts(priv, priv->direct_tir);
 	mlx5e_destroy_rqt(priv, &priv->indir_rqt);
 	mlx5e_close_drop_rq(&priv->drop_rq);
