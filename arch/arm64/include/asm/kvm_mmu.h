@@ -172,8 +172,8 @@ void kvm_clear_hyp_idmap(void);
 	__pmd(__phys_to_pmd_val(__pa(ptep)) | PMD_TYPE_TABLE)
 #define kvm_mk_pud(pmdp)					\
 	__pud(__phys_to_pud_val(__pa(pmdp)) | PMD_TYPE_TABLE)
-#define kvm_mk_pgd(pudp)					\
-	__pgd(__phys_to_pgd_val(__pa(pudp)) | PUD_TYPE_TABLE)
+#define kvm_mk_p4d(pmdp)					\
+	__p4d(__phys_to_p4d_val(__pa(pmdp)) | PUD_TYPE_TABLE)
 
 #define kvm_set_pud(pudp, pud)		set_pud(pudp, pud)
 
@@ -299,6 +299,12 @@ static inline bool kvm_s2pud_young(pud_t pud)
 #define hyp_pud_table_empty(pudp) kvm_page_empty(pudp)
 #endif
 
+#ifdef __PAGETABLE_P4D_FOLDED
+#define hyp_p4d_table_empty(p4dp) (0)
+#else
+#define hyp_p4d_table_empty(p4dp) kvm_page_empty(p4dp)
+#endif
+
 struct kvm;
 
 #define kvm_flush_dcache_to_poc(a,l)	__flush_dcache_area((a), (l))
@@ -362,8 +368,6 @@ static inline void __kvm_flush_dcache_pud(pud_t pud)
 		kvm_flush_dcache_to_poc(page_address(page), PUD_SIZE);
 	}
 }
-
-#define kvm_virt_to_phys(x)		__pa_symbol(x)
 
 void kvm_set_way_flush(struct kvm_vcpu *vcpu);
 void kvm_toggle_cache(struct kvm_vcpu *vcpu, bool was_enabled);
@@ -473,7 +477,7 @@ static inline int kvm_write_guest_lock(struct kvm *kvm, gpa_t gpa,
 extern void *__kvm_bp_vect_base;
 extern int __kvm_harden_el2_vector_slot;
 
-/*  This is only called on a VHE system */
+/*  This is called on both VHE and !VHE systems */
 static inline void *kvm_get_hyp_vector(void)
 {
 	struct bp_hardening_data *data = arm64_get_bp_hardening_data();
