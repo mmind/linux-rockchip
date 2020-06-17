@@ -311,8 +311,8 @@ struct drm_driver {
 	 *
 	 * Called whenever the minor master is set. Only used by vmwgfx.
 	 */
-	int (*master_set)(struct drm_device *dev, struct drm_file *file_priv,
-			  bool from_open);
+	void (*master_set)(struct drm_device *dev, struct drm_file *file_priv,
+			   bool from_open);
 	/**
 	 * @master_drop:
 	 *
@@ -352,23 +352,6 @@ struct drm_driver {
 	 * Driver hook called upon gem handle release
 	 */
 	void (*gem_close_object) (struct drm_gem_object *, struct drm_file *);
-
-	/**
-	 * @gem_print_info:
-	 *
-	 * This callback is deprecated in favour of
-	 * &drm_gem_object_funcs.print_info.
-	 *
-	 * If driver subclasses struct &drm_gem_object, it can implement this
-	 * optional hook for printing additional driver specific info.
-	 *
-	 * drm_printf_indent() should be used in the callback passing it the
-	 * indent argument.
-	 *
-	 * This callback is called from drm_gem_print_info().
-	 */
-	void (*gem_print_info)(struct drm_printer *p, unsigned int indent,
-			       const struct drm_gem_object *obj);
 
 	/**
 	 * @gem_create_object: constructor for gem objects

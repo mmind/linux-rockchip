@@ -142,7 +142,7 @@ enum mga_type {
 #define IS_G200_SE(mdev) (mdev->type == G200_SE_A || mdev->type == G200_SE_B)
 
 struct mga_device {
-	struct drm_device		*dev;
+	struct drm_device		base;
 	unsigned long			flags;
 
 	resource_size_t			rmmio_base;
@@ -170,7 +170,7 @@ struct mga_device {
 
 static inline struct mga_device *to_mga_device(struct drm_device *dev)
 {
-	return dev->dev_private;
+	return container_of(dev, struct mga_device, base);
 }
 
 static inline enum mga_type
@@ -188,16 +188,11 @@ mgag200_flags_from_driver_data(kernel_ulong_t driver_data)
 				/* mgag200_mode.c */
 int mgag200_modeset_init(struct mga_device *mdev);
 
-				/* mgag200_main.c */
-int mgag200_driver_load(struct drm_device *dev, unsigned long flags);
-void mgag200_driver_unload(struct drm_device *dev);
-
 				/* mgag200_i2c.c */
 struct mga_i2c_chan *mgag200_i2c_create(struct drm_device *dev);
 void mgag200_i2c_destroy(struct mga_i2c_chan *i2c);
 
+				/* mgag200_mm.c */
 int mgag200_mm_init(struct mga_device *mdev);
-void mgag200_mm_fini(struct mga_device *mdev);
-int mgag200_mmap(struct file *filp, struct vm_area_struct *vma);
 
 #endif				/* __MGAG200_DRV_H__ */
