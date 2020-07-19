@@ -893,7 +893,11 @@ static int ak8974_probe(struct i2c_client *i2c,
 		goto disable_pm;
 	}
 
-	indio_dev->dev.parent = &i2c->dev;
+	pm_runtime_set_autosuspend_delay(&i2c->dev,
+					 AK8974_AUTOSUSPEND_DELAY);
+	pm_runtime_use_autosuspend(&i2c->dev);
+	pm_runtime_put(&i2c->dev);
+
 	switch (ak8974->variant) {
 	case AK8974_WHOAMI_VALUE_AMI306:
 	case AK8974_WHOAMI_VALUE_AMI305:
