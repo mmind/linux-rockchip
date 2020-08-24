@@ -272,31 +272,27 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 				  struct ttm_operation_ctx *ctx)
 {
 	struct ttm_bo_device *bdev = bo->bdev;
-	bool old_is_pci = ttm_mem_reg_is_pci(bdev, &bo->mem);
-	bool new_is_pci = ttm_mem_reg_is_pci(bdev, mem);
 	struct ttm_mem_type_manager *old_man = &bdev->man[bo->mem.mem_type];
 	struct ttm_mem_type_manager *new_man = &bdev->man[mem->mem_type];
-	int ret = 0;
+	int ret;
 
-	if (old_is_pci || new_is_pci ||
-	    ((mem->placement & bo->mem.placement & TTM_PL_MASK_CACHING) == 0)) {
-		ret = ttm_mem_io_lock(old_man, true);
-		if (unlikely(ret != 0))
-			goto out_err;
-		ttm_bo_unmap_virtual_locked(bo);
-		ttm_mem_io_unlock(old_man);
-	}
+	ret = ttm_mem_io_lock(old_man, true);
+	if (unlikely(ret != 0))
+		goto out_err;
+	ttm_bo_unmap_virtual_locked(bo);
+	ttm_mem_io_unlock(old_man);
 
 	/*
 	 * Create and bind a ttm if required.
 	 */
 
 	if (!(new_man->flags & TTM_MEMTYPE_FLAG_FIXED)) {
-		bool zero = !(old_man->flags & TTM_MEMTYPE_FLAG_FIXED);
-
-		ret = ttm_tt_create(bo, zero);
-		if (ret)
-			goto out_err;
+		if (bo->ttm == NULL) {
+			bool zero = !(old_man->flags & TTM_MEMTYPE_FLAG_FIXED);
+			ret = ttm_tt_create(bo, zero);
+			if (ret)
+				goto out_err;
+		}
 
 		ret = ttm_tt_set_placement_caching(bo->ttm, mem->placement);
 		if (ret)
@@ -657,8 +653,13 @@ static int ttm_bo_evict(struct ttm_buffer_object *bo,
 	placement.num_busy_placement = 0;
 	bdev->driver->evict_flags(bo, &placement);
 
-	if (!placement.num_placement && !placement.num_busy_placement)
-		return ttm_bo_pipeline_gutting(bo);
+	if (!placement.num_placement && !placement.num_busy_placement) {
+		ret = ttm_bo_pipeline_gutting(bo);
+		if (ret)
+			return ret;
+
+		return ttm_tt_create(bo, false);
+	}
 
 	evict_mem = bo->mem;
 	evict_mem.mm_node = NULL;
@@ -1197,8 +1198,13 @@ int ttm_bo_validate(struct ttm_buffer_object *bo,
 	/*
 	 * Remove the backing store if no placement is given.
 	 */
-	if (!placement->num_placement && !placement->num_busy_placement)
-		return ttm_bo_pipeline_gutting(bo);
+	if (!placement->num_placement && !placement->num_busy_placement) {
+		ret = ttm_bo_pipeline_gutting(bo);
+		if (ret)
+			return ret;
+
+		return ttm_tt_create(bo, false);
+	}
 
 	/*
 	 * Check whether we need to move buffer.
@@ -1214,6 +1220,14 @@ int ttm_bo_validate(struct ttm_buffer_object *bo,
 		 */
 		ttm_flag_masked(&bo->mem.placement, new_flags,
 				~TTM_PL_MASK_MEMTYPE);
+	}
+	/*
+	 * We might need to add a TTM.
+	 */
+	if (bo->mem.mem_type == TTM_PL_SYSTEM && bo->ttm == NULL) {
+		ret = ttm_tt_create(bo, true);
+		if (ret)
+			return ret;
 	}
 	return 0;
 }
@@ -1523,7 +1537,6 @@ int ttm_bo_init_mm(struct ttm_bo_device *bdev, unsigned type,
 	BUG_ON(type >= TTM_NUM_MEM_TYPES);
 	man = &bdev->man[type];
 	BUG_ON(man->has_type);
-	man->io_reserve_fastpath = true;
 	man->use_io_reserve_lru = false;
 	mutex_init(&man->io_reserve_mutex);
 	spin_lock_init(&man->move_lock);
@@ -1701,23 +1714,6 @@ EXPORT_SYMBOL(ttm_bo_device_init);
  * buffer object vm functions.
  */
 
-bool ttm_mem_reg_is_pci(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem)
-{
-	struct ttm_mem_type_manager *man = &bdev->man[mem->mem_type];
-
-	if (!(man->flags & TTM_MEMTYPE_FLAG_FIXED)) {
-		if (mem->mem_type == TTM_PL_SYSTEM)
-			return false;
-
-		if (man->flags & TTM_MEMTYPE_FLAG_CMA)
-			return false;
-
-		if (mem->placement & TTM_PL_FLAG_CACHED)
-			return false;
-	}
-	return true;
-}
-
 void ttm_bo_unmap_virtual_locked(struct ttm_buffer_object *bo)
 {
 	struct ttm_bo_device *bdev = bo->bdev;
@@ -1861,7 +1857,7 @@ out:
 }
 EXPORT_SYMBOL(ttm_bo_swapout);
 
-void ttm_bo_swapout_all(struct ttm_bo_device *bdev)
+void ttm_bo_swapout_all(void)
 {
 	struct ttm_operation_ctx ctx = {
 		.interruptible = false,

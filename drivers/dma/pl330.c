@@ -285,7 +285,7 @@ struct pl330_config {
 	u32		irq_ns;
 };
 
-/**
+/*
  * Request Configuration.
  * The PL330 core does not modify this and uses the last
  * working configuration if the request doesn't provide any.
@@ -890,6 +890,12 @@ static inline void _execute_DBGINSN(struct pl330_thread *thrd,
 	void __iomem *regs = thrd->dmac->base;
 	u32 val;
 
+	/* If timed out due to halted state-machine */
+	if (_until_dmac_idle(thrd)) {
+		dev_err(thrd->dmac->ddma.dev, "DMAC halted!\n");
+		return;
+	}
+
 	val = (insn[0] << 16) | (insn[1] << 24);
 	if (!as_manager) {
 		val |= (1 << 0);
@@ -899,12 +905,6 @@ static inline void _execute_DBGINSN(struct pl330_thread *thrd,
 
 	val = le32_to_cpu(*((__le32 *)&insn[2]));
 	writel(val, regs + DBGINST1);
-
-	/* If timed out due to halted state-machine */
-	if (_until_dmac_idle(thrd)) {
-		dev_err(thrd->dmac->ddma.dev, "DMAC halted!\n");
-		return;
-	}
 
 	/* Get going */
 	writel(0, regs + DBGCMD);

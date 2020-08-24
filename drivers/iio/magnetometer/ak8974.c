@@ -180,6 +180,7 @@
  * @drdy_irq: uses the DRDY IRQ line
  * @drdy_complete: completion for DRDY
  * @drdy_active_low: the DRDY IRQ is active low
+ * @scan: timestamps
  */
 struct ak8974 {
 	struct i2c_client *i2c;
@@ -892,11 +893,6 @@ static int ak8974_probe(struct i2c_client *i2c,
 		dev_err(&i2c->dev, "AK8974 reset failed\n");
 		goto disable_pm;
 	}
-
-	pm_runtime_set_autosuspend_delay(&i2c->dev,
-					 AK8974_AUTOSUSPEND_DELAY);
-	pm_runtime_use_autosuspend(&i2c->dev);
-	pm_runtime_put(&i2c->dev);
 
 	switch (ak8974->variant) {
 	case AK8974_WHOAMI_VALUE_AMI306:

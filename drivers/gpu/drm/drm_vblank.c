@@ -1363,11 +1363,10 @@ EXPORT_SYMBOL(drm_crtc_vblank_off);
 void drm_crtc_vblank_reset(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
-	unsigned long irqflags;
 	unsigned int pipe = drm_crtc_index(crtc);
 	struct drm_vblank_crtc *vblank = &dev->vblank[pipe];
 
-	spin_lock_irqsave(&dev->vbl_lock, irqflags);
+	spin_lock_irq(&dev->vbl_lock);
 	/*
 	 * Prevent subsequent drm_vblank_get() from enabling the vblank
 	 * interrupt by bumping the refcount.
@@ -1376,7 +1375,7 @@ void drm_crtc_vblank_reset(struct drm_crtc *crtc)
 		atomic_inc(&vblank->refcount);
 		vblank->inmodeset = 1;
 	}
-	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
+	spin_unlock_irq(&dev->vbl_lock);
 
 	drm_WARN_ON(dev, !list_empty(&dev->vblank_event_list));
 	drm_WARN_ON(dev, !list_empty(&vblank->pending_work));
@@ -1429,12 +1428,11 @@ void drm_crtc_vblank_on(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	unsigned int pipe = drm_crtc_index(crtc);
 	struct drm_vblank_crtc *vblank = &dev->vblank[pipe];
-	unsigned long irqflags;
 
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
 		return;
 
-	spin_lock_irqsave(&dev->vbl_lock, irqflags);
+	spin_lock_irq(&dev->vbl_lock);
 	drm_dbg_vbl(dev, "crtc %d, vblank enabled %d, inmodeset %d\n",
 		    pipe, vblank->enabled, vblank->inmodeset);
 
@@ -1452,7 +1450,7 @@ void drm_crtc_vblank_on(struct drm_crtc *crtc)
 	 */
 	if (atomic_read(&vblank->refcount) != 0 || drm_vblank_offdelay == 0)
 		drm_WARN_ON(dev, drm_vblank_enable(dev, pipe));
-	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
+	spin_unlock_irq(&dev->vbl_lock);
 }
 EXPORT_SYMBOL(drm_crtc_vblank_on);
 
@@ -1553,7 +1551,6 @@ static void drm_legacy_vblank_post_modeset(struct drm_device *dev,
 					   unsigned int pipe)
 {
 	struct drm_vblank_crtc *vblank = &dev->vblank[pipe];
-	unsigned long irqflags;
 
 	/* vblank is not initialized (IRQ not installed ?), or has been freed */
 	if (!drm_dev_has_vblank(dev))
@@ -1563,9 +1560,9 @@ static void drm_legacy_vblank_post_modeset(struct drm_device *dev,
 		return;
 
 	if (vblank->inmodeset) {
-		spin_lock_irqsave(&dev->vbl_lock, irqflags);
+		spin_lock_irq(&dev->vbl_lock);
 		drm_reset_vblank_timestamp(dev, pipe);
-		spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
+		spin_unlock_irq(&dev->vbl_lock);
 
 		if (vblank->inmodeset & 0x2)
 			drm_vblank_put(dev, pipe);
@@ -1614,7 +1611,6 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 	struct drm_vblank_crtc *vblank = &dev->vblank[pipe];
 	struct drm_pending_vblank_event *e;
 	ktime_t now;
-	unsigned long flags;
 	u64 seq;
 	int ret;
 
@@ -1636,7 +1632,7 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 			e->event.vbl.crtc_id = crtc->base.id;
 	}
 
-	spin_lock_irqsave(&dev->event_lock, flags);
+	spin_lock_irq(&dev->event_lock);
 
 	/*
 	 * drm_crtc_vblank_off() might have been called after we called
@@ -1673,12 +1669,12 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 		vblwait->reply.sequence = req_seq;
 	}
 
-	spin_unlock_irqrestore(&dev->event_lock, flags);
+	spin_unlock_irq(&dev->event_lock);
 
 	return 0;
 
 err_unlock:
-	spin_unlock_irqrestore(&dev->event_lock, flags);
+	spin_unlock_irq(&dev->event_lock);
 	kfree(e);
 err_put:
 	drm_vblank_put(dev, pipe);
@@ -2070,7 +2066,6 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 	u64 seq;
 	u64 req_seq;
 	int ret;
-	unsigned long spin_flags;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EOPNOTSUPP;
@@ -2118,7 +2113,7 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 	e->event.base.length = sizeof(e->event.seq);
 	e->event.seq.user_data = queue_seq->user_data;
 
-	spin_lock_irqsave(&dev->event_lock, spin_flags);
+	spin_lock_irq(&dev->event_lock);
 
 	/*
 	 * drm_crtc_vblank_off() might have been called after we called
@@ -2149,11 +2144,11 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 		queue_seq->sequence = req_seq;
 	}
 
-	spin_unlock_irqrestore(&dev->event_lock, spin_flags);
+	spin_unlock_irq(&dev->event_lock);
 	return 0;
 
 err_unlock:
-	spin_unlock_irqrestore(&dev->event_lock, spin_flags);
+	spin_unlock_irq(&dev->event_lock);
 	drm_crtc_vblank_put(crtc);
 err_free:
 	kfree(e);

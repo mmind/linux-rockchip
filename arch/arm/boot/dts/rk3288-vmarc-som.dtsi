@@ -38,6 +38,12 @@
 	snps,reset-gpio = <&gpio4 RK_PA7 GPIO_ACTIVE_HIGH>;
 };
 
+&hdmi {
+	ddc-i2c-bus = <&i2c5>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&hdmi_cec_c0>;
+};
+
 &i2c0 {
 	clock-frequency = <400000>;
 	status = "okay";
@@ -225,6 +231,10 @@
 	};
 };
 
+&i2c5 {
+	status = "okay";
+};
+
 &io_domains {
 	bb-supply = <&vcc_io>;
 	flash0-supply = <&vccio_flash>;
@@ -267,4 +277,46 @@
 			rockchip,pins = <6 RK_PC5 1 &pcfg_pull_up_drv_8ma>;
 		};
 	};
+
+	vbus_host {
+		usb1_en_oc: usb1-en-oc {
+			rockchip,pins = <0 RK_PC1 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	vbus_typec {
+		usb0_en_oc: usb0-en-oc {
+			rockchip,pins = <0 RK_PB5 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+};
+
+&usbphy {
+	status = "okay";
+};
+
+&usb_host0_ehci {
+	status = "okay";
+};
+
+&usb_host0_ohci {
+	status = "okay";
+};
+
+&usb_host1 {
+	status = "okay";
+};
+
+&usb_otg {
+	status = "okay";
+};
+
+&vbus_host {
+	enable-active-high;
+	gpio = <&gpio0 RK_PC1 GPIO_ACTIVE_HIGH>; /* USB1_EN_OC# */
+};
+
+&vbus_typec {
+	enable-active-high;
+	gpio = <&gpio0 RK_PB5 GPIO_ACTIVE_HIGH>; /* USB0_EN_OC# */
 };
