@@ -198,7 +198,7 @@ static int vcn_v3_0_sw_init(void *handle)
 		} else {
 			ring->doorbell_index = (adev->doorbell_index.vcn.vcn_ring0_1 << 1) + 8 * i;
 		}
-		if (i != 0)
+		if (adev->asic_type == CHIP_SIENNA_CICHLID && i != 0)
 			ring->no_scheduler = true;
 		sprintf(ring->name, "vcn_dec_%d", i);
 		r = amdgpu_ring_init(adev, ring, 512, &adev->vcn.inst[i].irq, 0,
@@ -222,7 +222,7 @@ static int vcn_v3_0_sw_init(void *handle)
 			} else {
 				ring->doorbell_index = (adev->doorbell_index.vcn.vcn_ring0_1 << 1) + 2 + j + 8 * i;
 			}
-			if (i != 1)
+			if (adev->asic_type == CHIP_SIENNA_CICHLID && i != 1)
 				ring->no_scheduler = true;
 			sprintf(ring->name, "vcn_enc_%d.%d", i, j);
 			r = amdgpu_ring_init(adev, ring, 512, &adev->vcn.inst[i].irq, 0,
@@ -746,18 +746,18 @@ static void vcn_v3_0_disable_clock_gating(struct amdgpu_device *adev, int inst)
 		| UVD_SUVD_CGC_GATE__IME_HEVC_MASK
 		| UVD_SUVD_CGC_GATE__EFC_MASK
 		| UVD_SUVD_CGC_GATE__SAOE_MASK
-		| 0x08000000
+		| UVD_SUVD_CGC_GATE__SRE_AV1_MASK
 		| UVD_SUVD_CGC_GATE__FBC_PCLK_MASK
 		| UVD_SUVD_CGC_GATE__FBC_CCLK_MASK
-		| 0x40000000
+		| UVD_SUVD_CGC_GATE__SCM_AV1_MASK
 		| UVD_SUVD_CGC_GATE__SMPA_MASK);
 	WREG32_SOC15(VCN, inst, mmUVD_SUVD_CGC_GATE, data);
 
 	data = RREG32_SOC15(VCN, inst, mmUVD_SUVD_CGC_GATE2);
 	data |= (UVD_SUVD_CGC_GATE2__MPBE0_MASK
 		| UVD_SUVD_CGC_GATE2__MPBE1_MASK
-		| 0x00000004
-		| 0x00000008
+		| UVD_SUVD_CGC_GATE2__SIT_AV1_MASK
+		| UVD_SUVD_CGC_GATE2__SDB_AV1_MASK
 		| UVD_SUVD_CGC_GATE2__MPC1_MASK);
 	WREG32_SOC15(VCN, inst, mmUVD_SUVD_CGC_GATE2, data);
 
@@ -776,8 +776,8 @@ static void vcn_v3_0_disable_clock_gating(struct amdgpu_device *adev, int inst)
 		| UVD_SUVD_CGC_CTRL__SMPA_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__MPBE0_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__MPBE1_MODE_MASK
-		| 0x00008000
-		| 0x00010000
+		| UVD_SUVD_CGC_CTRL__SIT_AV1_MODE_MASK
+		| UVD_SUVD_CGC_CTRL__SDB_AV1_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__MPC1_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__FBC_PCLK_MASK
 		| UVD_SUVD_CGC_CTRL__FBC_CCLK_MASK);
@@ -892,8 +892,8 @@ static void vcn_v3_0_enable_clock_gating(struct amdgpu_device *adev, int inst)
 		| UVD_SUVD_CGC_CTRL__SMPA_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__MPBE0_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__MPBE1_MODE_MASK
-		| 0x00008000
-		| 0x00010000
+		| UVD_SUVD_CGC_CTRL__SIT_AV1_MODE_MASK
+		| UVD_SUVD_CGC_CTRL__SDB_AV1_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__MPC1_MODE_MASK
 		| UVD_SUVD_CGC_CTRL__FBC_PCLK_MASK
 		| UVD_SUVD_CGC_CTRL__FBC_CCLK_MASK);
@@ -1011,6 +1011,11 @@ static int vcn_v3_0_start_dpg_mode(struct amdgpu_device *adev, int inst_idx, boo
 	tmp = REG_SET_FIELD(tmp, UVD_RBC_RB_CNTL, RB_RPTR_WR_EN, 1);
 	WREG32_SOC15(VCN, inst_idx, mmUVD_RBC_RB_CNTL, tmp);
 
+	/* Stall DPG before WPTR/RPTR reset */
+	WREG32_P(SOC15_REG_OFFSET(VCN, inst_idx, mmUVD_POWER_STATUS),
+		UVD_POWER_STATUS__STALL_DPG_POWER_UP_MASK,
+		~UVD_POWER_STATUS__STALL_DPG_POWER_UP_MASK);
+
 	/* set the write pointer delay */
 	WREG32_SOC15(VCN, inst_idx, mmUVD_RBC_RB_WPTR_CNTL, 0);
 
@@ -1032,6 +1037,10 @@ static int vcn_v3_0_start_dpg_mode(struct amdgpu_device *adev, int inst_idx, boo
 	ring->wptr = RREG32_SOC15(VCN, inst_idx, mmUVD_RBC_RB_RPTR);
 	WREG32_SOC15(VCN, inst_idx, mmUVD_RBC_RB_WPTR,
 		lower_32_bits(ring->wptr));
+
+	/* Unstall DPG */
+	WREG32_P(SOC15_REG_OFFSET(VCN, inst_idx, mmUVD_POWER_STATUS),
+		0, ~UVD_POWER_STATUS__STALL_DPG_POWER_UP_MASK);
 
 	return 0;
 }
@@ -1556,8 +1565,14 @@ static int vcn_v3_0_pause_dpg_mode(struct amdgpu_device *adev,
 					UVD_DPG_PAUSE__NJ_PAUSE_DPG_ACK_MASK,
 					UVD_DPG_PAUSE__NJ_PAUSE_DPG_ACK_MASK);
 
+				/* Stall DPG before WPTR/RPTR reset */
+				WREG32_P(SOC15_REG_OFFSET(VCN, inst_idx, mmUVD_POWER_STATUS),
+					UVD_POWER_STATUS__STALL_DPG_POWER_UP_MASK,
+					~UVD_POWER_STATUS__STALL_DPG_POWER_UP_MASK);
+
 				/* Restore */
 				ring = &adev->vcn.inst[inst_idx].ring_enc[0];
+				ring->wptr = 0;
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_BASE_LO, ring->gpu_addr);
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_BASE_HI, upper_32_bits(ring->gpu_addr));
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_SIZE, ring->ring_size / 4);
@@ -1565,14 +1580,16 @@ static int vcn_v3_0_pause_dpg_mode(struct amdgpu_device *adev,
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_WPTR, lower_32_bits(ring->wptr));
 
 				ring = &adev->vcn.inst[inst_idx].ring_enc[1];
+				ring->wptr = 0;
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_BASE_LO2, ring->gpu_addr);
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_BASE_HI2, upper_32_bits(ring->gpu_addr));
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_SIZE2, ring->ring_size / 4);
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_RPTR2, lower_32_bits(ring->wptr));
 				WREG32_SOC15(VCN, inst_idx, mmUVD_RB_WPTR2, lower_32_bits(ring->wptr));
 
-				WREG32_SOC15(VCN, inst_idx, mmUVD_RBC_RB_WPTR,
-					RREG32_SOC15(VCN, inst_idx, mmUVD_SCRATCH2) & 0x7FFFFFFF);
+				/* Unstall DPG */
+				WREG32_P(SOC15_REG_OFFSET(VCN, inst_idx, mmUVD_POWER_STATUS),
+					0, ~UVD_POWER_STATUS__STALL_DPG_POWER_UP_MASK);
 
 				SOC15_WAIT_ON_RREG(VCN, inst_idx, mmUVD_POWER_STATUS,
 					UVD_PGFSM_CONFIG__UVDM_UVDU_PWR_ON, UVD_POWER_STATUS__UVD_POWER_STATUS_MASK);
@@ -1629,10 +1646,6 @@ static uint64_t vcn_v3_0_dec_ring_get_wptr(struct amdgpu_ring *ring)
 static void vcn_v3_0_dec_ring_set_wptr(struct amdgpu_ring *ring)
 {
 	struct amdgpu_device *adev = ring->adev;
-
-	if (adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG)
-		WREG32_SOC15(VCN, ring->me, mmUVD_SCRATCH2,
-			lower_32_bits(ring->wptr) | 0x80000000);
 
 	if (ring->use_doorbell) {
 		adev->wb.wb[ring->wptr_offs] = lower_32_bits(ring->wptr);

@@ -356,7 +356,15 @@ static ssize_t _nfs42_proc_copy(struct file *src,
 
 	truncate_pagecache_range(dst_inode, pos_dst,
 				 pos_dst + res->write_res.count);
-
+	spin_lock(&dst_inode->i_lock);
+	NFS_I(dst_inode)->cache_validity |= (NFS_INO_REVAL_PAGECACHE |
+			NFS_INO_REVAL_FORCED | NFS_INO_INVALID_SIZE |
+			NFS_INO_INVALID_ATTR | NFS_INO_INVALID_DATA);
+	spin_unlock(&dst_inode->i_lock);
+	spin_lock(&src_inode->i_lock);
+	NFS_I(src_inode)->cache_validity |= (NFS_INO_REVAL_PAGECACHE |
+			NFS_INO_REVAL_FORCED | NFS_INO_INVALID_ATIME);
+	spin_unlock(&src_inode->i_lock);
 	status = res->write_res.count;
 out:
 	if (args->sync)
@@ -1233,12 +1241,13 @@ static ssize_t _nfs42_proc_listxattrs(struct inode *inode, void *buf,
 		.rpc_resp	= &res,
 	};
 	u32 xdrlen;
-	int ret, np;
+	int ret, np, i;
 
 
+	ret = -ENOMEM;
 	res.scratch = alloc_page(GFP_KERNEL);
 	if (!res.scratch)
-		return -ENOMEM;
+		goto out;
 
 	xdrlen = nfs42_listxattr_xdrsize(buflen);
 	if (xdrlen > server->lxasize)
@@ -1246,9 +1255,12 @@ static ssize_t _nfs42_proc_listxattrs(struct inode *inode, void *buf,
 	np = xdrlen / PAGE_SIZE + 1;
 
 	pages = kcalloc(np, sizeof(struct page *), GFP_KERNEL);
-	if (pages == NULL) {
-		__free_page(res.scratch);
-		return -ENOMEM;
+	if (!pages)
+		goto out_free_scratch;
+	for (i = 0; i < np; i++) {
+		pages[i] = alloc_page(GFP_KERNEL);
+		if (!pages[i])
+			goto out_free_pages;
 	}
 
 	arg.xattr_pages = pages;
@@ -1263,14 +1275,15 @@ static ssize_t _nfs42_proc_listxattrs(struct inode *inode, void *buf,
 		*eofp = res.eof;
 	}
 
+out_free_pages:
 	while (--np >= 0) {
 		if (pages[np])
 			__free_page(pages[np]);
 	}
-
-	__free_page(res.scratch);
 	kfree(pages);
-
+out_free_scratch:
+	__free_page(res.scratch);
+out:
 	return ret;
 
 }
