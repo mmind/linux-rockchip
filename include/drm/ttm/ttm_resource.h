@@ -33,7 +33,7 @@
 
 #define TTM_MAX_BO_PRIORITY	4U
 
-struct ttm_bo_device;
+struct ttm_device;
 struct ttm_resource_manager;
 struct ttm_resource;
 struct ttm_place;
@@ -171,7 +171,6 @@ struct ttm_bus_placement {
 struct ttm_resource {
 	void *mm_node;
 	unsigned long start;
-	unsigned long size;
 	unsigned long num_pages;
 	uint32_t page_alignment;
 	uint32_t mem_type;
@@ -191,6 +190,10 @@ struct ttm_resource {
 static inline void
 ttm_resource_manager_set_used(struct ttm_resource_manager *man, bool used)
 {
+	int i;
+
+	for (i = 0; i < TTM_MAX_BO_PRIORITY; i++)
+		WARN_ON(!list_empty(&man->lru[i]));
 	man->use_type = used;
 }
 
@@ -230,7 +233,7 @@ void ttm_resource_free(struct ttm_buffer_object *bo, struct ttm_resource *res);
 void ttm_resource_manager_init(struct ttm_resource_manager *man,
 			       unsigned long p_size);
 
-int ttm_resource_manager_evict_all(struct ttm_bo_device *bdev,
+int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 				   struct ttm_resource_manager *man);
 
 void ttm_resource_manager_debug(struct ttm_resource_manager *man,

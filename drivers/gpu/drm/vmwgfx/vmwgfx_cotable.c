@@ -63,6 +63,7 @@ struct vmw_cotable {
  * @min_initial_entries: Min number of initial intries at cotable allocation
  * for this cotable type.
  * @size: Size of each entry.
+ * @unbind_func: Unbind call-back function.
  */
 struct vmw_cotable_info {
 	u32 min_initial_entries;
@@ -175,7 +176,7 @@ static int vmw_cotable_unscrub(struct vmw_resource *res)
 	WARN_ON_ONCE(bo->mem.mem_type != VMW_PL_MOB);
 	dma_resv_assert_held(bo->base.resv);
 
-	cmd = VMW_FIFO_RESERVE(dev_priv, sizeof(*cmd));
+	cmd = VMW_CMD_RESERVE(dev_priv, sizeof(*cmd));
 	if (!cmd)
 		return -ENOMEM;
 
@@ -188,7 +189,7 @@ static int vmw_cotable_unscrub(struct vmw_resource *res)
 	cmd->body.mobid = bo->mem.start;
 	cmd->body.validSizeInBytes = vcotbl->size_read_back;
 
-	vmw_fifo_commit_flush(dev_priv, sizeof(*cmd));
+	vmw_cmd_commit_flush(dev_priv, sizeof(*cmd));
 	vcotbl->scrubbed = false;
 
 	return 0;
@@ -263,7 +264,7 @@ int vmw_cotable_scrub(struct vmw_resource *res, bool readback)
 	if (readback)
 		submit_size += sizeof(*cmd0);
 
-	cmd1 = VMW_FIFO_RESERVE(dev_priv, submit_size);
+	cmd1 = VMW_CMD_RESERVE(dev_priv, submit_size);
 	if (!cmd1)
 		return -ENOMEM;
 
@@ -283,7 +284,7 @@ int vmw_cotable_scrub(struct vmw_resource *res, bool readback)
 	cmd1->body.type = vcotbl->type;
 	cmd1->body.mobid = SVGA3D_INVALID_ID;
 	cmd1->body.validSizeInBytes = 0;
-	vmw_fifo_commit_flush(dev_priv, submit_size);
+	vmw_cmd_commit_flush(dev_priv, submit_size);
 	vcotbl->scrubbed = true;
 
 	/* Trigger a create() on next validate. */
@@ -297,7 +298,7 @@ int vmw_cotable_scrub(struct vmw_resource *res, bool readback)
  *
  * @res: Pointer to the cotable resource.
  * @readback: Whether to read back cotable data to the backup buffer.
- * val_buf: Pointer to a struct ttm_validate_buffer prepared by the caller
+ * @val_buf: Pointer to a struct ttm_validate_buffer prepared by the caller
  * for convenience / fencing.
  *
  * Unbinds the cotable from the device and fences the backup buffer.
@@ -349,7 +350,7 @@ static int vmw_cotable_readback(struct vmw_resource *res)
 	struct vmw_fence_obj *fence;
 
 	if (!vcotbl->scrubbed) {
-		cmd = VMW_FIFO_RESERVE(dev_priv, sizeof(*cmd));
+		cmd = VMW_CMD_RESERVE(dev_priv, sizeof(*cmd));
 		if (!cmd)
 			return -ENOMEM;
 
@@ -358,7 +359,7 @@ static int vmw_cotable_readback(struct vmw_resource *res)
 		cmd->body.cid = vcotbl->ctx->id;
 		cmd->body.type = vcotbl->type;
 		vcotbl->size_read_back = res->backup_size;
-		vmw_fifo_commit(dev_priv, sizeof(*cmd));
+		vmw_cmd_commit(dev_priv, sizeof(*cmd));
 	}
 
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv, &fence, NULL);
@@ -430,7 +431,7 @@ static int vmw_cotable_resize(struct vmw_resource *res, size_t new_size)
 	 * Do a page by page copy of COTables. This eliminates slow vmap()s.
 	 * This should really be a TTM utility.
 	 */
-	for (i = 0; i < old_bo->num_pages; ++i) {
+	for (i = 0; i < old_bo->mem.num_pages; ++i) {
 		bool dummy;
 
 		ret = ttm_bo_kmap(old_bo, i, 1, &old_map);

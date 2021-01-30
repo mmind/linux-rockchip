@@ -43,9 +43,9 @@
 #include <nvif/if500b.h>
 #include <nvif/if900b.h>
 
-static int nouveau_ttm_tt_bind(struct ttm_bo_device *bdev, struct ttm_tt *ttm,
+static int nouveau_ttm_tt_bind(struct ttm_device *bdev, struct ttm_tt *ttm,
 			       struct ttm_resource *reg);
-static void nouveau_ttm_tt_unbind(struct ttm_bo_device *bdev, struct ttm_tt *ttm);
+static void nouveau_ttm_tt_unbind(struct ttm_device *bdev, struct ttm_tt *ttm);
 
 /*
  * NV10-NV40 tiling helpers
@@ -473,10 +473,10 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t domain, bool contig)
 
 	switch (bo->mem.mem_type) {
 	case TTM_PL_VRAM:
-		drm->gem.vram_available -= bo->mem.size;
+		drm->gem.vram_available -= bo->base.size;
 		break;
 	case TTM_PL_TT:
-		drm->gem.gart_available -= bo->mem.size;
+		drm->gem.gart_available -= bo->base.size;
 		break;
 	default:
 		break;
@@ -504,10 +504,10 @@ nouveau_bo_unpin(struct nouveau_bo *nvbo)
 	if (!nvbo->bo.pin_count) {
 		switch (bo->mem.mem_type) {
 		case TTM_PL_VRAM:
-			drm->gem.vram_available += bo->mem.size;
+			drm->gem.vram_available += bo->base.size;
 			break;
 		case TTM_PL_TT:
-			drm->gem.gart_available += bo->mem.size;
+			drm->gem.gart_available += bo->base.size;
 			break;
 		default:
 			break;
@@ -674,7 +674,7 @@ nouveau_ttm_tt_create(struct ttm_buffer_object *bo, uint32_t page_flags)
 }
 
 static int
-nouveau_ttm_tt_bind(struct ttm_bo_device *bdev, struct ttm_tt *ttm,
+nouveau_ttm_tt_bind(struct ttm_device *bdev, struct ttm_tt *ttm,
 		    struct ttm_resource *reg)
 {
 #if IS_ENABLED(CONFIG_AGP)
@@ -690,7 +690,7 @@ nouveau_ttm_tt_bind(struct ttm_bo_device *bdev, struct ttm_tt *ttm,
 }
 
 static void
-nouveau_ttm_tt_unbind(struct ttm_bo_device *bdev, struct ttm_tt *ttm)
+nouveau_ttm_tt_unbind(struct ttm_device *bdev, struct ttm_tt *ttm)
 {
 #if IS_ENABLED(CONFIG_AGP)
 	struct nouveau_drm *drm = nouveau_bdev(bdev);
@@ -774,7 +774,10 @@ nouveau_bo_move_m2mf(struct ttm_buffer_object *bo, int evict,
 			return ret;
 	}
 
-	mutex_lock_nested(&cli->mutex, SINGLE_DEPTH_NESTING);
+	if (drm_drv_uses_atomic_modeset(drm->dev))
+		mutex_lock(&cli->mutex);
+	else
+		mutex_lock_nested(&cli->mutex, SINGLE_DEPTH_NESTING);
 	ret = nouveau_fence_sync(nouveau_bo(bo), chan, true, ctx->interruptible);
 	if (ret == 0) {
 		ret = drm->ttm.move(chan, bo, &bo->mem, new_reg);
@@ -910,7 +913,7 @@ nouveau_bo_vm_bind(struct ttm_buffer_object *bo, struct ttm_resource *new_reg,
 		return 0;
 
 	if (drm->client.device.info.family >= NV_DEVICE_INFO_V0_CELSIUS) {
-		*new_tile = nv10_bo_set_tiling(dev, offset, new_reg->size,
+		*new_tile = nv10_bo_set_tiling(dev, offset, bo->base.size,
 					       nvbo->mode, nvbo->zeta);
 	}
 
@@ -1052,7 +1055,7 @@ nouveau_ttm_io_mem_free_locked(struct nouveau_drm *drm,
 }
 
 static int
-nouveau_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_resource *reg)
+nouveau_ttm_io_mem_reserve(struct ttm_device *bdev, struct ttm_resource *reg)
 {
 	struct nouveau_drm *drm = nouveau_bdev(bdev);
 	struct nvkm_device *device = nvxx_device(&drm->client.device);
@@ -1160,7 +1163,7 @@ out:
 }
 
 static void
-nouveau_ttm_io_mem_free(struct ttm_bo_device *bdev, struct ttm_resource *reg)
+nouveau_ttm_io_mem_free(struct ttm_device *bdev, struct ttm_resource *reg)
 {
 	struct nouveau_drm *drm = nouveau_bdev(bdev);
 
@@ -1220,7 +1223,7 @@ vm_fault_t nouveau_ttm_fault_reserve_notify(struct ttm_buffer_object *bo)
 }
 
 static int
-nouveau_ttm_tt_populate(struct ttm_bo_device *bdev,
+nouveau_ttm_tt_populate(struct ttm_device *bdev,
 			struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
 {
 	struct ttm_tt *ttm_dma = (void *)ttm;
@@ -1232,9 +1235,8 @@ nouveau_ttm_tt_populate(struct ttm_bo_device *bdev,
 		return 0;
 
 	if (slave && ttm->sg) {
-		/* make userspace faulting work */
-		drm_prime_sg_to_page_addr_arrays(ttm->sg, ttm->pages,
-						 ttm_dma->dma_address, ttm->num_pages);
+		drm_prime_sg_to_dma_addr_array(ttm->sg, ttm_dma->dma_address,
+					       ttm->num_pages);
 		return 0;
 	}
 
@@ -1245,7 +1247,7 @@ nouveau_ttm_tt_populate(struct ttm_bo_device *bdev,
 }
 
 static void
-nouveau_ttm_tt_unpopulate(struct ttm_bo_device *bdev,
+nouveau_ttm_tt_unpopulate(struct ttm_device *bdev,
 			  struct ttm_tt *ttm)
 {
 	struct nouveau_drm *drm;
@@ -1262,7 +1264,7 @@ nouveau_ttm_tt_unpopulate(struct ttm_bo_device *bdev,
 }
 
 static void
-nouveau_ttm_tt_destroy(struct ttm_bo_device *bdev,
+nouveau_ttm_tt_destroy(struct ttm_device *bdev,
 		       struct ttm_tt *ttm)
 {
 #if IS_ENABLED(CONFIG_AGP)
@@ -1294,7 +1296,7 @@ nouveau_bo_delete_mem_notify(struct ttm_buffer_object *bo)
 	nouveau_bo_move_ntfy(bo, false, NULL);
 }
 
-struct ttm_bo_driver nouveau_bo_driver = {
+struct ttm_device_funcs nouveau_bo_driver = {
 	.ttm_tt_create = &nouveau_ttm_tt_create,
 	.ttm_tt_populate = &nouveau_ttm_tt_populate,
 	.ttm_tt_unpopulate = &nouveau_ttm_tt_unpopulate,

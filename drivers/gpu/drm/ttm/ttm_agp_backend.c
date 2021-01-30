@@ -32,7 +32,6 @@
 
 #define pr_fmt(fmt) "[TTM] " fmt
 
-#include <drm/ttm/ttm_module.h>
 #include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_placement.h>
 #include <linux/agp_backend.h>
@@ -50,7 +49,7 @@ struct ttm_agp_backend {
 int ttm_agp_bind(struct ttm_tt *ttm, struct ttm_resource *bo_mem)
 {
 	struct ttm_agp_backend *agp_be = container_of(ttm, struct ttm_agp_backend, ttm);
-	struct page *dummy_read_page = ttm_bo_glob.dummy_read_page;
+	struct page *dummy_read_page = ttm_glob.dummy_read_page;
 	struct drm_mm_node *node = bo_mem->mm_node;
 	struct agp_memory *mem;
 	int ret, cached = ttm->caching == ttm_cached;

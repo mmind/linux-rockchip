@@ -638,27 +638,29 @@ void amdgpu_vm_move_to_lru_tail(struct amdgpu_device *adev,
 	struct amdgpu_vm_bo_base *bo_base;
 
 	if (vm->bulk_moveable) {
-		spin_lock(&ttm_bo_glob.lru_lock);
+		spin_lock(&ttm_glob.lru_lock);
 		ttm_bo_bulk_move_lru_tail(&vm->lru_bulk_move);
-		spin_unlock(&ttm_bo_glob.lru_lock);
+		spin_unlock(&ttm_glob.lru_lock);
 		return;
 	}
 
 	memset(&vm->lru_bulk_move, 0, sizeof(vm->lru_bulk_move));
 
-	spin_lock(&ttm_bo_glob.lru_lock);
+	spin_lock(&ttm_glob.lru_lock);
 	list_for_each_entry(bo_base, &vm->idle, vm_status) {
 		struct amdgpu_bo *bo = bo_base->bo;
 
 		if (!bo->parent)
 			continue;
 
-		ttm_bo_move_to_lru_tail(&bo->tbo, &vm->lru_bulk_move);
+		ttm_bo_move_to_lru_tail(&bo->tbo, &bo->tbo.mem,
+					&vm->lru_bulk_move);
 		if (bo->shadow)
 			ttm_bo_move_to_lru_tail(&bo->shadow->tbo,
+						&bo->shadow->tbo.mem,
 						&vm->lru_bulk_move);
 	}
-	spin_unlock(&ttm_bo_glob.lru_lock);
+	spin_unlock(&ttm_glob.lru_lock);
 
 	vm->bulk_moveable = true;
 }

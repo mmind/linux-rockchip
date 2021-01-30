@@ -46,33 +46,33 @@ struct ttm_transfer_obj {
 	struct ttm_buffer_object *bo;
 };
 
-int ttm_mem_io_reserve(struct ttm_bo_device *bdev,
+int ttm_mem_io_reserve(struct ttm_device *bdev,
 		       struct ttm_resource *mem)
 {
 	if (mem->bus.offset || mem->bus.addr)
 		return 0;
 
 	mem->bus.is_iomem = false;
-	if (!bdev->driver->io_mem_reserve)
+	if (!bdev->funcs->io_mem_reserve)
 		return 0;
 
-	return bdev->driver->io_mem_reserve(bdev, mem);
+	return bdev->funcs->io_mem_reserve(bdev, mem);
 }
 
-void ttm_mem_io_free(struct ttm_bo_device *bdev,
+void ttm_mem_io_free(struct ttm_device *bdev,
 		     struct ttm_resource *mem)
 {
 	if (!mem->bus.offset && !mem->bus.addr)
 		return;
 
-	if (bdev->driver->io_mem_free)
-		bdev->driver->io_mem_free(bdev, mem);
+	if (bdev->funcs->io_mem_free)
+		bdev->funcs->io_mem_free(bdev, mem);
 
 	mem->bus.offset = 0;
 	mem->bus.addr = NULL;
 }
 
-static int ttm_resource_ioremap(struct ttm_bo_device *bdev,
+static int ttm_resource_ioremap(struct ttm_device *bdev,
 			       struct ttm_resource *mem,
 			       void **virtual)
 {
@@ -102,7 +102,7 @@ static int ttm_resource_ioremap(struct ttm_bo_device *bdev,
 	return 0;
 }
 
-static void ttm_resource_iounmap(struct ttm_bo_device *bdev,
+static void ttm_resource_iounmap(struct ttm_device *bdev,
 				struct ttm_resource *mem,
 				void *virtual)
 {
@@ -172,7 +172,7 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 		       struct ttm_operation_ctx *ctx,
 		       struct ttm_resource *new_mem)
 {
-	struct ttm_bo_device *bdev = bo->bdev;
+	struct ttm_device *bdev = bo->bdev;
 	struct ttm_resource_manager *man = ttm_manager_type(bdev, new_mem->mem_type);
 	struct ttm_tt *ttm = bo->ttm;
 	struct ttm_resource *old_mem = &bo->mem;
@@ -300,7 +300,7 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	 * TODO: Explicit member copy would probably be better here.
 	 */
 
-	atomic_inc(&ttm_bo_glob.bo_count);
+	atomic_inc(&ttm_glob.bo_count);
 	INIT_LIST_HEAD(&fbo->base.ddestroy);
 	INIT_LIST_HEAD(&fbo->base.lru);
 	INIT_LIST_HEAD(&fbo->base.swap);
@@ -310,7 +310,7 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	kref_init(&fbo->base.kref);
 	fbo->base.destroy = &ttm_transfered_destroy;
 	fbo->base.acc_size = 0;
-	fbo->base.pin_count = 1;
+	fbo->base.pin_count = 0;
 	if (bo->type != ttm_bo_type_sg)
 		fbo->base.base.resv = &fbo->base.base._resv;
 
@@ -318,6 +318,8 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	fbo->base.base.dev = NULL;
 	ret = dma_resv_trylock(&fbo->base.base._resv);
 	WARN_ON(!ret);
+
+	ttm_bo_move_to_lru_tail_unlocked(&fbo->base);
 
 	*new_obj = &fbo->base;
 	return 0;
@@ -429,9 +431,9 @@ int ttm_bo_kmap(struct ttm_buffer_object *bo,
 
 	map->virtual = NULL;
 	map->bo = bo;
-	if (num_pages > bo->num_pages)
+	if (num_pages > bo->mem.num_pages)
 		return -EINVAL;
-	if (start_page > bo->num_pages)
+	if ((start_page + num_pages) > bo->mem.num_pages)
 		return -EINVAL;
 
 	ret = ttm_mem_io_reserve(bo->bdev, &bo->mem);
@@ -483,14 +485,14 @@ int ttm_bo_vmap(struct ttm_buffer_object *bo, struct dma_buf_map *map)
 
 	if (mem->bus.is_iomem) {
 		void __iomem *vaddr_iomem;
-		size_t size = bo->num_pages << PAGE_SHIFT;
 
 		if (mem->bus.addr)
 			vaddr_iomem = (void __iomem *)mem->bus.addr;
 		else if (mem->bus.caching == ttm_write_combined)
-			vaddr_iomem = ioremap_wc(mem->bus.offset, size);
+			vaddr_iomem = ioremap_wc(mem->bus.offset,
+						 bo->base.size);
 		else
-			vaddr_iomem = ioremap(mem->bus.offset, size);
+			vaddr_iomem = ioremap(mem->bus.offset, bo->base.size);
 
 		if (!vaddr_iomem)
 			return -ENOMEM;
@@ -515,7 +517,7 @@ int ttm_bo_vmap(struct ttm_buffer_object *bo, struct dma_buf_map *map)
 		 * or to make the buffer object look contiguous.
 		 */
 		prot = ttm_io_prot(bo, mem, PAGE_KERNEL);
-		vaddr = vmap(ttm->pages, bo->num_pages, 0, prot);
+		vaddr = vmap(ttm->pages, ttm->num_pages, 0, prot);
 		if (!vaddr)
 			return -ENOMEM;
 
@@ -600,7 +602,7 @@ static int ttm_bo_move_to_ghost(struct ttm_buffer_object *bo,
 static void ttm_bo_move_pipeline_evict(struct ttm_buffer_object *bo,
 				       struct dma_fence *fence)
 {
-	struct ttm_bo_device *bdev = bo->bdev;
+	struct ttm_device *bdev = bo->bdev;
 	struct ttm_resource_manager *from = ttm_manager_type(bdev, bo->mem.mem_type);
 
 	/**
@@ -626,7 +628,7 @@ int ttm_bo_move_accel_cleanup(struct ttm_buffer_object *bo,
 			      bool pipeline,
 			      struct ttm_resource *new_mem)
 {
-	struct ttm_bo_device *bdev = bo->bdev;
+	struct ttm_device *bdev = bo->bdev;
 	struct ttm_resource_manager *from = ttm_manager_type(bdev, bo->mem.mem_type);
 	struct ttm_resource_manager *man = ttm_manager_type(bdev, new_mem->mem_type);
 	int ret = 0;
