@@ -1094,12 +1094,9 @@ static int cio2_v4l2_try_fmt(struct file *file, void *fh, struct v4l2_format *f)
 	mpix->pixelformat = fmt->fourcc;
 	mpix->colorspace = V4L2_COLORSPACE_RAW;
 	mpix->field = V4L2_FIELD_NONE;
-	memset(mpix->reserved, 0, sizeof(mpix->reserved));
 	mpix->plane_fmt[0].bytesperline = cio2_bytesperline(mpix->width);
 	mpix->plane_fmt[0].sizeimage = mpix->plane_fmt[0].bytesperline *
 							mpix->height;
-	memset(mpix->plane_fmt[0].reserved, 0,
-	       sizeof(mpix->plane_fmt[0].reserved));
 
 	/* use default */
 	mpix->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
@@ -1467,7 +1464,7 @@ static int cio2_parse_firmware(struct cio2_device *cio2)
 		struct v4l2_fwnode_endpoint vep = {
 			.bus_type = V4L2_MBUS_CSI2_DPHY
 		};
-		struct sensor_async_subdev *s_asd = NULL;
+		struct sensor_async_subdev *s_asd;
 		struct fwnode_handle *ep;
 
 		ep = fwnode_graph_get_endpoint_by_id(
@@ -1481,19 +1478,15 @@ static int cio2_parse_firmware(struct cio2_device *cio2)
 		if (ret)
 			goto err_parse;
 
-		s_asd = kzalloc(sizeof(*s_asd), GFP_KERNEL);
-		if (!s_asd) {
-			ret = -ENOMEM;
+		s_asd = v4l2_async_notifier_add_fwnode_remote_subdev(
+				&cio2->notifier, ep, struct sensor_async_subdev);
+		if (IS_ERR(s_asd)) {
+			ret = PTR_ERR(s_asd);
 			goto err_parse;
 		}
 
 		s_asd->csi2.port = vep.base.port;
 		s_asd->csi2.lanes = vep.bus.mipi_csi2.num_data_lanes;
-
-		ret = v4l2_async_notifier_add_fwnode_remote_subdev(
-			&cio2->notifier, ep, &s_asd->asd);
-		if (ret)
-			goto err_parse;
 
 		fwnode_handle_put(ep);
 
@@ -1501,7 +1494,6 @@ static int cio2_parse_firmware(struct cio2_device *cio2)
 
 err_parse:
 		fwnode_handle_put(ep);
-		kfree(s_asd);
 		return ret;
 	}
 

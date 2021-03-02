@@ -822,7 +822,7 @@ v4l2_async_notifier_fwnode_parse_endpoint(struct device *dev,
 	if (ret < 0)
 		goto out_err;
 
-	ret = v4l2_async_notifier_add_subdev(notifier, asd);
+	ret = __v4l2_async_notifier_add_subdev(notifier, asd);
 	if (ret < 0) {
 		/* not an error if asd already exists */
 		if (ret == -EEXIST)
@@ -944,7 +944,7 @@ static int v4l2_fwnode_reference_parse(struct device *dev,
 
 		asd = v4l2_async_notifier_add_fwnode_subdev(notifier,
 							    args.fwnode,
-							    sizeof(*asd));
+							    struct v4l2_async_subdev);
 		fwnode_handle_put(args.fwnode);
 		if (IS_ERR(asd)) {
 			/* not an error if asd already exists */
@@ -1244,7 +1244,7 @@ v4l2_fwnode_reference_parse_int_props(struct device *dev,
 		struct v4l2_async_subdev *asd;
 
 		asd = v4l2_async_notifier_add_fwnode_subdev(notifier, fwnode,
-							    sizeof(*asd));
+							    struct v4l2_async_subdev);
 		fwnode_handle_put(fwnode);
 		if (IS_ERR(asd)) {
 			ret = PTR_ERR(asd);
