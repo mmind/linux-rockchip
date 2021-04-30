@@ -47,12 +47,6 @@
 #define VMW_MIN_INITIAL_WIDTH 800
 #define VMW_MIN_INITIAL_HEIGHT 600
 
-#ifndef VMWGFX_GIT_VERSION
-#define VMWGFX_GIT_VERSION "Unknown"
-#endif
-
-#define VMWGFX_REPO "In Tree"
-
 #define VMWGFX_VALIDATION_MEM_GRAN (16*PAGE_SIZE)
 
 
@@ -712,6 +706,15 @@ static int vmw_driver_load(struct vmw_private *dev_priv, u32 pci_id)
 	dev_priv->last_read_seqno = (uint32_t) -100;
 	dev_priv->drm.dev_private = dev_priv;
 
+	mutex_init(&dev_priv->cmdbuf_mutex);
+	mutex_init(&dev_priv->binding_mutex);
+	ttm_lock_init(&dev_priv->reservation_sem);
+	spin_lock_init(&dev_priv->resource_lock);
+	spin_lock_init(&dev_priv->hw_lock);
+	spin_lock_init(&dev_priv->waiter_lock);
+	spin_lock_init(&dev_priv->cap_lock);
+	spin_lock_init(&dev_priv->cursor_lock);
+
 	ret = vmw_setup_pci_resources(dev_priv, pci_id);
 	if (ret)
 		return ret;
@@ -719,16 +722,6 @@ static int vmw_driver_load(struct vmw_private *dev_priv, u32 pci_id)
 	if (ret)
 		goto out_no_pci_or_version;
 
-	mutex_init(&dev_priv->cmdbuf_mutex);
-	mutex_init(&dev_priv->release_mutex);
-	mutex_init(&dev_priv->binding_mutex);
-	mutex_init(&dev_priv->global_kms_state_mutex);
-	ttm_lock_init(&dev_priv->reservation_sem);
-	spin_lock_init(&dev_priv->resource_lock);
-	spin_lock_init(&dev_priv->hw_lock);
-	spin_lock_init(&dev_priv->waiter_lock);
-	spin_lock_init(&dev_priv->cap_lock);
-	spin_lock_init(&dev_priv->cursor_lock);
 
 	for (i = vmw_res_context; i < vmw_res_max; ++i) {
 		idr_init(&dev_priv->res_idr[i]);
@@ -967,8 +960,6 @@ static int vmw_driver_load(struct vmw_private *dev_priv, u32 pci_id)
 	if (ret)
 		goto out_no_fifo;
 
-	DRM_INFO("Atomic: %s\n", (dev_priv->drm.driver->driver_features & DRIVER_ATOMIC)
-		 ? "yes." : "no.");
 	if (dev_priv->sm_type == VMW_SM_5)
 		DRM_INFO("SM5 support available.\n");
 	if (dev_priv->sm_type == VMW_SM_4_1)
@@ -976,11 +967,6 @@ static int vmw_driver_load(struct vmw_private *dev_priv, u32 pci_id)
 	if (dev_priv->sm_type == VMW_SM_4)
 		DRM_INFO("SM4 support available.\n");
 
-	snprintf(host_log, sizeof(host_log), "vmwgfx: %s-%s",
-		VMWGFX_REPO, VMWGFX_GIT_VERSION);
-	vmw_host_log(host_log);
-
-	memset(host_log, 0, sizeof(host_log));
 	snprintf(host_log, sizeof(host_log), "vmwgfx: Module Version: %d.%d.%d",
 		VMWGFX_DRIVER_MAJOR, VMWGFX_DRIVER_MINOR,
 		VMWGFX_DRIVER_PATCHLEVEL);
@@ -1268,6 +1254,7 @@ static void vmw_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
+	ttm_mem_global_release(&ttm_mem_glob);
 	drm_dev_unregister(dev);
 	vmw_driver_unload(dev);
 }
@@ -1383,7 +1370,7 @@ static int vmw_pm_freeze(struct device *kdev)
 	vmw_execbuf_release_pinned_bo(dev_priv);
 	vmw_resource_evict_all(dev_priv);
 	vmw_release_device_early(dev_priv);
-	while (ttm_bo_swapout(&ctx) == 0);
+	while (ttm_device_swapout(&dev_priv->bdev, &ctx, GFP_KERNEL) > 0);
 	if (dev_priv->enable_fb)
 		vmw_fifo_resource_dec(dev_priv);
 	if (atomic_read(&dev_priv->num_fifo_resources) != 0) {
@@ -1517,6 +1504,10 @@ static int vmw_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return PTR_ERR(vmw);
 
 	pci_set_drvdata(pdev, &vmw->drm);
+
+	ret = ttm_mem_global_init(&ttm_mem_glob, &pdev->dev);
+	if (ret)
+		return ret;
 
 	ret = vmw_driver_load(vmw, ent->device);
 	if (ret)

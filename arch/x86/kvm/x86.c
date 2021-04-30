@@ -156,9 +156,9 @@ module_param(tsc_tolerance_ppm, uint, S_IRUGO | S_IWUSR);
 
 /*
  * lapic timer advance (tscdeadline mode only) in nanoseconds.  '-1' enables
- * adaptive tuning starting from default advancment of 1000ns.  '0' disables
+ * adaptive tuning starting from default advancement of 1000ns.  '0' disables
  * advancement entirely.  Any other value is used as-is and disables adaptive
- * tuning, i.e. allows priveleged userspace to set an exact advancement time.
+ * tuning, i.e. allows privileged userspace to set an exact advancement time.
  */
 static int __read_mostly lapic_timer_advance_ns = -1;
 module_param(lapic_timer_advance_ns, int, S_IRUGO | S_IWUSR);
@@ -271,8 +271,7 @@ static struct kmem_cache *x86_emulator_cache;
  * When called, it means the previous get/set msr reached an invalid msr.
  * Return true if we want to ignore/silent this failed msr access.
  */
-static bool kvm_msr_ignored_check(struct kvm_vcpu *vcpu, u32 msr,
-				  u64 data, bool write)
+static bool kvm_msr_ignored_check(u32 msr, u64 data, bool write)
 {
 	const char *op = write ? "wrmsr" : "rdmsr";
 
@@ -1288,7 +1287,7 @@ static const u32 emulated_msrs_all[] = {
 	MSR_KVM_PV_EOI_EN, MSR_KVM_ASYNC_PF_INT, MSR_KVM_ASYNC_PF_ACK,
 
 	MSR_IA32_TSC_ADJUST,
-	MSR_IA32_TSCDEADLINE,
+	MSR_IA32_TSC_DEADLINE,
 	MSR_IA32_ARCH_CAPABILITIES,
 	MSR_IA32_PERF_CAPABILITIES,
 	MSR_IA32_MISC_ENABLE,
@@ -1373,7 +1372,7 @@ static u64 kvm_get_arch_capabilities(void)
 	/*
 	 * If nx_huge_pages is enabled, KVM's shadow paging will ensure that
 	 * the nested hypervisor runs with NX huge pages.  If it is not,
-	 * L1 is anyway vulnerable to ITLB_MULTIHIT explots from other
+	 * L1 is anyway vulnerable to ITLB_MULTIHIT exploits from other
 	 * L1 guests, so it need not worry about its own (L2) guests.
 	 */
 	data |= ARCH_CAP_PSCHANGE_MC_NO;
@@ -1445,7 +1444,7 @@ static int do_get_msr_feature(struct kvm_vcpu *vcpu, unsigned index, u64 *data)
 	if (r == KVM_MSR_RET_INVALID) {
 		/* Unconditionally clear the output for simplicity */
 		*data = 0;
-		if (kvm_msr_ignored_check(vcpu, index, 0, false))
+		if (kvm_msr_ignored_check(index, 0, false))
 			r = 0;
 	}
 
@@ -1620,7 +1619,7 @@ static int kvm_set_msr_ignored_check(struct kvm_vcpu *vcpu,
 	int ret = __kvm_set_msr(vcpu, index, data, host_initiated);
 
 	if (ret == KVM_MSR_RET_INVALID)
-		if (kvm_msr_ignored_check(vcpu, index, data, true))
+		if (kvm_msr_ignored_check(index, data, true))
 			ret = 0;
 
 	return ret;
@@ -1658,7 +1657,7 @@ static int kvm_get_msr_ignored_check(struct kvm_vcpu *vcpu,
 	if (ret == KVM_MSR_RET_INVALID) {
 		/* Unconditionally clear *data for simplicity */
 		*data = 0;
-		if (kvm_msr_ignored_check(vcpu, index, 0, false))
+		if (kvm_msr_ignored_check(index, 0, false))
 			ret = 0;
 	}
 
@@ -1850,7 +1849,7 @@ fastpath_t handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vcpu)
 			ret = EXIT_FASTPATH_EXIT_HANDLED;
 		}
 		break;
-	case MSR_IA32_TSCDEADLINE:
+	case MSR_IA32_TSC_DEADLINE:
 		data = kvm_read_edx_eax(vcpu);
 		if (!handle_fastpath_set_tscdeadline(vcpu, data)) {
 			kvm_skip_emulated_instruction(vcpu);
@@ -2329,7 +2328,7 @@ static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 data)
 	kvm_vcpu_write_tsc_offset(vcpu, offset);
 	raw_spin_unlock_irqrestore(&kvm->arch.tsc_write_lock, flags);
 
-	spin_lock(&kvm->arch.pvclock_gtod_sync_lock);
+	spin_lock_irqsave(&kvm->arch.pvclock_gtod_sync_lock, flags);
 	if (!matched) {
 		kvm->arch.nr_vcpus_matched_tsc = 0;
 	} else if (!already_matched) {
@@ -2337,7 +2336,7 @@ static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 data)
 	}
 
 	kvm_track_tsc_matching(vcpu);
-	spin_unlock(&kvm->arch.pvclock_gtod_sync_lock);
+	spin_unlock_irqrestore(&kvm->arch.pvclock_gtod_sync_lock, flags);
 }
 
 static inline void adjust_tsc_offset_guest(struct kvm_vcpu *vcpu,
@@ -2559,13 +2558,16 @@ static void kvm_gen_update_masterclock(struct kvm *kvm)
 	int i;
 	struct kvm_vcpu *vcpu;
 	struct kvm_arch *ka = &kvm->arch;
+	unsigned long flags;
 
 	kvm_hv_invalidate_tsc_page(kvm);
 
-	spin_lock(&ka->pvclock_gtod_sync_lock);
 	kvm_make_mclock_inprogress_request(kvm);
+
 	/* no guest entries from this point */
+	spin_lock_irqsave(&ka->pvclock_gtod_sync_lock, flags);
 	pvclock_update_vm_gtod_copy(kvm);
+	spin_unlock_irqrestore(&ka->pvclock_gtod_sync_lock, flags);
 
 	kvm_for_each_vcpu(i, vcpu, kvm)
 		kvm_make_request(KVM_REQ_CLOCK_UPDATE, vcpu);
@@ -2573,8 +2575,6 @@ static void kvm_gen_update_masterclock(struct kvm *kvm)
 	/* guest entries allowed */
 	kvm_for_each_vcpu(i, vcpu, kvm)
 		kvm_clear_request(KVM_REQ_MCLOCK_INPROGRESS, vcpu);
-
-	spin_unlock(&ka->pvclock_gtod_sync_lock);
 #endif
 }
 
@@ -2582,17 +2582,18 @@ u64 get_kvmclock_ns(struct kvm *kvm)
 {
 	struct kvm_arch *ka = &kvm->arch;
 	struct pvclock_vcpu_time_info hv_clock;
+	unsigned long flags;
 	u64 ret;
 
-	spin_lock(&ka->pvclock_gtod_sync_lock);
+	spin_lock_irqsave(&ka->pvclock_gtod_sync_lock, flags);
 	if (!ka->use_master_clock) {
-		spin_unlock(&ka->pvclock_gtod_sync_lock);
+		spin_unlock_irqrestore(&ka->pvclock_gtod_sync_lock, flags);
 		return get_kvmclock_base_ns() + ka->kvmclock_offset;
 	}
 
 	hv_clock.tsc_timestamp = ka->master_cycle_now;
 	hv_clock.system_time = ka->master_kernel_ns + ka->kvmclock_offset;
-	spin_unlock(&ka->pvclock_gtod_sync_lock);
+	spin_unlock_irqrestore(&ka->pvclock_gtod_sync_lock, flags);
 
 	/* both __this_cpu_read() and rdtsc() should be on the same cpu */
 	get_cpu();
@@ -2686,13 +2687,13 @@ static int kvm_guest_time_update(struct kvm_vcpu *v)
 	 * If the host uses TSC clock, then passthrough TSC as stable
 	 * to the guest.
 	 */
-	spin_lock(&ka->pvclock_gtod_sync_lock);
+	spin_lock_irqsave(&ka->pvclock_gtod_sync_lock, flags);
 	use_master_clock = ka->use_master_clock;
 	if (use_master_clock) {
 		host_tsc = ka->master_cycle_now;
 		kernel_ns = ka->master_kernel_ns;
 	}
-	spin_unlock(&ka->pvclock_gtod_sync_lock);
+	spin_unlock_irqrestore(&ka->pvclock_gtod_sync_lock, flags);
 
 	/* Keep irq disabled to prevent changes to the clock */
 	local_irq_save(flags);
@@ -3086,7 +3087,7 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		return kvm_set_apic_base(vcpu, msr_info);
 	case APIC_BASE_MSR ... APIC_BASE_MSR + 0xff:
 		return kvm_x2apic_msr_write(vcpu, msr, data);
-	case MSR_IA32_TSCDEADLINE:
+	case MSR_IA32_TSC_DEADLINE:
 		kvm_set_lapic_tscdeadline_msr(vcpu, data);
 		break;
 	case MSR_IA32_TSC_ADJUST:
@@ -3448,7 +3449,7 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 	case APIC_BASE_MSR ... APIC_BASE_MSR + 0xff:
 		return kvm_x2apic_msr_read(vcpu, msr_info->index, &msr_info->data);
-	case MSR_IA32_TSCDEADLINE:
+	case MSR_IA32_TSC_DEADLINE:
 		msr_info->data = kvm_get_lapic_tscdeadline_msr(vcpu);
 		break;
 	case MSR_IA32_TSC_ADJUST:
@@ -4024,7 +4025,6 @@ static void kvm_steal_time_set_preempted(struct kvm_vcpu *vcpu)
 {
 	struct kvm_host_map map;
 	struct kvm_steal_time *st;
-	int idx;
 
 	if (!(vcpu->arch.st.msr_val & KVM_MSR_ENABLED))
 		return;
@@ -4032,15 +4032,9 @@ static void kvm_steal_time_set_preempted(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.st.preempted)
 		return;
 
-	/*
-	 * Take the srcu lock as memslots will be accessed to check the gfn
-	 * cache generation against the memslots generation.
-	 */
-	idx = srcu_read_lock(&vcpu->kvm->srcu);
-
 	if (kvm_map_gfn(vcpu, vcpu->arch.st.msr_val >> PAGE_SHIFT, &map,
 			&vcpu->arch.st.cache, true))
-		goto out;
+		return;
 
 	st = map.hva +
 		offset_in_page(vcpu->arch.st.msr_val & KVM_STEAL_VALID_BITS);
@@ -4048,20 +4042,25 @@ static void kvm_steal_time_set_preempted(struct kvm_vcpu *vcpu)
 	st->preempted = vcpu->arch.st.preempted = KVM_VCPU_PREEMPTED;
 
 	kvm_unmap_gfn(vcpu, &map, &vcpu->arch.st.cache, true, true);
-
-out:
-	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 }
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
+	int idx;
+
 	if (vcpu->preempted && !vcpu->arch.guest_state_protected)
 		vcpu->arch.preempted_in_kernel = !static_call(kvm_x86_get_cpl)(vcpu);
 
+	/*
+	 * Take the srcu lock as memslots will be accessed to check the gfn
+	 * cache generation against the memslots generation.
+	 */
+	idx = srcu_read_lock(&vcpu->kvm->srcu);
 	if (kvm_xen_msr_enabled(vcpu->kvm))
 		kvm_xen_runstate_set_preempted(vcpu);
 	else
 		kvm_steal_time_set_preempted(vcpu);
+	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 
 	static_call(kvm_x86_vcpu_put)(vcpu);
 	vcpu->arch.last_host_tsc = rdtsc();
@@ -5726,6 +5725,7 @@ set_pit2_out:
 	}
 #endif
 	case KVM_SET_CLOCK: {
+		struct kvm_arch *ka = &kvm->arch;
 		struct kvm_clock_data user_ns;
 		u64 now_ns;
 
@@ -5744,8 +5744,22 @@ set_pit2_out:
 		 * pvclock_update_vm_gtod_copy().
 		 */
 		kvm_gen_update_masterclock(kvm);
-		now_ns = get_kvmclock_ns(kvm);
-		kvm->arch.kvmclock_offset += user_ns.clock - now_ns;
+
+		/*
+		 * This pairs with kvm_guest_time_update(): when masterclock is
+		 * in use, we use master_kernel_ns + kvmclock_offset to set
+		 * unsigned 'system_time' so if we use get_kvmclock_ns() (which
+		 * is slightly ahead) here we risk going negative on unsigned
+		 * 'system_time' when 'user_ns.clock' is very small.
+		 */
+		spin_lock_irq(&ka->pvclock_gtod_sync_lock);
+		if (kvm->arch.use_master_clock)
+			now_ns = ka->master_kernel_ns;
+		else
+			now_ns = get_kvmclock_base_ns();
+		ka->kvmclock_offset = user_ns.clock - now_ns;
+		spin_unlock_irq(&ka->pvclock_gtod_sync_lock);
+
 		kvm_make_all_cpus_request(kvm, KVM_REQ_CLOCK_UPDATE);
 		break;
 	}
@@ -7724,6 +7738,7 @@ static void kvm_hyperv_tsc_notifier(void)
 	struct kvm *kvm;
 	struct kvm_vcpu *vcpu;
 	int cpu;
+	unsigned long flags;
 
 	mutex_lock(&kvm_lock);
 	list_for_each_entry(kvm, &vm_list, vm_list)
@@ -7739,17 +7754,15 @@ static void kvm_hyperv_tsc_notifier(void)
 	list_for_each_entry(kvm, &vm_list, vm_list) {
 		struct kvm_arch *ka = &kvm->arch;
 
-		spin_lock(&ka->pvclock_gtod_sync_lock);
-
+		spin_lock_irqsave(&ka->pvclock_gtod_sync_lock, flags);
 		pvclock_update_vm_gtod_copy(kvm);
+		spin_unlock_irqrestore(&ka->pvclock_gtod_sync_lock, flags);
 
 		kvm_for_each_vcpu(cpu, vcpu, kvm)
 			kvm_make_request(KVM_REQ_CLOCK_UPDATE, vcpu);
 
 		kvm_for_each_vcpu(cpu, vcpu, kvm)
 			kvm_clear_request(KVM_REQ_MCLOCK_INPROGRESS, vcpu);
-
-		spin_unlock(&ka->pvclock_gtod_sync_lock);
 	}
 	mutex_unlock(&kvm_lock);
 }

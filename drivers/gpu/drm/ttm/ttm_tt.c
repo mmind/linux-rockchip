@@ -38,6 +38,21 @@
 #include <drm/drm_cache.h>
 #include <drm/ttm/ttm_bo_driver.h>
 
+#include "ttm_module.h"
+
+static unsigned long ttm_pages_limit;
+
+MODULE_PARM_DESC(pages_limit, "Limit for the allocated pages");
+module_param_named(pages_limit, ttm_pages_limit, ulong, 0644);
+
+static unsigned long ttm_dma32_pages_limit;
+
+MODULE_PARM_DESC(dma32_pages_limit, "Limit for the allocated DMA32 pages");
+module_param_named(dma32_pages_limit, ttm_dma32_pages_limit, ulong, 0644);
+
+static atomic_long_t ttm_pages_allocated;
+static atomic_long_t ttm_dma32_pages_allocated;
+
 /*
  * Allocates a ttm structure for the given BO.
  */
@@ -223,32 +238,41 @@ out_err:
 	return ret;
 }
 
-int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm)
+/**
+ * ttm_tt_swapout - swap out tt object
+ *
+ * @bdev: TTM device structure.
+ * @ttm: The struct ttm_tt.
+ * @gfp_flags: Flags to use for memory allocation.
+ *
+ * Swapout a TT object to a shmem_file, return number of pages swapped out or
+ * negative error code.
+ */
+int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm,
+		   gfp_t gfp_flags)
 {
+	loff_t size = (loff_t)ttm->num_pages << PAGE_SHIFT;
 	struct address_space *swap_space;
 	struct file *swap_storage;
 	struct page *from_page;
 	struct page *to_page;
-	gfp_t gfp_mask;
 	int i, ret;
 
-	swap_storage = shmem_file_setup("ttm swap",
-					ttm->num_pages << PAGE_SHIFT,
-					0);
+	swap_storage = shmem_file_setup("ttm swap", size, 0);
 	if (IS_ERR(swap_storage)) {
 		pr_err("Failed allocating swap storage\n");
 		return PTR_ERR(swap_storage);
 	}
 
 	swap_space = swap_storage->f_mapping;
-	gfp_mask = mapping_gfp_mask(swap_space);
+	gfp_flags &= mapping_gfp_mask(swap_space);
 
 	for (i = 0; i < ttm->num_pages; ++i) {
 		from_page = ttm->pages[i];
 		if (unlikely(from_page == NULL))
 			continue;
 
-		to_page = shmem_read_mapping_page_gfp(swap_space, i, gfp_mask);
+		to_page = shmem_read_mapping_page_gfp(swap_space, i, gfp_flags);
 		if (IS_ERR(to_page)) {
 			ret = PTR_ERR(to_page);
 			goto out_err;
@@ -263,7 +287,7 @@ int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm)
 	ttm->swap_storage = swap_storage;
 	ttm->page_flags |= TTM_PAGE_FLAG_SWAPPED;
 
-	return 0;
+	return ttm->num_pages;
 
 out_err:
 	fput(swap_storage);
@@ -293,12 +317,30 @@ int ttm_tt_populate(struct ttm_device *bdev,
 	if (ttm_tt_is_populated(ttm))
 		return 0;
 
+	if (!(ttm->page_flags & TTM_PAGE_FLAG_SG)) {
+		atomic_long_add(ttm->num_pages, &ttm_pages_allocated);
+		if (bdev->pool.use_dma32)
+			atomic_long_add(ttm->num_pages,
+					&ttm_dma32_pages_allocated);
+	}
+
+	while (atomic_long_read(&ttm_pages_allocated) > ttm_pages_limit ||
+	       atomic_long_read(&ttm_dma32_pages_allocated) >
+	       ttm_dma32_pages_limit) {
+
+		ret = ttm_global_swapout(ctx, GFP_KERNEL);
+		if (ret == 0)
+			break;
+		if (ret < 0)
+			goto error;
+	}
+
 	if (bdev->funcs->ttm_tt_populate)
 		ret = bdev->funcs->ttm_tt_populate(bdev, ttm, ctx);
 	else
 		ret = ttm_pool_alloc(&bdev->pool, ttm, ctx);
 	if (ret)
-		return ret;
+		goto error;
 
 	ttm_tt_add_mapping(bdev, ttm);
 	ttm->page_flags |= TTM_PAGE_FLAG_PRIV_POPULATED;
@@ -311,6 +353,15 @@ int ttm_tt_populate(struct ttm_device *bdev,
 	}
 
 	return 0;
+
+error:
+	if (!(ttm->page_flags & TTM_PAGE_FLAG_SG)) {
+		atomic_long_sub(ttm->num_pages, &ttm_pages_allocated);
+		if (bdev->pool.use_dma32)
+			atomic_long_sub(ttm->num_pages,
+					&ttm_dma32_pages_allocated);
+	}
+	return ret;
 }
 EXPORT_SYMBOL(ttm_tt_populate);
 
@@ -328,8 +379,7 @@ static void ttm_tt_clear_mapping(struct ttm_tt *ttm)
 	}
 }
 
-void ttm_tt_unpopulate(struct ttm_device *bdev,
-		       struct ttm_tt *ttm)
+void ttm_tt_unpopulate(struct ttm_device *bdev, struct ttm_tt *ttm)
 {
 	if (!ttm_tt_is_populated(ttm))
 		return;
@@ -339,5 +389,27 @@ void ttm_tt_unpopulate(struct ttm_device *bdev,
 		bdev->funcs->ttm_tt_unpopulate(bdev, ttm);
 	else
 		ttm_pool_free(&bdev->pool, ttm);
+
+	if (!(ttm->page_flags & TTM_PAGE_FLAG_SG)) {
+		atomic_long_sub(ttm->num_pages, &ttm_pages_allocated);
+		if (bdev->pool.use_dma32)
+			atomic_long_sub(ttm->num_pages,
+					&ttm_dma32_pages_allocated);
+	}
+
 	ttm->page_flags &= ~TTM_PAGE_FLAG_PRIV_POPULATED;
+}
+
+/**
+ * ttm_tt_mgr_init - register with the MM shrinker
+ *
+ * Register with the MM shrinker for swapping out BOs.
+ */
+void ttm_tt_mgr_init(unsigned long num_pages, unsigned long num_dma32_pages)
+{
+	if (!ttm_pages_limit)
+		ttm_pages_limit = num_pages;
+
+	if (!ttm_dma32_pages_limit)
+		ttm_dma32_pages_limit = num_dma32_pages;
 }

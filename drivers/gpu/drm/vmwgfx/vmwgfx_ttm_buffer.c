@@ -576,11 +576,31 @@ static void vmw_ttm_destroy(struct ttm_device *bdev, struct ttm_tt *ttm)
 static int vmw_ttm_populate(struct ttm_device *bdev,
 			    struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
 {
+	unsigned int i;
+	int ret;
+
 	/* TODO: maybe completely drop this ? */
 	if (ttm_tt_is_populated(ttm))
 		return 0;
 
-	return ttm_pool_alloc(&bdev->pool, ttm, ctx);
+	ret = ttm_pool_alloc(&bdev->pool, ttm, ctx);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ttm->num_pages; ++i) {
+		ret = ttm_mem_global_alloc_page(&ttm_mem_glob, ttm->pages[i],
+						PAGE_SIZE, ctx);
+		if (ret)
+			goto error;
+	}
+	return 0;
+
+error:
+	while (i--)
+		ttm_mem_global_free_page(&ttm_mem_glob, ttm->pages[i],
+					 PAGE_SIZE);
+	ttm_pool_free(&bdev->pool, ttm);
+	return ret;
 }
 
 static void vmw_ttm_unpopulate(struct ttm_device *bdev,
@@ -588,6 +608,7 @@ static void vmw_ttm_unpopulate(struct ttm_device *bdev,
 {
 	struct vmw_ttm_tt *vmw_tt = container_of(ttm, struct vmw_ttm_tt,
 						 dma_ttm);
+	unsigned int i;
 
 	if (vmw_tt->mob) {
 		vmw_mob_destroy(vmw_tt->mob);
@@ -595,6 +616,11 @@ static void vmw_ttm_unpopulate(struct ttm_device *bdev,
 	}
 
 	vmw_ttm_unmap_dma(vmw_tt);
+
+	for (i = 0; i < ttm->num_pages; ++i)
+		ttm_mem_global_free_page(&ttm_mem_glob, ttm->pages[i],
+					 PAGE_SIZE);
+
 	ttm_pool_free(&bdev->pool, ttm);
 }
 
@@ -665,21 +691,19 @@ static int vmw_ttm_io_mem_reserve(struct ttm_device *bdev, struct ttm_resource *
  * vmw_move_notify - TTM move_notify_callback
  *
  * @bo: The TTM buffer object about to move.
- * @evict: Unused
- * @mem: The struct ttm_resource indicating to what memory
+ * @old_mem: The old memory where we move from
+ * @new_mem: The struct ttm_resource indicating to what memory
  *       region the move is taking place.
  *
  * Calls move_notify for all subsystems needing it.
  * (currently only resources).
  */
 static void vmw_move_notify(struct ttm_buffer_object *bo,
-			    bool evict,
-			    struct ttm_resource *mem)
+			    struct ttm_resource *old_mem,
+			    struct ttm_resource *new_mem)
 {
-	if (!mem)
-		return;
-	vmw_bo_move_notify(bo, mem);
-	vmw_query_move_notify(bo, mem);
+	vmw_bo_move_notify(bo, new_mem);
+	vmw_query_move_notify(bo, old_mem, new_mem);
 }
 
 
@@ -710,7 +734,7 @@ static int vmw_move(struct ttm_buffer_object *bo,
 			return ret;
 	}
 
-	vmw_move_notify(bo, evict, new_mem);
+	vmw_move_notify(bo, &bo->mem, new_mem);
 
 	if (old_man->use_tt && new_man->use_tt) {
 		if (bo->mem.mem_type == TTM_PL_SYSTEM) {
@@ -732,16 +756,8 @@ static int vmw_move(struct ttm_buffer_object *bo,
 	}
 	return 0;
 fail:
-	swap(*new_mem, bo->mem);
-	vmw_move_notify(bo, false, new_mem);
-	swap(*new_mem, bo->mem);
+	vmw_move_notify(bo, new_mem, &bo->mem);
 	return ret;
-}
-
-static void
-vmw_delete_mem_notify(struct ttm_buffer_object *bo)
-{
-	vmw_move_notify(bo, false, NULL);
 }
 
 struct ttm_device_funcs vmw_bo_driver = {
@@ -753,7 +769,6 @@ struct ttm_device_funcs vmw_bo_driver = {
 	.evict_flags = vmw_evict_flags,
 	.move = vmw_move,
 	.verify_access = vmw_verify_access,
-	.delete_mem_notify = vmw_delete_mem_notify,
 	.swap_notify = vmw_swap_notify,
 	.io_mem_reserve = &vmw_ttm_io_mem_reserve,
 };

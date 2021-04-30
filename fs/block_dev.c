@@ -275,6 +275,8 @@ __blkdev_direct_IO_simple(struct kiocb *iocb, struct iov_iter *iter,
 		bio.bi_opf = dio_bio_write_op(iocb);
 		task_io_account_write(ret);
 	}
+	if (iocb->ki_flags & IOCB_NOWAIT)
+		bio.bi_opf |= REQ_NOWAIT;
 	if (iocb->ki_flags & IOCB_HIPRI)
 		bio_set_polled(&bio, iocb);
 
@@ -428,6 +430,8 @@ static ssize_t __blkdev_direct_IO(struct kiocb *iocb, struct iov_iter *iter,
 			bio->bi_opf = dio_bio_write_op(iocb);
 			task_io_account_write(bio->bi_iter.bi_size);
 		}
+		if (iocb->ki_flags & IOCB_NOWAIT)
+			bio->bi_opf |= REQ_NOWAIT;
 
 		dio->size += bio->bi_iter.bi_size;
 		pos += bio->bi_iter.bi_size;
@@ -1236,14 +1240,16 @@ static void __blkdev_put(struct block_device *bdev, fmode_t mode, int for_part);
 int bdev_disk_changed(struct block_device *bdev, bool invalidate)
 {
 	struct gendisk *disk = bdev->bd_disk;
-	int ret;
+	int ret = 0;
 
 	lockdep_assert_held(&bdev->bd_mutex);
 
 rescan:
-	ret = blk_drop_partitions(bdev);
-	if (ret)
-		return ret;
+	if (bdev->bd_part_count)
+		return -EBUSY;
+	sync_blockdev(bdev);
+	invalidate_bdev(bdev);
+	blk_drop_partitions(disk);
 
 	clear_bit(GD_NEED_PART_SCAN, &disk->state);
 
@@ -1259,9 +1265,6 @@ rescan:
 		if (disk_part_scan_enabled(disk) ||
 		    !(disk->flags & GENHD_FL_REMOVABLE))
 			set_capacity(disk, 0);
-	} else {
-		if (disk->fops->revalidate_disk)
-			disk->fops->revalidate_disk(disk);
 	}
 
 	if (get_capacity(disk)) {
@@ -1433,10 +1436,6 @@ struct block_device *blkdev_get_by_dev(dev_t dev, fmode_t mode, void *holder)
 	if (ret)
 		return ERR_PTR(ret);
 
-	/*
-	 * If we lost a race with 'disk' being deleted, try again.  See md.c.
-	 */
-retry:
 	bdev = blkdev_get_no_open(dev);
 	if (!bdev)
 		return ERR_PTR(-ENXIO);
@@ -1483,8 +1482,6 @@ abort_claiming:
 	disk_unblock_events(disk);
 put_blkdev:
 	blkdev_put_no_open(bdev);
-	if (ret == -ERESTARTSYS)
-		goto retry;
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(blkdev_get_by_dev);

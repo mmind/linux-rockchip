@@ -8,7 +8,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
 #include <drm/drm_framebuffer.h>
-#include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_ttm_helper.h>
 #include <drm/drm_gem_vram_helper.h>
 #include <drm/drm_managed.h>
@@ -189,7 +189,6 @@ struct drm_gem_vram_object *drm_gem_vram_create(struct drm_device *dev,
 	struct drm_vram_mm *vmm = dev->vram_mm;
 	struct ttm_device *bdev;
 	int ret;
-	size_t acc_size;
 
 	if (WARN_ONCE(!vmm, "VRAM MM not initialized"))
 		return ERR_PTR(-EINVAL);
@@ -216,7 +215,6 @@ struct drm_gem_vram_object *drm_gem_vram_create(struct drm_device *dev,
 	}
 
 	bdev = &vmm->bdev;
-	acc_size = ttm_bo_dma_acc_size(bdev, size, sizeof(*gbo));
 
 	gbo->bo.bdev = bdev;
 	drm_gem_vram_placement(gbo, DRM_GEM_VRAM_PL_FLAG_SYSTEM);
@@ -226,8 +224,8 @@ struct drm_gem_vram_object *drm_gem_vram_create(struct drm_device *dev,
 	 * to release gbo->bo.base and kfree gbo.
 	 */
 	ret = ttm_bo_init(bdev, &gbo->bo, size, ttm_bo_type_device,
-			  &gbo->placement, pg_align, false, acc_size,
-			  NULL, NULL, ttm_buffer_object_destroy);
+			  &gbo->placement, pg_align, false, NULL, NULL,
+			  ttm_buffer_object_destroy);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -573,9 +571,7 @@ static void drm_gem_vram_bo_driver_evict_flags(struct drm_gem_vram_object *gbo,
 	*pl = gbo->placement;
 }
 
-static void drm_gem_vram_bo_driver_move_notify(struct drm_gem_vram_object *gbo,
-					       bool evict,
-					       struct ttm_resource *new_mem)
+static void drm_gem_vram_bo_driver_move_notify(struct drm_gem_vram_object *gbo)
 {
 	struct ttm_buffer_object *bo = &gbo->bo;
 	struct drm_device *dev = bo->base.dev;
@@ -592,16 +588,8 @@ static int drm_gem_vram_bo_driver_move(struct drm_gem_vram_object *gbo,
 				       struct ttm_operation_ctx *ctx,
 				       struct ttm_resource *new_mem)
 {
-	int ret;
-
-	drm_gem_vram_bo_driver_move_notify(gbo, evict, new_mem);
-	ret = ttm_bo_move_memcpy(&gbo->bo, ctx, new_mem);
-	if (ret) {
-		swap(*new_mem, gbo->bo.mem);
-		drm_gem_vram_bo_driver_move_notify(gbo, false, new_mem);
-		swap(*new_mem, gbo->bo.mem);
-	}
-	return ret;
+	drm_gem_vram_bo_driver_move_notify(gbo);
+	return ttm_bo_move_memcpy(&gbo->bo, ctx, new_mem);
 }
 
 /*
@@ -720,7 +708,7 @@ drm_gem_vram_plane_helper_prepare_fb(struct drm_plane *plane,
 			goto err_drm_gem_vram_unpin;
 	}
 
-	ret = drm_gem_fb_prepare_fb(plane, new_state);
+	ret = drm_gem_plane_helper_prepare_fb(plane, new_state);
 	if (ret)
 		goto err_drm_gem_vram_unpin;
 
@@ -957,7 +945,7 @@ static void bo_driver_delete_mem_notify(struct ttm_buffer_object *bo)
 
 	gbo = drm_gem_vram_of_bo(bo);
 
-	drm_gem_vram_bo_driver_move_notify(gbo, false, NULL);
+	drm_gem_vram_bo_driver_move_notify(gbo);
 }
 
 static int bo_driver_move(struct ttm_buffer_object *bo,

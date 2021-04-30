@@ -33,6 +33,7 @@
 
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
+#include <linux/highmem.h>
 #include <linux/sched/mm.h>
 
 #ifdef CONFIG_X86
@@ -414,16 +415,10 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 			caching = pages + (1 << order);
 		}
 
-		r = ttm_mem_global_alloc_page(&ttm_mem_glob, p,
-					      (1 << order) * PAGE_SIZE,
-					      ctx);
-		if (r)
-			goto error_free_page;
-
 		if (dma_addr) {
 			r = ttm_pool_map(pool, order, p, &dma_addr);
 			if (r)
-				goto error_global_free;
+				goto error_free_page;
 		}
 
 		num_pages -= 1 << order;
@@ -436,9 +431,6 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		goto error_free_all;
 
 	return 0;
-
-error_global_free:
-	ttm_mem_global_free_page(&ttm_mem_glob, p, (1 << order) * PAGE_SIZE);
 
 error_free_page:
 	ttm_pool_free_page(pool, tt->caching, order, p);
@@ -474,8 +466,6 @@ void ttm_pool_free(struct ttm_pool *pool, struct ttm_tt *tt)
 
 		order = ttm_pool_page_order(pool, p);
 		num_pages = 1ULL << order;
-		ttm_mem_global_free_page(&ttm_mem_glob, p,
-					 num_pages * PAGE_SIZE);
 		if (tt->dma_address)
 			ttm_pool_unmap(pool, tt->dma_address[i], num_pages);
 
@@ -614,7 +604,7 @@ static int ttm_pool_debugfs_globals_show(struct seq_file *m, void *data)
 {
 	ttm_pool_debugfs_header(m);
 
-	spin_lock(&shrinker_lock);
+	mutex_lock(&shrinker_lock);
 	seq_puts(m, "wc\t:");
 	ttm_pool_debugfs_orders(global_write_combined, m);
 	seq_puts(m, "uc\t:");
@@ -623,7 +613,7 @@ static int ttm_pool_debugfs_globals_show(struct seq_file *m, void *data)
 	ttm_pool_debugfs_orders(global_dma32_write_combined, m);
 	seq_puts(m, "uc 32\t:");
 	ttm_pool_debugfs_orders(global_dma32_uncached, m);
-	spin_unlock(&shrinker_lock);
+	mutex_unlock(&shrinker_lock);
 
 	ttm_pool_debugfs_footer(m);
 
@@ -650,7 +640,7 @@ int ttm_pool_debugfs(struct ttm_pool *pool, struct seq_file *m)
 
 	ttm_pool_debugfs_header(m);
 
-	spin_lock(&shrinker_lock);
+	mutex_lock(&shrinker_lock);
 	for (i = 0; i < TTM_NUM_CACHING_TYPES; ++i) {
 		seq_puts(m, "DMA ");
 		switch (i) {
@@ -666,7 +656,7 @@ int ttm_pool_debugfs(struct ttm_pool *pool, struct seq_file *m)
 		}
 		ttm_pool_debugfs_orders(pool->caching[i].orders, m);
 	}
-	spin_unlock(&shrinker_lock);
+	mutex_unlock(&shrinker_lock);
 
 	ttm_pool_debugfs_footer(m);
 	return 0;

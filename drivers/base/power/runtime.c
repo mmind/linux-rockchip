@@ -951,7 +951,7 @@ static void pm_runtime_work(struct work_struct *work)
 
 /**
  * pm_suspend_timer_fn - Timer function for pm_schedule_suspend().
- * @data: Device pointer passed by pm_schedule_suspend().
+ * @timer: hrtimer used by pm_schedule_suspend().
  *
  * Check if the time is right and queue a suspend request.
  */
@@ -1690,8 +1690,8 @@ void pm_runtime_get_suppliers(struct device *dev)
 				device_links_read_lock_held())
 		if (link->flags & DL_FLAG_PM_RUNTIME) {
 			link->supplier_preactivated = true;
-			refcount_inc(&link->rpm_active);
 			pm_runtime_get_sync(link->supplier);
+			refcount_inc(&link->rpm_active);
 		}
 
 	device_links_read_unlock(idx);
@@ -1704,6 +1704,8 @@ void pm_runtime_get_suppliers(struct device *dev)
 void pm_runtime_put_suppliers(struct device *dev)
 {
 	struct device_link *link;
+	unsigned long flags;
+	bool put;
 	int idx;
 
 	idx = device_links_read_lock();
@@ -1712,7 +1714,11 @@ void pm_runtime_put_suppliers(struct device *dev)
 				device_links_read_lock_held())
 		if (link->supplier_preactivated) {
 			link->supplier_preactivated = false;
-			if (refcount_dec_not_one(&link->rpm_active))
+			spin_lock_irqsave(&dev->power.lock, flags);
+			put = pm_runtime_status_suspended(dev) &&
+			      refcount_dec_not_one(&link->rpm_active);
+			spin_unlock_irqrestore(&dev->power.lock, flags);
+			if (put)
 				pm_runtime_put(link->supplier);
 		}
 
