@@ -633,7 +633,9 @@ void soc15_program_register_sequence(struct amdgpu_device *adev,
 		if (entry->and_mask == 0xffffffff) {
 			tmp = entry->or_mask;
 		} else {
-			tmp = RREG32(reg);
+			tmp = (entry->hwip == GC_HWIP) ?
+				RREG32_SOC15_IP(GC, reg) : RREG32(reg);
+
 			tmp &= ~(entry->and_mask);
 			tmp |= (entry->or_mask & entry->and_mask);
 		}
@@ -644,7 +646,8 @@ void soc15_program_register_sequence(struct amdgpu_device *adev,
 			reg == SOC15_REG_OFFSET(GC, 0, mmSH_MEM_CONFIG))
 			WREG32_RLC(reg, tmp);
 		else
-			WREG32(reg, tmp);
+			(entry->hwip == GC_HWIP) ?
+				WREG32_SOC15_IP(GC, reg, tmp) : WREG32(reg, tmp);
 
 	}
 
@@ -1357,10 +1360,7 @@ static int soc15_common_early_init(void *handle)
 		break;
 	case CHIP_RAVEN:
 		adev->asic_funcs = &soc15_asic_funcs;
-		if (adev->pdev->device == 0x15dd)
-			adev->apu_flags |= AMD_APU_IS_RAVEN;
-		if (adev->pdev->device == 0x15d8)
-			adev->apu_flags |= AMD_APU_IS_PICASSO;
+
 		if (adev->rev_id >= 0x8)
 			adev->apu_flags |= AMD_APU_IS_RAVEN2;
 
@@ -1452,11 +1452,6 @@ static int soc15_common_early_init(void *handle)
 		break;
 	case CHIP_RENOIR:
 		adev->asic_funcs = &soc15_asic_funcs;
-		if ((adev->pdev->device == 0x1636) ||
-		    (adev->pdev->device == 0x164c))
-			adev->apu_flags |= AMD_APU_IS_RENOIR;
-		else
-			adev->apu_flags |= AMD_APU_IS_GREEN_SARDINE;
 
 		if (adev->apu_flags & AMD_APU_IS_RENOIR)
 			adev->external_rev_id = adev->rev_id + 0x91;

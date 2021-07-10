@@ -95,7 +95,7 @@ static inline u64 radeon_bo_gpu_offset(struct radeon_bo *bo)
 
 	rdev = radeon_get_rdev(bo->tbo.bdev);
 
-	switch (bo->tbo.mem.mem_type) {
+	switch (bo->tbo.resource->mem_type) {
 	case TTM_PL_TT:
 		start = rdev->mc.gtt_start;
 		break;
@@ -104,7 +104,7 @@ static inline u64 radeon_bo_gpu_offset(struct radeon_bo *bo)
 		break;
 	}
 
-	return (bo->tbo.mem.start << PAGE_SHIFT) + start;
+	return (bo->tbo.resource->start << PAGE_SHIFT) + start;
 }
 
 static inline unsigned long radeon_bo_size(struct radeon_bo *bo)
@@ -161,7 +161,7 @@ extern void radeon_bo_get_tiling_flags(struct radeon_bo *bo,
 extern int radeon_bo_check_tiling(struct radeon_bo *bo, bool has_moved,
 				bool force_drop);
 extern void radeon_bo_move_notify(struct ttm_buffer_object *bo,
-				  bool evict,
+				  unsigned int old_type,
 				  struct ttm_resource *new_mem);
 extern vm_fault_t radeon_bo_fault_reserve_notify(struct ttm_buffer_object *bo);
 extern int radeon_bo_get_surface_reg(struct radeon_bo *bo);

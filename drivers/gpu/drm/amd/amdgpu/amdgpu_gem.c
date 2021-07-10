@@ -170,7 +170,7 @@ static int amdgpu_gem_object_open(struct drm_gem_object *obj,
 		return -EPERM;
 
 	if (abo->flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID &&
-	    abo->tbo.base.resv != vm->root.base.bo->tbo.base.resv)
+	    abo->tbo.base.resv != vm->root.bo->tbo.base.resv)
 		return -EPERM;
 
 	r = amdgpu_bo_reserve(abo, false);
@@ -226,7 +226,7 @@ static void amdgpu_gem_object_close(struct drm_gem_object *obj,
 	if (!amdgpu_vm_ready(vm))
 		goto out_unlock;
 
-	fence = dma_resv_get_excl(bo->tbo.base.resv);
+	fence = dma_resv_excl_fence(bo->tbo.base.resv);
 	if (fence) {
 		amdgpu_bo_fence(bo, fence, true);
 		fence = NULL;
@@ -320,11 +320,11 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 	}
 
 	if (flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID) {
-		r = amdgpu_bo_reserve(vm->root.base.bo, false);
+		r = amdgpu_bo_reserve(vm->root.bo, false);
 		if (r)
 			return r;
 
-		resv = vm->root.base.bo->tbo.base.resv;
+		resv = vm->root.bo->tbo.base.resv;
 	}
 
 	initial_domain = (u32)(0xffffffff & args->in.domains);
@@ -353,9 +353,9 @@ retry:
 		if (!r) {
 			struct amdgpu_bo *abo = gem_to_amdgpu_bo(gobj);
 
-			abo->parent = amdgpu_bo_ref(vm->root.base.bo);
+			abo->parent = amdgpu_bo_ref(vm->root.bo);
 		}
-		amdgpu_bo_unreserve(vm->root.base.bo);
+		amdgpu_bo_unreserve(vm->root.bo);
 	}
 	if (r)
 		return r;
@@ -526,8 +526,7 @@ int amdgpu_gem_wait_idle_ioctl(struct drm_device *dev, void *data,
 		return -ENOENT;
 	}
 	robj = gem_to_amdgpu_bo(gobj);
-	ret = dma_resv_wait_timeout_rcu(robj->tbo.base.resv, true, true,
-						  timeout);
+	ret = dma_resv_wait_timeout(robj->tbo.base.resv, true, true, timeout);
 
 	/* ret == 0 means not signaled,
 	 * ret > 0 means signaled
@@ -613,7 +612,7 @@ static void amdgpu_gem_va_update_vm(struct amdgpu_device *adev,
 
 	if (operation == AMDGPU_VA_OP_MAP ||
 	    operation == AMDGPU_VA_OP_REPLACE) {
-		r = amdgpu_vm_bo_update(adev, bo_va, false);
+		r = amdgpu_vm_bo_update(adev, bo_va, false, NULL);
 		if (r)
 			goto error;
 	}
@@ -842,7 +841,7 @@ int amdgpu_gem_op_ioctl(struct drm_device *dev, void *data,
 		}
 		for (base = robj->vm_bo; base; base = base->next)
 			if (amdgpu_xgmi_same_hive(amdgpu_ttm_adev(robj->tbo.bdev),
-				amdgpu_ttm_adev(base->vm->root.base.bo->tbo.bdev))) {
+				amdgpu_ttm_adev(base->vm->root.bo->tbo.bdev))) {
 				r = -EINVAL;
 				amdgpu_bo_unreserve(robj);
 				goto out;

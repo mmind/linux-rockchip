@@ -234,6 +234,8 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_UDA1380
 	imply SND_SOC_WCD9335
 	imply SND_SOC_WCD934X
+	imply SND_SOC_WCD937X
+	imply SND_SOC_WCD938X
 	imply SND_SOC_LPASS_RX_MACRO
 	imply SND_SOC_LPASS_TX_MACRO
 	imply SND_SOC_WL1273
@@ -691,7 +693,7 @@ config SND_SOC_CS47L15
 
 config SND_SOC_CS47L24
 	tristate
-	depends on MFD_CS47L24
+	depends on MFD_CS47L24 && MFD_ARIZONA
 
 config SND_SOC_CS47L35
 	tristate
@@ -1187,7 +1189,7 @@ config SND_SOC_RT5631
 	depends on I2C
 
 config SND_SOC_RT5640
-	tristate
+	tristate "Realtek RT5640/RT5639 Codec"
 	depends on I2C
 
 config SND_SOC_RT5645
@@ -1554,6 +1556,18 @@ config SND_SOC_WCD934X
 	  The WCD9340/9341 is a audio codec IC Integrated in
 	  Qualcomm SoCs like SDM845.
 
+config SND_SOC_WCD938X
+	tristate
+
+config SND_SOC_WCD938X_SDW
+	tristate "WCD9380/WCD9385 Codec - SDW"
+	select SND_SOC_WCD938X
+	depends on SOUNDWIRE
+	select REGMAP_SOUNDWIRE
+	help
+	  The WCD9380/9385 is a audio codec IC Integrated in
+	  Qualcomm SoCs like SM8250.
+
 config SND_SOC_WL1273
 	tristate
 
@@ -1579,11 +1593,11 @@ config SND_SOC_WM5100
 
 config SND_SOC_WM5102
 	tristate
-	depends on MFD_WM5102
+	depends on MFD_WM5102 && MFD_ARIZONA
 
 config SND_SOC_WM5110
 	tristate
-	depends on MFD_WM5110
+	depends on MFD_WM5110 && MFD_ARIZONA
 
 config SND_SOC_WM8350
 	tristate
@@ -1748,11 +1762,11 @@ config SND_SOC_WM8996
 
 config SND_SOC_WM8997
 	tristate
-	depends on MFD_WM8997
+	depends on MFD_WM8997 && MFD_ARIZONA
 
 config SND_SOC_WM8998
 	tristate
-	depends on MFD_WM8998
+	depends on MFD_WM8998 && MFD_ARIZONA
 
 config SND_SOC_WM9081
 	tristate

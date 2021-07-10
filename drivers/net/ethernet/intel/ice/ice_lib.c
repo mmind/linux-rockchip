@@ -169,12 +169,13 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi, u16 vf_id)
 
 	switch (vsi->type) {
 	case ICE_VSI_PF:
-		vsi->alloc_txq = min3(pf->num_lan_msix,
-				      ice_get_avail_txq_count(pf),
-				      (u16)num_online_cpus());
 		if (vsi->req_txq) {
 			vsi->alloc_txq = vsi->req_txq;
 			vsi->num_txq = vsi->req_txq;
+		} else {
+			vsi->alloc_txq = min3(pf->num_lan_msix,
+					      ice_get_avail_txq_count(pf),
+					      (u16)num_online_cpus());
 		}
 
 		pf->num_lan_tx = vsi->alloc_txq;
@@ -183,12 +184,13 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi, u16 vf_id)
 		if (!test_bit(ICE_FLAG_RSS_ENA, pf->flags)) {
 			vsi->alloc_rxq = 1;
 		} else {
-			vsi->alloc_rxq = min3(pf->num_lan_msix,
-					      ice_get_avail_rxq_count(pf),
-					      (u16)num_online_cpus());
 			if (vsi->req_rxq) {
 				vsi->alloc_rxq = vsi->req_rxq;
 				vsi->num_rxq = vsi->req_rxq;
+			} else {
+				vsi->alloc_rxq = min3(pf->num_lan_msix,
+						      ice_get_avail_rxq_count(pf),
+						      (u16)num_online_cpus());
 			}
 		}
 
@@ -626,6 +628,17 @@ static void ice_vsi_put_qs(struct ice_vsi *vsi)
 bool ice_is_safe_mode(struct ice_pf *pf)
 {
 	return !test_bit(ICE_FLAG_ADV_FEATURES, pf->flags);
+}
+
+/**
+ * ice_is_aux_ena
+ * @pf: pointer to the PF struct
+ *
+ * returns true if AUX devices/drivers are supported, false otherwise
+ */
+bool ice_is_aux_ena(struct ice_pf *pf)
+{
+	return test_bit(ICE_FLAG_AUX_ENA, pf->flags);
 }
 
 /**
@@ -1192,11 +1205,11 @@ static int ice_vsi_setup_vector_base(struct ice_vsi *vsi)
 	num_q_vectors = vsi->num_q_vectors;
 	/* reserve slots from OS requested IRQs */
 	if (vsi->type == ICE_VSI_CTRL && vsi->vf_id != ICE_INVAL_VFID) {
-		struct ice_vf *vf;
 		int i;
 
 		ice_for_each_vf(pf, i) {
-			vf = &pf->vf[i];
+			struct ice_vf *vf = &pf->vf[i];
+
 			if (i != vsi->vf_id && vf->ctrl_vsi_idx != ICE_NO_VSI) {
 				base = pf->vsi[vf->ctrl_vsi_idx]->base_vector;
 				break;
@@ -1285,6 +1298,7 @@ static int ice_vsi_alloc_rings(struct ice_vsi *vsi)
 		ring->reg_idx = vsi->txq_map[i];
 		ring->ring_active = false;
 		ring->vsi = vsi;
+		ring->tx_tstamps = &pf->ptp.port.tx;
 		ring->dev = dev;
 		ring->count = vsi->num_tx_desc;
 		WRITE_ONCE(vsi->tx_rings[i], ring);
@@ -1662,9 +1676,11 @@ void ice_vsi_cfg_frame_size(struct ice_vsi *vsi)
  * @pf_q: index of the Rx queue in the PF's queue space
  * @rxdid: flexible descriptor RXDID
  * @prio: priority for the RXDID for this queue
+ * @ena_ts: true to enable timestamp and false to disable timestamp
  */
 void
-ice_write_qrxflxp_cntxt(struct ice_hw *hw, u16 pf_q, u32 rxdid, u32 prio)
+ice_write_qrxflxp_cntxt(struct ice_hw *hw, u16 pf_q, u32 rxdid, u32 prio,
+			bool ena_ts)
 {
 	int regval = rd32(hw, QRXFLXP_CNTXT(pf_q));
 
@@ -1679,7 +1695,38 @@ ice_write_qrxflxp_cntxt(struct ice_hw *hw, u16 pf_q, u32 rxdid, u32 prio)
 	regval |= (prio << QRXFLXP_CNTXT_RXDID_PRIO_S) &
 		QRXFLXP_CNTXT_RXDID_PRIO_M;
 
+	if (ena_ts)
+		/* Enable TimeSync on this queue */
+		regval |= QRXFLXP_CNTXT_TS_M;
+
 	wr32(hw, QRXFLXP_CNTXT(pf_q), regval);
+}
+
+int ice_vsi_cfg_single_rxq(struct ice_vsi *vsi, u16 q_idx)
+{
+	if (q_idx >= vsi->num_rxq)
+		return -EINVAL;
+
+	return ice_vsi_cfg_rxq(vsi->rx_rings[q_idx]);
+}
+
+int ice_vsi_cfg_single_txq(struct ice_vsi *vsi, struct ice_ring **tx_rings, u16 q_idx)
+{
+	struct ice_aqc_add_tx_qgrp *qg_buf;
+	int err;
+
+	if (q_idx >= vsi->alloc_txq || !tx_rings || !tx_rings[q_idx])
+		return -EINVAL;
+
+	qg_buf = kzalloc(struct_size(qg_buf, txqs, 1), GFP_KERNEL);
+	if (!qg_buf)
+		return -ENOMEM;
+
+	qg_buf->num_txqs = 1;
+
+	err = ice_vsi_cfg_txq(vsi, tx_rings[q_idx], qg_buf);
+	kfree(qg_buf);
+	return err;
 }
 
 /**
@@ -1699,15 +1746,11 @@ int ice_vsi_cfg_rxqs(struct ice_vsi *vsi)
 	ice_vsi_cfg_frame_size(vsi);
 setup_rings:
 	/* set up individual rings */
-	for (i = 0; i < vsi->num_rxq; i++) {
-		int err;
+	ice_for_each_rxq(vsi, i) {
+		int err = ice_vsi_cfg_rxq(vsi->rx_rings[i]);
 
-		err = ice_setup_rx_ctx(vsi->rx_rings[i]);
-		if (err) {
-			dev_err(ice_pf_to_dev(vsi->back), "ice_setup_rx_ctx failed for RxQ %d, err %d\n",
-				i, err);
+		if (err)
 			return err;
-		}
 	}
 
 	return 0;
@@ -1717,12 +1760,13 @@ setup_rings:
  * ice_vsi_cfg_txqs - Configure the VSI for Tx
  * @vsi: the VSI being configured
  * @rings: Tx ring array to be configured
+ * @count: number of Tx ring array elements
  *
  * Return 0 on success and a negative value on error
  * Configure the Tx VSI for operation.
  */
 static int
-ice_vsi_cfg_txqs(struct ice_vsi *vsi, struct ice_ring **rings)
+ice_vsi_cfg_txqs(struct ice_vsi *vsi, struct ice_ring **rings, u16 count)
 {
 	struct ice_aqc_add_tx_qgrp *qg_buf;
 	u16 q_idx = 0;
@@ -1734,7 +1778,7 @@ ice_vsi_cfg_txqs(struct ice_vsi *vsi, struct ice_ring **rings)
 
 	qg_buf->num_txqs = 1;
 
-	for (q_idx = 0; q_idx < vsi->num_txq; q_idx++) {
+	for (q_idx = 0; q_idx < count; q_idx++) {
 		err = ice_vsi_cfg_txq(vsi, rings[q_idx], qg_buf);
 		if (err)
 			goto err_cfg_txqs;
@@ -1754,7 +1798,7 @@ err_cfg_txqs:
  */
 int ice_vsi_cfg_lan_txqs(struct ice_vsi *vsi)
 {
-	return ice_vsi_cfg_txqs(vsi, vsi->tx_rings);
+	return ice_vsi_cfg_txqs(vsi, vsi->tx_rings, vsi->num_txq);
 }
 
 /**
@@ -1769,7 +1813,7 @@ int ice_vsi_cfg_xdp_txqs(struct ice_vsi *vsi)
 	int ret;
 	int i;
 
-	ret = ice_vsi_cfg_txqs(vsi, vsi->xdp_rings);
+	ret = ice_vsi_cfg_txqs(vsi, vsi->xdp_rings, vsi->num_xdp_txq);
 	if (ret)
 		return ret;
 
@@ -2009,17 +2053,18 @@ int ice_vsi_stop_all_rx_rings(struct ice_vsi *vsi)
  * @rst_src: reset source
  * @rel_vmvf_num: Relative ID of VF/VM
  * @rings: Tx ring array to be stopped
+ * @count: number of Tx ring array elements
  */
 static int
 ice_vsi_stop_tx_rings(struct ice_vsi *vsi, enum ice_disq_rst_src rst_src,
-		      u16 rel_vmvf_num, struct ice_ring **rings)
+		      u16 rel_vmvf_num, struct ice_ring **rings, u16 count)
 {
 	u16 q_idx;
 
 	if (vsi->num_txq > ICE_LAN_TXQ_MAX_QDIS)
 		return -EINVAL;
 
-	for (q_idx = 0; q_idx < vsi->num_txq; q_idx++) {
+	for (q_idx = 0; q_idx < count; q_idx++) {
 		struct ice_txq_meta txq_meta = { };
 		int status;
 
@@ -2047,7 +2092,7 @@ int
 ice_vsi_stop_lan_tx_rings(struct ice_vsi *vsi, enum ice_disq_rst_src rst_src,
 			  u16 rel_vmvf_num)
 {
-	return ice_vsi_stop_tx_rings(vsi, rst_src, rel_vmvf_num, vsi->tx_rings);
+	return ice_vsi_stop_tx_rings(vsi, rst_src, rel_vmvf_num, vsi->tx_rings, vsi->num_txq);
 }
 
 /**
@@ -2056,7 +2101,7 @@ ice_vsi_stop_lan_tx_rings(struct ice_vsi *vsi, enum ice_disq_rst_src rst_src,
  */
 int ice_vsi_stop_xdp_tx_rings(struct ice_vsi *vsi)
 {
-	return ice_vsi_stop_tx_rings(vsi, ICE_NO_RESET, 0, vsi->xdp_rings);
+	return ice_vsi_stop_tx_rings(vsi, ICE_NO_RESET, 0, vsi->xdp_rings, vsi->num_xdp_txq);
 }
 
 /**
@@ -2215,7 +2260,7 @@ void ice_cfg_sw_lldp(struct ice_vsi *vsi, bool tx, bool create)
 	}
 
 	if (status)
-		dev_err(dev, "Fail %s %s LLDP rule on VSI %i error: %s\n",
+		dev_dbg(dev, "Fail %s %s LLDP rule on VSI %i error: %s\n",
 			create ? "adding" : "removing", tx ? "TX" : "RX",
 			vsi->vsi_num, ice_stat_str(status));
 }
@@ -2830,11 +2875,11 @@ int ice_vsi_release(struct ice_vsi *vsi)
 	 * cleared in the same manner.
 	 */
 	if (vsi->type == ICE_VSI_CTRL && vsi->vf_id != ICE_INVAL_VFID) {
-		struct ice_vf *vf;
 		int i;
 
 		ice_for_each_vf(pf, i) {
-			vf = &pf->vf[i];
+			struct ice_vf *vf = &pf->vf[i];
+
 			if (i != vsi->vf_id && vf->ctrl_vsi_idx != ICE_NO_VSI)
 				break;
 		}
@@ -3194,6 +3239,34 @@ bool ice_is_reset_in_progress(unsigned long *state)
 	       test_bit(ICE_GLOBR_REQ, state);
 }
 
+/**
+ * ice_wait_for_reset - Wait for driver to finish reset and rebuild
+ * @pf: pointer to the PF structure
+ * @timeout: length of time to wait, in jiffies
+ *
+ * Wait (sleep) for a short time until the driver finishes cleaning up from
+ * a device reset. The caller must be able to sleep. Use this to delay
+ * operations that could fail while the driver is cleaning up after a device
+ * reset.
+ *
+ * Returns 0 on success, -EBUSY if the reset is not finished within the
+ * timeout, and -ERESTARTSYS if the thread was interrupted.
+ */
+int ice_wait_for_reset(struct ice_pf *pf, unsigned long timeout)
+{
+	long ret;
+
+	ret = wait_event_interruptible_timeout(pf->reset_wait_queue,
+					       !ice_is_reset_in_progress(pf->state),
+					       timeout);
+	if (ret < 0)
+		return ret;
+	else if (!ret)
+		return -EBUSY;
+	else
+		return 0;
+}
+
 #ifdef CONFIG_DCB
 /**
  * ice_vsi_update_q_map - update our copy of the VSI info with new queue map
@@ -3328,13 +3401,22 @@ int ice_status_to_errno(enum ice_status err)
 	case ICE_ERR_DOES_NOT_EXIST:
 		return -ENOENT;
 	case ICE_ERR_OUT_OF_RANGE:
-		return -ENOTTY;
+	case ICE_ERR_AQ_ERROR:
+	case ICE_ERR_AQ_TIMEOUT:
+	case ICE_ERR_AQ_EMPTY:
+	case ICE_ERR_AQ_FW_CRITICAL:
+		return -EIO;
 	case ICE_ERR_PARAM:
+	case ICE_ERR_INVAL_SIZE:
 		return -EINVAL;
 	case ICE_ERR_NO_MEMORY:
 		return -ENOMEM;
 	case ICE_ERR_MAX_LIMIT:
 		return -EAGAIN;
+	case ICE_ERR_RESET_ONGOING:
+		return -EBUSY;
+	case ICE_ERR_AQ_FULL:
+		return -ENOSPC;
 	default:
 		return -EINVAL;
 	}

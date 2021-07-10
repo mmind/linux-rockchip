@@ -76,6 +76,7 @@
 #include "sf/vhca_event.h"
 #include "sf/dev/dev.h"
 #include "sf/sf.h"
+#include "mlx5_irq.h"
 
 MODULE_AUTHOR("Eli Cohen <eli@mellanox.com>");
 MODULE_DESCRIPTION("Mellanox 5th generation network adapters (ConnectX series) core driver");
@@ -1161,7 +1162,7 @@ static int mlx5_load(struct mlx5_core_dev *dev)
 	err = mlx5_core_set_hca_defaults(dev);
 	if (err) {
 		mlx5_core_err(dev, "Failed to set hca defaults\n");
-		goto err_sriov;
+		goto err_set_hca;
 	}
 
 	mlx5_vhca_event_start(dev);
@@ -1185,6 +1186,7 @@ static int mlx5_load(struct mlx5_core_dev *dev)
 	}
 
 	mlx5_sf_dev_table_create(dev);
+	mlx5_lag_add_mdev(dev);
 
 	return 0;
 
@@ -1194,6 +1196,7 @@ err_ec:
 	mlx5_sf_hw_table_destroy(dev);
 err_vhca:
 	mlx5_vhca_event_stop(dev);
+err_set_hca:
 	mlx5_cleanup_fs(dev);
 err_fs:
 	mlx5_accel_tls_cleanup(dev);
@@ -1219,6 +1222,7 @@ err_irq_table:
 
 static void mlx5_unload(struct mlx5_core_dev *dev)
 {
+	mlx5_lag_remove_mdev(dev);
 	mlx5_sf_dev_table_destroy(dev);
 	mlx5_sriov_detach(dev);
 	mlx5_ec_cleanup(dev);

@@ -199,7 +199,6 @@ static const struct dmi_system_id sof_sdw_quirk_table[] = {
 		.driver_data = (void *)(SOF_RT711_JD_SRC_JD1 |
 					SOF_SDW_TGL_HDMI |
 					SOF_RT715_DAI_ID_FIX |
-					SOF_SDW_PCH_DMIC |
 					SOF_BT_OFFLOAD_SSP(2) |
 					SOF_SSP_BT_OFFLOAD_PRESENT),
 	},
@@ -601,13 +600,13 @@ static int create_codec_dai_name(struct device *dev,
 		comp_index = i + offset;
 		if (is_unique_device(link, sdw_version, mfg_id, part_id,
 				     class_id, i)) {
-			codec_str = "sdw:%x:%x:%x:%x";
+			codec_str = "sdw:%01x:%04x:%04x:%02x";
 			codec[comp_index].name =
 				devm_kasprintf(dev, GFP_KERNEL, codec_str,
 					       link_id, mfg_id, part_id,
 					       class_id);
 		} else {
-			codec_str = "sdw:%x:%x:%x:%x:%x";
+			codec_str = "sdw:%01x:%04x:%04x:%02x:%01x";
 			codec[comp_index].name =
 				devm_kasprintf(dev, GFP_KERNEL, codec_str,
 					       link_id, mfg_id, part_id,
@@ -683,7 +682,7 @@ static int set_codec_init_func(const struct snd_soc_acpi_link_adr *link,
  */
 static int get_slave_info(const struct snd_soc_acpi_link_adr *adr_link,
 			  struct device *dev, int *cpu_dai_id, int *cpu_dai_num,
-			  int *codec_num, int *group_id,
+			  int *codec_num, unsigned int *group_id,
 			  bool *group_generated)
 {
 	const struct snd_soc_acpi_adr_device *adr_d;
@@ -1273,8 +1272,6 @@ static int mc_probe(struct platform_device *pdev)
 					card);
 	if (ret < 0)
 		return ret;
-
-	ctx->common_hdmi_codec_drv = mach->mach_params.common_hdmi_codec_drv;
 
 	/*
 	 * the default amp_num is zero for each codec and

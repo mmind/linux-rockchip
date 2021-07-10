@@ -1202,7 +1202,7 @@ struct intel_crtc_state {
 	struct {
 		bool enable;
 		u8 pipeline_full;
-		u16 flipline, vmin, vmax;
+		u16 flipline, vmin, vmax, guardband;
 	} vrr;
 
 	/* Stream Splitter for eDP MSO */
@@ -1482,6 +1482,7 @@ struct intel_psr {
 	bool sink_support;
 	bool source_support;
 	bool enabled;
+	bool paused;
 	enum pipe pipe;
 	enum transcoder transcoder;
 	bool active;
@@ -1498,7 +1499,7 @@ struct intel_psr {
 	bool sink_not_reliable;
 	bool irq_aux_error;
 	u16 su_x_granularity;
-	bool dc3co_enabled;
+	u32 dc3co_exitline;
 	u32 dc3co_exit_delay;
 	struct delayed_work dc3co_work;
 	struct drm_dp_vsc_sdp vsc;
@@ -1720,6 +1721,14 @@ vlv_pipe_to_channel(enum pipe pipe)
 	default:
 		BUG();
 	}
+}
+
+static inline bool intel_pipe_valid(struct drm_i915_private *i915, enum pipe pipe)
+{
+	return (pipe >= 0 &&
+		pipe < ARRAY_SIZE(i915->pipe_to_crtc_mapping) &&
+		INTEL_INFO(i915)->pipe_mask & BIT(pipe) &&
+		i915->pipe_to_crtc_mapping[pipe]);
 }
 
 static inline struct intel_crtc *
