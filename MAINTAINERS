@@ -933,6 +933,7 @@ F:	drivers/video/fbdev/geode/
 
 AMD IOMMU (AMD-VI)
 M:	Joerg Roedel <joro@8bytes.org>
+R:	Suravee Suthikulpanit <suravee.suthikulpanit@amd.com>
 L:	iommu@lists.linux-foundation.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/joro/iommu.git
@@ -3780,6 +3781,17 @@ L:	bcm-kernel-feedback-list@broadcom.com
 S:	Supported
 F:	Documentation/devicetree/bindings/gpio/brcm,kona-gpio.txt
 F:	drivers/gpio/gpio-bcm-kona.c
+
+BROADCOM MPI3 STORAGE CONTROLLER DRIVER
+M:	Sathya Prakash Veerichetty <sathya.prakash@broadcom.com>
+M:	Kashyap Desai <kashyap.desai@broadcom.com>
+M:	Sumit Saxena <sumit.saxena@broadcom.com>
+M:	Sreekanth Reddy <sreekanth.reddy@broadcom.com>
+L:	mpi3mr-linuxdrv.pdl@broadcom.com
+L:	linux-scsi@vger.kernel.org
+S:	Supported
+W:	https://www.broadcom.com/support/storage
+F:	drivers/scsi/mpi3mr/
 
 BROADCOM NETXTREME-E ROCE DRIVER
 M:	Selvin Xavier <selvin.xavier@broadcom.com>
@@ -14997,6 +15009,13 @@ F:	Documentation/driver-api/ptp.rst
 F:	drivers/net/phy/dp83640*
 F:	drivers/ptp/*
 F:	include/linux/ptp_cl*
+
+PTP VIRTUAL CLOCK SUPPORT
+M:	Yangbo Lu <yangbo.lu@nxp.com>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	drivers/ptp/ptp_vclock.c
+F:	net/ethtool/phc_vclocks.c
 
 PTRACE SUPPORT
 M:	Oleg Nesterov <oleg@redhat.com>

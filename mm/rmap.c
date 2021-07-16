@@ -1439,23 +1439,21 @@ static bool try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 	while (page_vma_mapped_walk(&pvmw)) {
 		/*
 		 * If the page is mlock()d, we cannot swap it out.
-		 * If it's recently referenced (perhaps page_referenced
-		 * skipped over this mm) then we should reactivate it.
 		 */
-		if (!(flags & TTU_IGNORE_MLOCK)) {
-			if (vma->vm_flags & VM_LOCKED) {
-				/* PTE-mapped THP are never mlocked */
-				if (!PageTransCompound(page)) {
-					/*
-					 * Holding pte lock, we do *not* need
-					 * mmap_lock here
-					 */
-					mlock_vma_page(page);
-				}
-				ret = false;
-				page_vma_mapped_walk_done(&pvmw);
-				break;
-			}
+		if (!(flags & TTU_IGNORE_MLOCK) &&
+		    (vma->vm_flags & VM_LOCKED)) {
+			/*
+			 * PTE-mapped THP are never marked as mlocked: so do
+			 * not set it on a DoubleMap THP, nor on an Anon THP
+			 * (which may still be PTE-mapped after DoubleMap was
+			 * cleared).  But stop unmapping even in those cases.
+			 */
+			if (!PageTransCompound(page) || (PageHead(page) &&
+			     !PageDoubleMap(page) && !PageAnon(page)))
+				mlock_vma_page(page);
+			page_vma_mapped_walk_done(&pvmw);
+			ret = false;
+			break;
 		}
 
 		/* Unexpected PMD-mapped THP? */
@@ -1687,8 +1685,7 @@ void try_to_unmap(struct page *page, enum ttu_flags flags)
  * @arg: enum ttu_flags will be passed to this argument.
  *
  * If TTU_SPLIT_HUGE_PMD is specified any PMD mappings will be split into PTEs
- * containing migration entries. This and TTU_RMAP_LOCKED are the only supported
- * flags.
+ * containing migration entries.
  */
 static bool try_to_migrate_one(struct page *page, struct vm_area_struct *vma,
 		     unsigned long address, void *arg)
@@ -1704,9 +1701,6 @@ static bool try_to_migrate_one(struct page *page, struct vm_area_struct *vma,
 	bool ret = true;
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
-
-	if (is_zone_device_page(page) && !is_device_private_page(page))
-		return true;
 
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
@@ -1928,8 +1922,6 @@ static bool try_to_migrate_one(struct page *page, struct vm_area_struct *vma,
  *
  * Tries to remove all the page table entries which are mapping this page and
  * replace them with special swap entries. Caller must hold the page lock.
- *
- * If is successful, return true. Otherwise, false.
  */
 void try_to_migrate(struct page *page, enum ttu_flags flags)
 {
@@ -1946,6 +1938,9 @@ void try_to_migrate(struct page *page, enum ttu_flags flags)
 	 */
 	if (WARN_ON_ONCE(flags & ~(TTU_RMAP_LOCKED | TTU_SPLIT_HUGE_PMD |
 					TTU_SYNC)))
+		return;
+
+	if (is_zone_device_page(page) && !is_device_private_page(page))
 		return;
 
 	/*
@@ -1989,17 +1984,20 @@ static bool page_mlock_one(struct page *page, struct vm_area_struct *vma,
 		 * munlock_vma_pages_range().
 		 */
 		if (vma->vm_flags & VM_LOCKED) {
-			/* PTE-mapped THP are never mlocked */
-			if (!PageTransCompound(page))
-				mlock_vma_page(page);
+			/*
+			 * PTE-mapped THP are never marked as mlocked; but
+			 * this function is never called on a DoubleMap THP,
+			 * nor on an Anon THP (which may still be PTE-mapped
+			 * after DoubleMap was cleared).
+			 */
+			mlock_vma_page(page);
+			/*
+			 * No need to scan further once the page is marked
+			 * as mlocked.
+			 */
 			page_vma_mapped_walk_done(&pvmw);
+			return false;
 		}
-
-		/*
-		 * no need to continue scanning other vma's if the page has
-		 * been locked.
-		 */
-		return false;
 	}
 
 	return true;
@@ -2024,6 +2022,10 @@ void page_mlock(struct page *page)
 
 	VM_BUG_ON_PAGE(!PageLocked(page) || PageLRU(page), page);
 	VM_BUG_ON_PAGE(PageCompound(page) && PageDoubleMap(page), page);
+
+	/* Anon THP are only marked as mlocked when singly mapped */
+	if (PageTransCompound(page) && PageAnon(page))
+		return;
 
 	rmap_walk(page, &rwc);
 }

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 VERSION = 5
-PATCHLEVEL = 13
+PATCHLEVEL = 14
 SUBLEVEL = 0
-EXTRAVERSION =
+EXTRAVERSION = -rc1
 NAME = Opossums on Parade
 
 # *DOCUMENTATION*
@@ -802,7 +802,7 @@ else
 # Warn about unmarked fall-throughs in switch statement.
 # Disabled for clang while comment to attribute conversion happens and
 # https://github.com/ClangBuiltLinux/linux/issues/636 is discussed.
-KBUILD_CFLAGS += $(call cc-option,-Wimplicit-fallthrough,)
+KBUILD_CFLAGS += $(call cc-option,-Wimplicit-fallthrough=5,)
 endif
 
 # These warnings generated too much noise in a regular build.
