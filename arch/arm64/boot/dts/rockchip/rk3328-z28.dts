@@ -47,6 +47,11 @@
 	model = "Z28 TV box";
 	compatible = "rockchip,z28", "rockchip,rk3328";
 
+	aliases {
+		mmc0 = &sdmmc;
+		mmc1 = &emmc;
+	};
+
 	chosen {
 		stdout-path = "serial2:1500000n8";
 	};
