@@ -29,7 +29,7 @@
 struct dwc3_rk_inno {
 	struct device		*dev;
 	struct clk_bulk_data	*clks;
-	struct dwc3		*dwc;
+	struct device_node	*child;
 	struct usb_phy		*phy;
 	struct notifier_block	reset_nb;
 	struct work_struct	reset_work;
@@ -50,12 +50,31 @@ static int dwc3_rk_inno_host_reset_notifier(struct notifier_block *nb, unsigned 
 static void dwc3_rk_inno_host_reset_work(struct work_struct *work)
 {
 	struct dwc3_rk_inno	*rk_inno = container_of(work, struct dwc3_rk_inno, reset_work);
-	struct usb_hcd		*hcd = dev_get_drvdata(&rk_inno->dwc->xhci->dev);
-	struct usb_hcd		*shared_hcd = hcd->shared_hcd;
-	struct xhci_hcd		*xhci = hcd_to_xhci(hcd);
+	struct usb_hcd		*hcd, *shared_hcd;
+	struct xhci_hcd		*xhci;
+	struct dwc3		*dwc;
 	unsigned int		count = 0;
+	struct platform_device	*child_pdev;
 
 	mutex_lock(&rk_inno->lock);
+
+	child_pdev = of_find_device_by_node(rk_inno->child);
+	if (!child_pdev) {
+		dev_err(rk_inno->dev, "failed to get dwc3 core device\n");
+		mutex_unlock(&rk_inno->lock);
+		return;
+	}
+
+	dwc = platform_get_drvdata(child_pdev);
+	if (!dwc || !dwc->xhci) {
+		dev_warn(rk_inno->dev, "dwc3 not probed yet\n");
+		mutex_unlock(&rk_inno->lock);
+		return;
+	}
+
+	hcd = dev_get_drvdata(&dwc->xhci->dev);
+	shared_hcd = hcd->shared_hcd;
+	xhci = hcd_to_xhci(hcd);
 
 	if (hcd->state != HC_STATE_HALT) {
 		usb_remove_hcd(shared_hcd);
@@ -90,9 +109,7 @@ static int dwc3_rk_inno_probe(struct platform_device *pdev)
 {
 	struct dwc3_rk_inno	*rk_inno;
 	struct device		*dev = &pdev->dev;
-	struct device_node	*np = dev->of_node, *child, *node;
-	struct platform_device	*child_pdev;
-
+	struct device_node	*np = dev->of_node, *node;
 	int			ret;
 
 	rk_inno = devm_kzalloc(dev, sizeof(*rk_inno), GFP_KERNEL);
@@ -127,31 +144,24 @@ static int dwc3_rk_inno_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_clk_put;
 
-	child = of_get_child_by_name(np, "dwc3");
-	if (!child) {
+	rk_inno->child = of_get_child_by_name(np, "dwc3");
+	if (!rk_inno->child) {
 		dev_err(dev, "failed to find dwc3 core node\n");
 		ret = -ENODEV;
 		goto err_plat_depopulate;
 	}
 
-	child_pdev = of_find_device_by_node(child);
-	if (!child_pdev) {
-		dev_err(dev, "failed to get dwc3 core device\n");
-		ret = -ENODEV;
-		goto err_plat_depopulate;
-	}
-
-	rk_inno->dwc = platform_get_drvdata(child_pdev);
-	if (!rk_inno->dwc || !rk_inno->dwc->xhci) {
-		ret = -EPROBE_DEFER;
-		goto err_plat_depopulate;
-	}
-
-	node = of_parse_phandle(child, "usb-phy", 0);
-	INIT_WORK(&rk_inno->reset_work, dwc3_rk_inno_host_reset_work);
-	rk_inno->reset_nb.notifier_call = dwc3_rk_inno_host_reset_notifier;
+	node = of_parse_phandle(rk_inno->child, "usb-phy", 0);
 	rk_inno->phy = devm_usb_get_phy_by_node(dev, node, &rk_inno->reset_nb);
 	of_node_put(node);
+	if (IS_ERR(rk_inno->phy)) {
+		ret = PTR_ERR(rk_inno->phy);
+		of_node_put(rk_inno->child);
+		goto err_plat_depopulate;
+	}
+
+	INIT_WORK(&rk_inno->reset_work, dwc3_rk_inno_host_reset_work);
+	rk_inno->reset_nb.notifier_call = dwc3_rk_inno_host_reset_notifier;
 	mutex_init(&rk_inno->lock);
 
 	pm_runtime_set_active(dev);
@@ -177,6 +187,7 @@ err_resetc_put:
 
 static void __dwc3_rk_inno_teardown(struct dwc3_rk_inno *rk_inno)
 {
+	of_node_put(rk_inno->child);
 	of_platform_depopulate(rk_inno->dev);
 
 	clk_bulk_disable_unprepare(rk_inno->num_clocks, rk_inno->clks);
