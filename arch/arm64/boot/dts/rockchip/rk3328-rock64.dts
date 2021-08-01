@@ -376,20 +376,20 @@
 	};
 };
 
-&u3phy {
-	status = "okay";
-};
-
-&u3phy_utmi {
-	status = "okay";
-};
-
-&u3phy_pipe {
-	status = "okay";
-};
-
 &usb20_otg {
 	dr_mode = "host";
+	status = "okay";
+};
+
+&usb3phy {
+	status = "okay";
+};
+
+&usb3phy_utmi {
+	status = "okay";
+};
+
+&usb3phy_pipe {
 	status = "okay";
 };
 
