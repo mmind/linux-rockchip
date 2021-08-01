@@ -109,7 +109,7 @@
 		compatible = "regulator-fixed";
 		gpio = <&gpio0 RK_PD6 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&sdmmc0m1_gpio>;
+		pinctrl-0 = <&sdmmc0m1_pin>;
 		regulator-name = "vcc_sd";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
@@ -414,20 +414,20 @@
 	};
 };
 
-&u3phy {
-	status = "okay";
-};
-
-&u3phy_utmi {
-	status = "okay";
-};
-
-&u3phy_pipe {
-	status = "okay";
-};
-
 &usb20_otg {
 	dr_mode = "host";
+	status = "okay";
+};
+
+&usb3phy {
+	status = "okay";
+};
+
+&usb3phy_utmi {
+	status = "okay";
+};
+
+&usb3phy_pipe {
 	status = "okay";
 };
 
