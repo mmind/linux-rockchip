@@ -1028,29 +1028,13 @@
 	};
 
 	usbdrd3: usb@ff600000 {
-		compatible = "rockchip,rk3328-dwc3", "snps,dwc3";
+		compatible = "rockchip,rk3328-dwc3";
 		reg = <0x0 0xff600000 0x0 0x100000>;
 		interrupts = <GIC_SPI 67 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&cru SCLK_USB3OTG_REF>, <&cru SCLK_USB3OTG_SUSPEND>,
 			 <&cru ACLK_USB3OTG>;
 		clock-names = "ref_clk", "suspend_clk",
 			      "bus_clk";
-		dr_mode = "otg";
-		phy_type = "utmi_wide";
-		snps,dis-del-phy-power-chg-quirk;
-		snps,dis_enblslpm_quirk;
-		snps,dis-tx-ipgap-linecheck-quirk;
-		snps,dis-u2-freeclk-exists-quirk;
-		snps,dis_u2_susphy_quirk;
-		snps,dis_u3_susphy_quirk;
-		status = "disabled";
-	};
-
-       usbdrd3: usb@ff600000 {
-		compatible = "rockchip,rk3328-dwc3";
-		clocks = <&cru SCLK_USB3OTG_REF>, <&cru ACLK_USB3OTG>,
-			 <&cru SCLK_USB3OTG_SUSPEND>;
-		clock-names = "ref", "bus_early", "suspend";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
@@ -1063,16 +1047,16 @@
 			clocks = <&cru SCLK_USB3OTG_REF>, <&cru ACLK_USB3OTG>,
 				 <&cru SCLK_USB3OTG_SUSPEND>;
 			clock-names = "ref", "bus_early", "suspend";
-			dr_mode = "host";
-			usb-phy = <&usb3phy_utmi>, <&usb3phy_pipe>;
+			dr_mode = "otg";
 			phy_type = "utmi_wide";
+			snps,dis-del-phy-power-chg-quirk;
 			snps,dis_enblslpm_quirk;
+			snps,dis-tx-ipgap-linecheck-quirk;
 			snps,dis-u2-freeclk-exists-quirk;
 			snps,dis_u2_susphy_quirk;
 			snps,dis_u3_susphy_quirk;
-			snps,dis-del-phy-power-chg-quirk;
-			snps,dis-tx-ipgap-linecheck-quirk;
 			snps,xhci-trb-ent-quirk;
+			usb-phy = <&usb3phy_utmi>, <&usb3phy_pipe>;
 			status = "disabled";
 		};
 	};
