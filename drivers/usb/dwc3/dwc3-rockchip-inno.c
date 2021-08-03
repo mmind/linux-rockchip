@@ -9,14 +9,12 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
-#include <linux/dma-mapping.h>
 #include <linux/clk.h>
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
-
 #include <linux/workqueue.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
@@ -24,7 +22,6 @@
 
 #include "core.h"
 #include "../host/xhci.h"
-
 
 struct dwc3_rk_inno {
 	struct device		*dev;
@@ -53,24 +50,36 @@ static void dwc3_rk_inno_host_reset_work(struct work_struct *work)
 	struct usb_hcd		*hcd, *shared_hcd;
 	struct xhci_hcd		*xhci;
 	struct dwc3		*dwc;
-	unsigned int		count = 0;
+	unsigned int		count;
 	struct platform_device	*child_pdev;
 
+	/* prevent device removal while host-reset is running */
 	mutex_lock(&rk_inno->lock);
 
 	child_pdev = of_find_device_by_node(rk_inno->child);
 	if (!child_pdev) {
-		dev_err(rk_inno->dev, "failed to get dwc3 core device\n");
-		mutex_unlock(&rk_inno->lock);
-		return;
+		dev_warn(rk_inno->dev, "failed to get dwc3 core device\n");
+		goto out_release_mutex;
 	}
 
+	/*
+	 * The usb-phy gets attached to the hcd and events only get
+	 * triggered after the usb-phy got enabled by it.
+	 * So at this point dwc3 and xhci are probed and running
+	 * if in host mode.
+	 */
 	dwc = platform_get_drvdata(child_pdev);
-	if (!dwc || !dwc->xhci) {
-		dev_warn(rk_inno->dev, "dwc3 not probed yet\n");
-		mutex_unlock(&rk_inno->lock);
-		return;
+	if (!dwc) {
+		dev_warn(rk_inno->dev, "dwc3 missing\n");
+		goto out_release_mutex;
 	}
+
+	/* prevent mode switches in dwc3 */
+	mutex_lock(&dwc->mutex);
+
+	/* not in host-mode */
+	if (!dwc->xhci)
+		goto out_release_dwcmutex;
 
 	hcd = dev_get_drvdata(&dwc->xhci->dev);
 	shared_hcd = hcd->shared_hcd;
@@ -81,15 +90,16 @@ static void dwc3_rk_inno_host_reset_work(struct work_struct *work)
 		usb_remove_hcd(hcd);
 	}
 
-	if (rk_inno->phy)
-		usb_phy_shutdown(rk_inno->phy);
+	usb_phy_shutdown(rk_inno->phy);
 
+	count = 0;
 	while (hcd->state != HC_STATE_HALT) {
-		if (++count > 1000) {
-			dev_err(rk_inno->dev, "wait for HCD remove 1s timeout!\n");
+		if (count > 1000) {
+			dev_err(rk_inno->dev, "HCD removal took longer than 1s, timeout!\n");
 			break;
 		}
 		usleep_range(1000, 1100);
+		count++;
 	}
 
 	if (hcd->state == HC_STATE_HALT) {
@@ -98,11 +108,13 @@ static void dwc3_rk_inno_host_reset_work(struct work_struct *work)
 		usb_add_hcd(shared_hcd, hcd->irq, IRQF_SHARED);
 	}
 
-	if (rk_inno->phy)
-		usb_phy_init(rk_inno->phy);
-
-	mutex_unlock(&rk_inno->lock);
+	usb_phy_init(rk_inno->phy);
 	dev_dbg(rk_inno->dev, "host reset complete\n");
+
+out_release_dwcmutex:
+	mutex_unlock(&dwc->mutex);
+out_release_mutex:
+	mutex_unlock(&rk_inno->lock);
 }
 
 static int dwc3_rk_inno_probe(struct platform_device *pdev)
@@ -151,6 +163,10 @@ static int dwc3_rk_inno_probe(struct platform_device *pdev)
 		goto err_plat_depopulate;
 	}
 
+	INIT_WORK(&rk_inno->reset_work, dwc3_rk_inno_host_reset_work);
+	rk_inno->reset_nb.notifier_call = dwc3_rk_inno_host_reset_notifier;
+	mutex_init(&rk_inno->lock);
+
 	node = of_parse_phandle(rk_inno->child, "usb-phy", 0);
 	rk_inno->phy = devm_usb_get_phy_by_node(dev, node, &rk_inno->reset_nb);
 	of_node_put(node);
@@ -159,10 +175,6 @@ static int dwc3_rk_inno_probe(struct platform_device *pdev)
 		of_node_put(rk_inno->child);
 		goto err_plat_depopulate;
 	}
-
-	INIT_WORK(&rk_inno->reset_work, dwc3_rk_inno_host_reset_work);
-	rk_inno->reset_nb.notifier_call = dwc3_rk_inno_host_reset_notifier;
-	mutex_init(&rk_inno->lock);
 
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
@@ -185,10 +197,15 @@ err_resetc_put:
 	return ret;
 }
 
-static void __dwc3_rk_inno_teardown(struct dwc3_rk_inno *rk_inno)
+static int dwc3_rk_inno_remove(struct platform_device *pdev)
 {
+	struct dwc3_rk_inno	*rk_inno = platform_get_drvdata(pdev);
+
+	/* prevent device removal while host-reset is running */
+	mutex_lock(&rk_inno->lock);
 	of_node_put(rk_inno->child);
 	of_platform_depopulate(rk_inno->dev);
+	mutex_unlock(&rk_inno->lock);
 
 	clk_bulk_disable_unprepare(rk_inno->num_clocks, rk_inno->clks);
 	clk_bulk_put_all(rk_inno->num_clocks, rk_inno->clks);
@@ -201,22 +218,13 @@ static void __dwc3_rk_inno_teardown(struct dwc3_rk_inno *rk_inno)
 	pm_runtime_disable(rk_inno->dev);
 	pm_runtime_put_noidle(rk_inno->dev);
 	pm_runtime_set_suspended(rk_inno->dev);
-}
-
-static int dwc3_rk_inno_remove(struct platform_device *pdev)
-{
-	struct dwc3_rk_inno	*rk_inno = platform_get_drvdata(pdev);
-
-	__dwc3_rk_inno_teardown(rk_inno);
 
 	return 0;
 }
 
 static void dwc3_rk_inno_shutdown(struct platform_device *pdev)
 {
-	struct dwc3_rk_inno	*rk_inno = platform_get_drvdata(pdev);
-
-	__dwc3_rk_inno_teardown(rk_inno);
+	dwc3_rk_inno_remove(pdev);
 }
 
 static int __maybe_unused dwc3_rk_inno_runtime_suspend(struct device *dev)
