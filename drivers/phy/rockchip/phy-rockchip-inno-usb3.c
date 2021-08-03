@@ -217,7 +217,7 @@ static int rockchip_usb3phy_init(struct usb_phy *phy)
 	struct rockchip_usb3phy_port *usb3phy_port = container_of(phy, struct rockchip_usb3phy_port, phy);
 	struct rockchip_usb3phy *usb3phy = usb3phy_port->parent;
 
-	dev_warn(usb3phy->dev, "usb3phy_init %s\n", phy->label);
+	dev_dbg(usb3phy->dev, "usb3phy_init %s\n", phy->label);
 	if (phy->type == USB_PHY_TYPE_USB3){
 		rockchip_usb3phy_reset(usb3phy, false, PHY_USB3);
 		udelay(100); /* let it stabilize */
