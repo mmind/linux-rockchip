@@ -159,6 +159,8 @@ KMS Core Structures and Functions
 .. kernel-doc:: drivers/gpu/drm/drm_mode_config.c
    :export:
 
+.. _kms_base_object_abstraction:
+
 Modeset Base Object Abstraction
 ===============================
 
@@ -537,8 +539,8 @@ Plane Composition Properties
 Damage Tracking Properties
 --------------------------
 
-.. kernel-doc:: drivers/gpu/drm/drm_damage_helper.c
-   :doc: overview
+.. kernel-doc:: drivers/gpu/drm/drm_plane.c
+   :doc: damage tracking
 
 Color Management Properties
 ---------------------------
