@@ -819,38 +819,22 @@ static void __init reserve_crashkernel(void)
 
 	crash_size = PAGE_ALIGN(crash_size);
 
-	if (crash_base == 0) {
-		/*
-		 * Current riscv boot protocol requires 2MB alignment for
-		 * RV64 and 4MB alignment for RV32 (hugepage size)
-		 */
-		crash_base = memblock_find_in_range(search_start, search_end,
-						    crash_size, PMD_SIZE);
-
-		if (crash_base == 0) {
-			pr_warn("crashkernel: couldn't allocate %lldKB\n",
-				crash_size >> 10);
-			return;
-		}
-	} else {
-		/* User specifies base address explicitly. */
-		if (!memblock_is_region_memory(crash_base, crash_size)) {
-			pr_warn("crashkernel: requested region is not memory\n");
-			return;
-		}
-
-		if (memblock_is_region_reserved(crash_base, crash_size)) {
-			pr_warn("crashkernel: requested region is reserved\n");
-			return;
-		}
-
-
-		if (!IS_ALIGNED(crash_base, PMD_SIZE)) {
-			pr_warn("crashkernel: requested region is misaligned\n");
-			return;
-		}
+	if (crash_base) {
+		search_start = crash_base;
+		search_end = crash_base + crash_size;
 	}
-	memblock_reserve(crash_base, crash_size);
+
+	/*
+	 * Current riscv boot protocol requires 2MB alignment for
+	 * RV64 and 4MB alignment for RV32 (hugepage size)
+	 */
+	crash_base = memblock_phys_alloc_range(crash_size, PMD_SIZE,
+					       search_start, search_end);
+	if (crash_base == 0) {
+		pr_warn("crashkernel: couldn't allocate %lldKB\n",
+			crash_size >> 10);
+		return;
+	}
 
 	pr_info("crashkernel: reserved 0x%016llx - 0x%016llx (%lld MB)\n",
 		crash_base, crash_base + crash_size, crash_size >> 20);
@@ -859,26 +843,6 @@ static void __init reserve_crashkernel(void)
 	crashk_res.end = crash_base + crash_size - 1;
 }
 #endif /* CONFIG_KEXEC_CORE */
-
-#ifdef CONFIG_CRASH_DUMP
-/*
- * We keep track of the ELF core header of the crashed
- * kernel with a reserved-memory region with compatible
- * string "linux,elfcorehdr". Here we register a callback
- * to populate elfcorehdr_addr/size when this region is
- * present. Note that this region will be marked as
- * reserved once we call early_init_fdt_scan_reserved_mem()
- * later on.
- */
-static int __init elfcore_hdr_setup(struct reserved_mem *rmem)
-{
-	elfcorehdr_addr = rmem->base;
-	elfcorehdr_size = rmem->size;
-	return 0;
-}
-
-RESERVEDMEM_OF_DECLARE(elfcorehdr, "linux,elfcorehdr", elfcore_hdr_setup);
-#endif
 
 void __init paging_init(void)
 {

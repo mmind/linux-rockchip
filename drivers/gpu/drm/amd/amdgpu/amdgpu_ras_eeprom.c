@@ -27,9 +27,9 @@
 #include <linux/bits.h>
 #include "atom.h"
 #include "amdgpu_eeprom.h"
+#include "amdgpu_atomfirmware.h"
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
-#include "amdgpu_atomfirmware.h"
 
 #define EEPROM_I2C_MADDR_VEGA20         0x0
 #define EEPROM_I2C_MADDR_ARCTURUS       0x40000
@@ -114,11 +114,28 @@ static bool __get_eeprom_i2c_addr_arct(struct amdgpu_device *adev,
 static bool __get_eeprom_i2c_addr(struct amdgpu_device *adev,
 				  struct amdgpu_ras_eeprom_control *control)
 {
+	uint8_t ras_rom_i2c_slave_addr;
+
 	if (!control)
 		return false;
 
-	if (amdgpu_atomfirmware_ras_rom_addr(adev, (uint8_t*)i2c_addr))
-		return true;
+	control->i2c_address = 0;
+
+	if (amdgpu_atomfirmware_ras_rom_addr(adev, &ras_rom_i2c_slave_addr))
+	{
+		switch (ras_rom_i2c_slave_addr) {
+		case 0xA0:
+			control->i2c_address = 0;
+			return true;
+		case 0xA8:
+			control->i2c_address = 0x40000;
+			return true;
+		default:
+			dev_warn(adev->dev, "RAS EEPROM I2C slave address %02x not supported",
+				 ras_rom_i2c_slave_addr);
+			return false;
+		}
+	}
 
 	switch (adev->asic_type) {
 	case CHIP_VEGA20:
