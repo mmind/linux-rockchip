@@ -10,7 +10,6 @@
 #include <linux/sched.h>
 #include <asm/thread_info.h>
 #include <asm/ptrace.h>
-#include <asm/suspend.h>
 
 void asm_offsets(void);
 
@@ -111,8 +110,6 @@ void asm_offsets(void)
 	OFFSET(PT_STATUS, pt_regs, status);
 	OFFSET(PT_BADADDR, pt_regs, badaddr);
 	OFFSET(PT_CAUSE, pt_regs, cause);
-
-	OFFSET(SUSPEND_CONTEXT_REGS, suspend_context, regs);
 
 	/*
 	 * THREAD_{F,X}* might be larger than a S-type offset can handle, but
