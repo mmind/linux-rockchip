@@ -179,7 +179,7 @@ err_cancel_job:
 	hantro_job_finish_no_pm(ctx->dev, ctx, VB2_BUF_STATE_ERROR);
 }
 
-static struct v4l2_m2m_ops vpu_m2m_ops = {
+static const struct v4l2_m2m_ops vpu_m2m_ops = {
 	.device_run = device_run,
 };
 
@@ -980,7 +980,7 @@ static int hantro_probe(struct platform_device *pdev)
 	vpu->mdev.dev = vpu->dev;
 	strscpy(vpu->mdev.model, DRIVER_NAME, sizeof(vpu->mdev.model));
 	strscpy(vpu->mdev.bus_info, "platform: " DRIVER_NAME,
-		sizeof(vpu->mdev.model));
+		sizeof(vpu->mdev.bus_info));
 	media_device_init(&vpu->mdev);
 	vpu->mdev.ops = &hantro_m2m_media_ops;
 	vpu->v4l2_dev.mdev = &vpu->mdev;

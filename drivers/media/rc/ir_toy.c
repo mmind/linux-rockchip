@@ -123,6 +123,7 @@ static void irtoy_response(struct irtoy *irtoy, u32 len)
 				len, irtoy->in);
 		}
 		break;
+	case STATE_COMMAND_NO_RESP:
 	case STATE_IRDATA: {
 		struct ir_raw_event rawir = { .pulse = irtoy->pulse };
 		__be16 *in = (__be16 *)irtoy->in;
@@ -168,10 +169,8 @@ static void irtoy_response(struct irtoy *irtoy, u32 len)
 			int err;
 
 			if (len != 1 || space > MAX_PACKET || space == 0) {
-				dev_err(irtoy->dev, "packet length expected: %*phN\n",
+				dev_dbg(irtoy->dev, "packet length expected: %*phN\n",
 					len, irtoy->in);
-				irtoy->state = STATE_IRDATA;
-				complete(&irtoy->command_done);
 				break;
 			}
 
@@ -195,9 +194,6 @@ static void irtoy_response(struct irtoy *irtoy, u32 len)
 			irtoy->tx_len -= buf_len;
 		}
 		break;
-	case STATE_COMMAND_NO_RESP:
-		dev_err(irtoy->dev, "unexpected response to reset: %*phN\n",
-			len, irtoy->in);
 	}
 }
 
@@ -218,10 +214,20 @@ static void irtoy_in_callback(struct urb *urb)
 	struct irtoy *irtoy = urb->context;
 	int ret;
 
-	if (urb->status == 0)
+	switch (urb->status) {
+	case 0:
 		irtoy_response(irtoy, urb->actual_length);
-	else
+		break;
+	case -ECONNRESET:
+	case -ENOENT:
+	case -ESHUTDOWN:
+	case -EPROTO:
+	case -EPIPE:
+		usb_unlink_urb(urb);
+		return;
+	default:
 		dev_dbg(irtoy->dev, "in urb status: %d\n", urb->status);
+	}
 
 	ret = usb_submit_urb(urb, GFP_ATOMIC);
 	if (ret && ret != -ENODEV)
@@ -312,7 +318,7 @@ static int irtoy_tx(struct rc_dev *rc, uint *txbuf, uint count)
 		buf[i] = cpu_to_be16(v);
 	}
 
-	buf[count] = 0xffff;
+	buf[count] = cpu_to_be16(0xffff);
 
 	irtoy->tx_buf = buf;
 	irtoy->tx_len = size;
@@ -323,7 +329,7 @@ static int irtoy_tx(struct rc_dev *rc, uint *txbuf, uint count)
 	// with its led on. It does not respond to any command when this
 	// happens. To work around this, re-enter sample mode.
 	err = irtoy_command(irtoy, COMMAND_SMODE_EXIT,
-			    sizeof(COMMAND_SMODE_EXIT), STATE_RESET);
+			    sizeof(COMMAND_SMODE_EXIT), STATE_COMMAND_NO_RESP);
 	if (err) {
 		dev_err(irtoy->dev, "exit sample mode: %d\n", err);
 		return err;
@@ -459,8 +465,9 @@ static int irtoy_probe(struct usb_interface *intf,
 	if (err)
 		goto free_rcdev;
 
-	dev_info(irtoy->dev, "version: hardware %u, firmware %u, protocol %u",
-		 irtoy->hw_version, irtoy->sw_version, irtoy->proto_version);
+	dev_info(irtoy->dev, "version: hardware %u, firmware %u.%u, protocol %u",
+		 irtoy->hw_version, irtoy->sw_version / 10,
+		 irtoy->sw_version % 10, irtoy->proto_version);
 
 	if (irtoy->sw_version < MIN_FW_VERSION) {
 		dev_err(irtoy->dev, "need firmware V%02u or higher",
