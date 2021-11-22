@@ -241,7 +241,7 @@ void evsel__init(struct evsel *evsel,
 {
 	perf_evsel__init(&evsel->core, attr, idx);
 	evsel->tracking	   = !idx;
-	evsel->unit	   = "";
+	evsel->unit	   = strdup("");
 	evsel->scale	   = 1.0;
 	evsel->max_events  = ULONG_MAX;
 	evsel->evlist	   = NULL;
@@ -276,13 +276,8 @@ struct evsel *evsel__new_idx(struct perf_event_attr *attr, int idx)
 	}
 
 	if (evsel__is_clock(evsel)) {
-		/*
-		 * The evsel->unit points to static alias->unit
-		 * so it's ok to use static string in here.
-		 */
-		static const char *unit = "msec";
-
-		evsel->unit = unit;
+		free((char *)evsel->unit);
+		evsel->unit = strdup("msec");
 		evsel->scale = 1e-6;
 	}
 
@@ -420,7 +415,11 @@ struct evsel *evsel__clone(struct evsel *orig)
 
 	evsel->max_events = orig->max_events;
 	evsel->tool_event = orig->tool_event;
-	evsel->unit = orig->unit;
+	free((char *)evsel->unit);
+	evsel->unit = strdup(orig->unit);
+	if (evsel->unit == NULL)
+		goto out_err;
+
 	evsel->scale = orig->scale;
 	evsel->snapshot = orig->snapshot;
 	evsel->per_pkg = orig->per_pkg;
@@ -1441,6 +1440,7 @@ void evsel__exit(struct evsel *evsel)
 	zfree(&evsel->group_name);
 	zfree(&evsel->name);
 	zfree(&evsel->pmu_name);
+	zfree(&evsel->unit);
 	zfree(&evsel->metric_id);
 	evsel__zero_per_pkg(evsel);
 	hashmap__free(evsel->per_pkg_mask);
@@ -3036,4 +3036,16 @@ bool evsel__is_leader(struct evsel *evsel)
 void evsel__set_leader(struct evsel *evsel, struct evsel *leader)
 {
 	evsel->core.leader = &leader->core;
+}
+
+int evsel__source_count(const struct evsel *evsel)
+{
+	struct evsel *pos;
+	int count = 0;
+
+	evlist__for_each_entry(evsel->evlist, pos) {
+		if (pos->metric_leader == evsel)
+			count++;
+	}
+	return count;
 }

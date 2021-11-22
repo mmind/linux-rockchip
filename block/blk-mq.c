@@ -2495,8 +2495,9 @@ static inline unsigned short blk_plug_max_rq_count(struct blk_plug *plug)
 	return BLK_MAX_REQUEST_COUNT;
 }
 
-static bool blk_attempt_bio_merge(struct request_queue *q, struct bio *bio,
-				  unsigned int nr_segs, bool *same_queue_rq)
+static bool blk_mq_attempt_bio_merge(struct request_queue *q,
+				     struct bio *bio, unsigned int nr_segs,
+				     bool *same_queue_rq)
 {
 	if (!blk_queue_nomerges(q) && bio_mergeable(bio)) {
 		if (blk_attempt_plug_merge(q, bio, nr_segs, same_queue_rq))
@@ -2520,12 +2521,8 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
 	};
 	struct request *rq;
 
-	if (unlikely(bio_queue_enter(bio)))
+	if (blk_mq_attempt_bio_merge(q, bio, nsegs, same_queue_rq))
 		return NULL;
-	if (unlikely(!submit_bio_checks(bio)))
-		goto put_exit;
-	if (blk_attempt_bio_merge(q, bio, nsegs, same_queue_rq))
-		goto put_exit;
 
 	rq_qos_throttle(q, bio);
 
@@ -2542,9 +2539,19 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
 	rq_qos_cleanup(q, bio);
 	if (bio->bi_opf & REQ_NOWAIT)
 		bio_wouldblock_error(bio);
-put_exit:
-	blk_queue_exit(q);
+
 	return NULL;
+}
+
+static inline bool blk_mq_can_use_cached_rq(struct request *rq, struct bio *bio)
+{
+	if (blk_mq_get_hctx_type(bio->bi_opf) != rq->mq_hctx->type)
+		return false;
+
+	if (op_is_flush(rq->cmd_flags) != op_is_flush(bio->bi_opf))
+		return false;
+
+	return true;
 }
 
 static inline struct request *blk_mq_get_request(struct request_queue *q,
@@ -2553,15 +2560,21 @@ static inline struct request *blk_mq_get_request(struct request_queue *q,
 						 unsigned int nsegs,
 						 bool *same_queue_rq)
 {
-	if (plug) {
-		struct request *rq;
+	struct request *rq;
+	bool checked = false;
 
+	if (plug) {
 		rq = rq_list_peek(&plug->cached_rq);
 		if (rq && rq->q == q) {
 			if (unlikely(!submit_bio_checks(bio)))
 				return NULL;
-			if (blk_attempt_bio_merge(q, bio, nsegs, same_queue_rq))
+			if (blk_mq_attempt_bio_merge(q, bio, nsegs,
+						same_queue_rq))
 				return NULL;
+			checked = true;
+			if (!blk_mq_can_use_cached_rq(rq, bio))
+				goto fallback;
+			rq->cmd_flags = bio->bi_opf;
 			plug->cached_rq = rq_list_next(rq);
 			INIT_LIST_HEAD(&rq->queuelist);
 			rq_qos_throttle(q, bio);
@@ -2569,7 +2582,17 @@ static inline struct request *blk_mq_get_request(struct request_queue *q,
 		}
 	}
 
-	return blk_mq_get_new_requests(q, plug, bio, nsegs, same_queue_rq);
+fallback:
+	if (unlikely(bio_queue_enter(bio)))
+		return NULL;
+	if (unlikely(!checked && !submit_bio_checks(bio)))
+		goto out_put;
+	rq = blk_mq_get_new_requests(q, plug, bio, nsegs, same_queue_rq);
+	if (rq)
+		return rq;
+out_put:
+	blk_queue_exit(q);
+	return NULL;
 }
 
 /**
@@ -2624,8 +2647,10 @@ void blk_mq_submit_bio(struct bio *bio)
 		return;
 	}
 
-	if (op_is_flush(bio->bi_opf) && blk_insert_flush(rq))
+	if (op_is_flush(bio->bi_opf)) {
+		blk_insert_flush(rq);
 		return;
+	}
 
 	if (plug && (q->nr_hw_queues == 1 ||
 	    blk_mq_is_shared_tags(rq->mq_hctx->flags) ||
@@ -4393,6 +4418,19 @@ unsigned int blk_mq_rq_cpu(struct request *rq)
 	return rq->mq_ctx->cpu;
 }
 EXPORT_SYMBOL(blk_mq_rq_cpu);
+
+void blk_mq_cancel_work_sync(struct request_queue *q)
+{
+	if (queue_is_mq(q)) {
+		struct blk_mq_hw_ctx *hctx;
+		int i;
+
+		cancel_delayed_work_sync(&q->requeue_work);
+
+		queue_for_each_hw_ctx(q, hctx, i)
+			cancel_delayed_work_sync(&hctx->run_work);
+	}
+}
 
 static int __init blk_mq_init(void)
 {
