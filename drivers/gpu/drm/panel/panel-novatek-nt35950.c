@@ -636,7 +636,7 @@ static int nt35950_remove(struct mipi_dsi_device *dsi)
 			dev_err(&dsi->dev,
 				"Failed to detach from DSI1 host: %d\n", ret);
 		mipi_dsi_device_unregister(nt->dsi[1]);
-	};
+	}
 
 	drm_panel_remove(&nt->panel);
 
@@ -668,7 +668,7 @@ static const struct nt35950_panel_mode sharp_ls055d1sx04_modes[] = {
 	/* TODO: Add 2160x3840 60Hz when DSC is supported */
 };
 
-const struct nt35950_panel_desc sharp_ls055d1sx04 = {
+static const struct nt35950_panel_desc sharp_ls055d1sx04 = {
 	.model_name = "Sharp LS055D1SX04",
 	.dsi_info = {
 		.type = "LS055D1SX04",
