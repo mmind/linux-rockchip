@@ -54,6 +54,7 @@ config PHY_ROCKCHIP_INNO_USB3
 	depends on COMMON_CLK
 	depends on USB_SUPPORT
 	select USB_COMMON
+	select USB_PHY
 	help
 	  Support for Rockchip USB3.0 PHY with Innosilicon IP block.
 
