@@ -19,13 +19,13 @@
 		stdout-path = "serial2:1500000n8";
 	};
 
-/*	ir: ir-receiver {
+	ir: ir-receiver {
 		compatible = "gpio-ir-receiver";
 		gpios = <&gpio2 RK_PA2 GPIO_ACTIVE_LOW>;
 		linux,rc-map-name = "rc-z28";
 		pinctrl-names = "default";
 		pinctrl-0 = <&ir_int>;
-	}; */
+	};
 
 	leds {
 		compatible = "gpio-leds";
