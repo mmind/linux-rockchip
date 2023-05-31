@@ -47,6 +47,18 @@ static int check_custom_allocator(enum io_pgtable_fmt fmt,
 	if (!cfg->alloc)
 		return 0;
 
+	switch (fmt) {
+	case ARM_32_LPAE_S1:
+	case ARM_32_LPAE_S2:
+	case ARM_64_LPAE_S1:
+	case ARM_64_LPAE_S2:
+	case ARM_MALI_LPAE:
+		return 0;
+
+	default:
+		break;
+	}
+
 	return -EINVAL;
 }
 
