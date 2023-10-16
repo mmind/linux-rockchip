@@ -236,18 +236,15 @@ struct panthor_fw {
 	} watchdog;
 
 	/**
-	 * @waitqueues: Request waitqueues.
+	 * @req_waitqueue: FW request waitqueue.
 	 *
 	 * Everytime a request is sent to a command stream group or the global
 	 * interface, the caller will first busy wait for the request to be
 	 * acknowledged, and then fallback to a sleeping wait.
 	 *
-	 * Those wait queues are here to support the sleeping wait flavor.
-	 *
-	 * Entry 31 is the global waitqueue, the other ones are the command
-	 * stream group slot waitqueues.
+	 * This wait queue is here to support the sleeping wait flavor.
 	 */
-	wait_queue_head_t waitqueues[32];
+	wait_queue_head_t req_waitqueue;
 
 	/** @booted: True is the FW is booted */
 	bool booted;
@@ -956,36 +953,18 @@ static void panthor_fw_init_global_iface(struct panthor_device *ptdev)
 			 msecs_to_jiffies(PING_INTERVAL_MS));
 }
 
-static void panthor_fw_process_global_irq(struct panthor_device *ptdev)
-{
-	/* If the FW is not booted, don't process IRQs, just flag the FW as booted. */
-	if (!ptdev->fw->booted)
-		ptdev->fw->booted = true;
-	else
-		panthor_sched_process_global_irq(ptdev);
-
-	wake_up_all(&ptdev->fw->waitqueues[31]);
-}
-
-static void panthor_fw_process_csg_irq(struct panthor_device *ptdev, u32 csg_slot)
-{
-	panthor_sched_process_csg_irq(ptdev, csg_slot);
-	wake_up_all(&ptdev->fw->waitqueues[csg_slot]);
-}
-
 static void panthor_job_irq_handler(struct panthor_device *ptdev, u32 status)
 {
-	if (status & JOB_INT_GLOBAL_IF) {
-		panthor_fw_process_global_irq(ptdev);
-		status &= ~JOB_INT_GLOBAL_IF;
-	}
+	if (!ptdev->fw->booted && (status & JOB_INT_GLOBAL_IF))
+		ptdev->fw->booted = true;
 
-	while (status) {
-		u32 csg_id = ffs(status) - 1;
+	wake_up_all(&ptdev->fw->req_waitqueue);
 
-		panthor_fw_process_csg_irq(ptdev, csg_id);
-		status &= ~JOB_INT_CSG_IF(csg_id);
-	}
+	/* If the FW is not booted, don't process IRQs, just flag the FW as booted. */
+	if (!ptdev->fw->booted)
+		return;
+
+	panthor_sched_report_fw_events(ptdev, status);
 }
 PANTHOR_IRQ_HANDLER(job, JOB, panthor_job_irq_handler);
 
@@ -997,7 +976,7 @@ static int panthor_fw_start(struct panthor_device *ptdev)
 	panthor_job_irq_resume(&ptdev->fw->irq, ~0);
 	gpu_write(ptdev, MCU_CONTROL, MCU_CONTROL_AUTO);
 
-	if (!wait_event_timeout(ptdev->fw->waitqueues[31],
+	if (!wait_event_timeout(ptdev->fw->req_waitqueue,
 				ptdev->fw->booted,
 				msecs_to_jiffies(1000))) {
 		if (!ptdev->fw->booted &&
@@ -1192,7 +1171,7 @@ int panthor_fw_glb_wait_acks(struct panthor_device *ptdev,
 
 	return panthor_fw_wait_acks(&glb_iface->input->req,
 				    &glb_iface->output->ack,
-				    &ptdev->fw->waitqueues[31],
+				    &ptdev->fw->req_waitqueue,
 				    req_mask, acked, timeout_ms);
 }
 
@@ -1217,7 +1196,7 @@ int panthor_fw_csg_wait_acks(struct panthor_device *ptdev, u32 csg_slot,
 
 	ret = panthor_fw_wait_acks(&csg_iface->input->req,
 				   &csg_iface->output->ack,
-				   &ptdev->fw->waitqueues[csg_slot],
+				   &ptdev->fw->req_waitqueue,
 				   req_mask, acked, timeout_ms);
 
 	/*
@@ -1289,9 +1268,7 @@ int panthor_fw_init(struct panthor_device *ptdev)
 		return -ENOMEM;
 
 	ptdev->fw = fw;
-	for (u32 i = 0; i < ARRAY_SIZE(fw->waitqueues); i++)
-		init_waitqueue_head(&fw->waitqueues[i]);
-
+	init_waitqueue_head(&fw->req_waitqueue);
 	INIT_LIST_HEAD(&fw->sections);
 	INIT_DELAYED_WORK(&fw->watchdog.ping_work, panthor_fw_ping_work);
 
