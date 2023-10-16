@@ -35,14 +35,14 @@ void panthor_job_update_resvs(struct drm_exec *exec, struct drm_sched_job *job);
 int panthor_group_pool_create(struct panthor_file *pfile);
 void panthor_group_pool_destroy(struct panthor_file *pfile);
 
-void panthor_sched_process_csg_irq(struct panthor_device *ptdev, u32 csg_slot);
-void panthor_sched_process_global_irq(struct panthor_device *ptdev);
-
 int panthor_sched_init(struct panthor_device *ptdev);
 void panthor_sched_unplug(struct panthor_device *ptdev);
 void panthor_sched_pre_reset(struct panthor_device *ptdev);
 void panthor_sched_post_reset(struct panthor_device *ptdev);
 void panthor_sched_suspend(struct panthor_device *ptdev);
 void panthor_sched_resume(struct panthor_device *ptdev);
+
+void panthor_sched_report_mmu_fault(struct panthor_device *ptdev);
+void panthor_sched_report_fw_events(struct panthor_device *ptdev, u32 events);
 
 #endif
