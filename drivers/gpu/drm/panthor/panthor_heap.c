@@ -301,7 +301,7 @@ int panthor_heap_create(struct panthor_heap_pool *pool,
 	}
 
 	gpu_ctx = panthor_get_heap_ctx(pool, id);
-	memset(gpu_ctx, 0, sizeof(*gpu_ctx));
+	memset(gpu_ctx, 0, panthor_heap_ctx_stride(pool->ptdev));
 
 	ret = panthor_alloc_heap_chunks(pool->ptdev, pool->vm, heap,
 					initial_chunk_count);
