@@ -385,6 +385,14 @@ struct panthor_vm {
 	 * situation, where the logical device needs to be re-created.
 	 */
 	bool unusable;
+
+	/**
+	 * @unhandled_fault: Unhandled fault happened.
+	 *
+	 * This should be reported to the scheduler, and the queue/group be
+	 * flagged as faulty as a result.
+	 */
+	bool unhandled_fault;
 };
 
 /**
@@ -650,6 +658,17 @@ static u32 panthor_mmu_as_fault_mask(struct panthor_device *ptdev, u32 as)
 }
 
 /**
+ * panthor_vm_has_unhandled_faults() - Check if a VM has unhandled faults
+ * @vm: VM to check.
+ *
+ * Return: true if the VM has unhandled faults, false otherwise.
+ */
+bool panthor_vm_has_unhandled_faults(struct panthor_vm *vm)
+{
+	return vm->unhandled_fault;
+}
+
+/**
  * panthor_vm_active() - Flag a VM as active
  * @VM: VM to flag as active.
  *
@@ -671,18 +690,11 @@ int panthor_vm_active(struct panthor_vm *vm)
 
 	as = vm->as.id;
 	if (as >= 0) {
-		u32 mask = panthor_mmu_as_fault_mask(ptdev, as);
-
-		if (ptdev->mmu->as.faulty_mask & mask) {
-			/* Unhandled pagefault on this AS, the MMU was
-			 * disabled. We need to re-enable the MMU after
-			 * clearing+unmasking the AS interrupts.
-			 */
-			gpu_write(ptdev, MMU_INT_CLEAR, mask);
-			ptdev->mmu->as.faulty_mask &= ~mask;
-			gpu_write(ptdev, MMU_INT_MASK, ~ptdev->mmu->as.faulty_mask);
+		/* Unhandled pagefault on this AS, the MMU was disabled. We need to
+		 * re-enable the MMU after clearing+unmasking the AS interrupts.
+		 */
+		if (ptdev->mmu->as.faulty_mask & panthor_mmu_as_fault_mask(ptdev, as))
 			goto out_enable_as;
-		}
 
 		goto out_unlock;
 	}
@@ -725,6 +737,18 @@ out_enable_as:
 		   AS_TRANSCFG_ADRMODE_AARCH64_4K;
 	if (ptdev->coherent)
 		transcfg |= AS_TRANSCFG_PTW_SH_OS;
+
+	/* If the VM is re-activated, we clear the fault. */
+	vm->unhandled_fault = false;
+
+	/* Unhandled pagefault on this AS, clear the fault and re-enable interrupts
+	 * before enabling the AS.
+	 */
+	if (ptdev->mmu->as.faulty_mask & panthor_mmu_as_fault_mask(ptdev, as)) {
+		gpu_write(ptdev, MMU_INT_CLEAR, panthor_mmu_as_fault_mask(ptdev, as));
+		ptdev->mmu->as.faulty_mask &= ~panthor_mmu_as_fault_mask(ptdev, as);
+		gpu_write(ptdev, MMU_INT_MASK, ~ptdev->mmu->as.faulty_mask);
+	}
 
 	ret = panthor_mmu_as_enable(vm->ptdev, vm->as.id, transtab, transcfg, vm->memattr);
 
@@ -1481,6 +1505,8 @@ static const char *access_type_name(struct panthor_device *ptdev,
 
 static void panthor_mmu_irq_handler(struct panthor_device *ptdev, u32 status)
 {
+	bool has_unhandled_faults = false;
+
 	status = panthor_mmu_fault_mask(ptdev, status);
 	while (status) {
 		u32 as = ffs(status | (status >> 16)) - 1;
@@ -1503,6 +1529,7 @@ static void panthor_mmu_irq_handler(struct panthor_device *ptdev, u32 status)
 
 		mutex_lock(&ptdev->mmu->as.slots_lock);
 
+		ptdev->mmu->as.faulty_mask |= mask;
 		new_int_mask =
 			panthor_mmu_fault_mask(ptdev, ~ptdev->mmu->as.faulty_mask);
 
@@ -1532,7 +1559,11 @@ static void panthor_mmu_irq_handler(struct panthor_device *ptdev, u32 status)
 		mutex_unlock(&ptdev->mmu->as.slots_lock);
 
 		status &= ~mask;
+		has_unhandled_faults = true;
 	}
+
+	if (has_unhandled_faults)
+		panthor_sched_report_mmu_fault(ptdev);
 }
 PANTHOR_IRQ_HANDLER(mmu, MMU, panthor_mmu_irq_handler);
 

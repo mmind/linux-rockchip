@@ -61,6 +61,8 @@ int panthor_vm_pool_create_vm(struct panthor_device *ptdev,
 int panthor_vm_pool_destroy_vm(struct panthor_vm_pool *pool, u32 handle);
 struct panthor_vm *panthor_vm_pool_get_vm(struct panthor_vm_pool *pool, u32 handle);
 
+bool panthor_vm_has_unhandled_faults(struct panthor_vm *vm);
+
 /*
  * PANTHOR_VM_KERNEL_AUTO_VA: Use this magic address when you want the GEM
  * logic to auto-allocate the virtual address in the reserved kernel VA range.
