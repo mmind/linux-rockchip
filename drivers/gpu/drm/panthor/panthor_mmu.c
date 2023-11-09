@@ -1726,7 +1726,7 @@ static void panthor_vm_release(struct kref *kref)
 
 	drm_mm_takedown(&vm->mm);
 	mutex_destroy(&vm->mm_lock);
-	drm_gpuvm_destroy(&vm->base);
+	drm_gpuvm_put(&vm->base);
 	mutex_destroy(&vm->op_lock);
 	kfree(vm);
 }
@@ -2148,7 +2148,7 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
 	}
 
 	/* We allocate a dummy GEM for the VM. */
-	dummy_gem = drm_gpuvm_root_object_alloc(&ptdev->base);
+	dummy_gem = drm_gpuvm_resv_object_alloc(&ptdev->base);
 	if (!dummy_gem) {
 		ret = -ENOMEM;
 		goto err_free_vm;
@@ -2162,9 +2162,9 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
 	/* We intentionally leave the reserved range to zero, because we want kernel VMAs
 	 * to be handled the same way user VMAs are.
 	 */
-	drm_gpuvm_init(&vm->base, dummy_gem,
-		       for_mcu ? "panthor-MCU-VM" : "panthor-GPU-VM",
-		       0, min_va, va_range, 0, 0,
+	drm_gpuvm_init(&vm->base, for_mcu ? "panthor-MCU-VM" : "panthor-GPU-VM",
+		       0, &ptdev->base, dummy_gem,
+		       min_va, va_range, 0, 0,
 		       &panthor_gpuvm_ops);
 	drm_gem_object_put(dummy_gem);
 	INIT_LIST_HEAD(&vm->node);
@@ -2189,10 +2189,10 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
 	}
 
 	/* Bind operations are synchronous for now, no timeout needed. */
-	ret = drm_sched_init(&vm->sched, &panthor_vm_bind_ops, ptdev->mmu->vm.wq, 1, 0,
+	ret = drm_sched_init(&vm->sched, &panthor_vm_bind_ops, ptdev->mmu->vm.wq,
+			     DRM_SCHED_PRIORITY_COUNT, 1, 0,
 			     MAX_SCHEDULE_TIMEOUT, NULL, NULL,
-			     "panthor-vm-bind", DRM_SCHED_POLICY_SINGLE_ENTITY,
-			     ptdev->base.dev);
+			     "panthor-vm-bind", ptdev->base.dev);
 	if (ret)
 		goto err_free_io_pgtable;
 
@@ -2223,7 +2223,7 @@ err_free_io_pgtable:
 
 err_gpuvm_destroy:
 	drm_mm_takedown(&vm->mm);
-	drm_gpuvm_destroy(&vm->base);
+	drm_gpuvm_put(&vm->base);
 
 err_free_vm:
 	kfree(vm);

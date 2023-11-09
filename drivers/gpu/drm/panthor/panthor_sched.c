@@ -2920,12 +2920,11 @@ group_create_queue(struct panthor_group *group,
 	}
 
 	ret = drm_sched_init(&queue->scheduler, &panthor_queue_sched_ops,
-			     group->ptdev->scheduler->drm_sched_wq,
+			     group->ptdev->scheduler->drm_sched_wq, DRM_SCHED_PRIORITY_COUNT,
 			     args->ringbuf_size / (NUM_INSTRS_PER_SLOT * sizeof(u64)),
-			     0, msecs_to_jiffies(JOB_TIMEOUT_MS),
+			     0 , msecs_to_jiffies(JOB_TIMEOUT_MS),
 			     group->ptdev->reset.wq,
-			     NULL, "panthor-queue", DRM_SCHED_POLICY_SINGLE_ENTITY,
-			     group->ptdev->base.dev);
+			     NULL, "panthor-queue", group->ptdev->base.dev);
 	if (ret)
 		goto out;
 
