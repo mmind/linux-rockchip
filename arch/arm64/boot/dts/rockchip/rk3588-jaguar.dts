@@ -238,6 +238,38 @@
 	cpu-supply = <&vdd_cpu_lit_s0>;
 };
 
+&dp0 {
+	status = "okay";
+};
+
+&dp0_in {
+	dp0_in_vp1: endpoint {
+		remote-endpoint = <&vp1_out_dp0>;
+	};
+};
+
+&dp1 {
+	status = "okay";
+};
+
+&dp1_in {
+	dp1_in_vp1: endpoint {
+		remote-endpoint = <&vp1_out_dp1>;
+	};
+};
+
+&vp1 {
+	vp1_out_dp0: endpoint@ROCKCHIP_VOP2_EP_DP0 {
+		reg = <ROCKCHIP_VOP2_EP_DP0>;
+		remote-endpoint = <&dp0_in_vp1>;
+	};
+
+	vp1_out_dp1: endpoint@ROCKCHIP_VOP2_EP_DP1 {
+		reg = <ROCKCHIP_VOP2_EP_DP1>;
+		remote-endpoint = <&dp1_in_vp1>;
+	};
+};
+
 &gmac0 {
 	clock_in_out = "output";
 	phy-handle = <&rgmii_phy>;
@@ -333,6 +365,14 @@
 			source-pdos =
 				<PDO_FIXED(5000, 1500, PDO_FIXED_USB_COMM)>;
 			try-power-role = "source";
+
+			altmodes {
+				displayport {
+					svid = /bits/ 16 <0xff01>;
+					vdo = <0xffffffff>;
+/*					vdo = <0x00001c46>; */
+				};
+			};
 
 			ports {
 				#address-cells = <1>;
@@ -449,6 +489,14 @@
 			source-pdos =
 				<PDO_FIXED(5000, 1500, PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)>;
 			try-power-role = "source";
+
+			altmodes {
+				displayport {
+					svid = /bits/ 16 <0xff01>;
+					vdo = <0xffffffff>;
+/*					vdo = <0x00001c46>; */
+				};
+			};
 
 			ports {
 				#address-cells = <1>;
@@ -1005,6 +1053,7 @@
 };
 
 &usbdp_phy0 {
+	mode-switch;
 	orientation-switch;
 	status = "okay";
 
@@ -1025,6 +1074,7 @@
 };
 
 &usbdp_phy1 {
+	mode-switch;
 	orientation-switch;
 	status = "okay";
 
