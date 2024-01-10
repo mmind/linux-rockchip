@@ -3132,6 +3132,14 @@ static int dw_dp_parse_dt(struct dw_dp *dp)
 	return 0;
 }
 
+static void dw_dp_exit_phy(void *data)
+{
+	struct dw_dp *dp = data;
+
+	phy_exit(dp->phy);
+	cancel_work_sync(&dp->hpd_work);
+}
+
 static int dw_dp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -3268,6 +3276,14 @@ static int dw_dp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dp);
 
+	ret = phy_init(dp->phy);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(dev, dw_dp_exit_phy, dp);
+	if (ret)
+		return ret;
+
 	return component_add(dev, &dw_dp_component_ops);
 }
 
@@ -3276,7 +3292,6 @@ static int dw_dp_remove(struct platform_device *pdev)
 	struct dw_dp *dp = platform_get_drvdata(pdev);
 
 	component_del(dp->dev, &dw_dp_component_ops);
-	cancel_work_sync(&dp->hpd_work);
 
 	return 0;
 }
