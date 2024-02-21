@@ -547,6 +547,16 @@ config DRM_PANEL_PANASONIC_VVX10F034N00
 	  WUXGA (1920x1200) Novatek NT1397-based DSI panel as found in some
 	  Xperia Z2 tablets
 
+config DRM_PANEL_RADXA_FHD10
+	tristate "Radxa 10in FHD panel driver"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for the DSI panels
+	  offered as addons for Radxa Rock 3/4/5 boards using MIPI-DSI
+	  system interfaces.
+
 config DRM_PANEL_RASPBERRYPI_TOUCHSCREEN
 	tristate "Raspberry Pi 7-inch touchscreen panel"
 	depends on DRM_MIPI_DSI
