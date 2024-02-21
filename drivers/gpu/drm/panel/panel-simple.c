@@ -5306,6 +5306,37 @@ static const struct panel_desc_dsi osd101t2045_53ts = {
 	.lanes = 4,
 };
 
+static const struct drm_display_mode radxa_fhd10_mode = {
+	.hdisplay	= 1200,
+	.hsync_start	= 1200 + 80,
+	.hsync_end	= 1200 + 80 + 4,
+	.htotal		= 1200 + 80 + 4 + 60,
+	.vdisplay	= 1920,
+	.vsync_start	= 1920 + 35,
+	.vsync_end	= 1920 + 35 + 4,
+	.vtotal		= 1920 + 35 + 4 + 25,
+	.clock		= 160000,
+	.width_mm	= 135,
+	.height_mm	= 216,
+};
+
+static const struct panel_desc_dsi radxa_fhd10 = {
+	.desc = {
+		.modes = &radxa_fhd10_mode,
+		.num_modes = 1,
+		.bpc = 8,
+		.size = {
+			.width = 135,
+			.height = 216,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
+		 MIPI_DSI_MODE_LPM | MIPI_DSI_MODE_NO_EOT_PACKET,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
 static const struct of_device_id dsi_of_match[] = {
 	{
 		.compatible = "auo,b080uan01",
@@ -5328,6 +5359,9 @@ static const struct of_device_id dsi_of_match[] = {
 	}, {
 		.compatible = "osddisplays,osd101t2045-53ts",
 		.data = &osd101t2045_53ts
+	}, {
+		.compatible = "radxa,fhd10",
+		.data = &radxa_fhd10
 	}, {
 		/* sentinel */
 	}
