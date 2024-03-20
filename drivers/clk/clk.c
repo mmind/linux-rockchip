@@ -1053,6 +1053,7 @@ static void clk_core_unprepare(struct clk_core *core)
 {
 	lockdep_assert_held(&prepare_lock);
 
+return;
 	if (!core)
 		return;
 
@@ -1194,6 +1195,7 @@ static void clk_core_disable(struct clk_core *core)
 {
 	lockdep_assert_held(&enable_lock);
 
+return;
 	if (!core)
 		return;
 

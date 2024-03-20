@@ -733,6 +733,7 @@ static void dw_mipi_dsi2_ipi_set(struct dw_mipi_dsi2 *dsi2)
 	u32 vact, vsa, vfp, vbp;
 	u16 val;
 
+printk("\n\n%s: entered\n", __func__);
 	if (dsi2->slave || dsi2->master)
 		val = mode->hdisplay / 2;
 	else
@@ -748,6 +749,7 @@ static void dw_mipi_dsi2_ipi_set(struct dw_mipi_dsi2 *dsi2)
 	 */
 	if (!(dsi2->mode_flags & MIPI_DSI_MODE_VIDEO))
 		return;
+printk("%s: we have video-mode\n", __func__);
 
 	vact = mode->vdisplay;
 	vsa = mode->vsync_end - mode->vsync_start;
@@ -760,10 +762,13 @@ static void dw_mipi_dsi2_ipi_set(struct dw_mipi_dsi2 *dsi2)
 
 	pixel_clk = mode->crtc_clock * MSEC_PER_SEC;
 
+printk("%s: pixel_clk %llu, vact %u, vsa %u, vfp %u, vbp %u, hact %u, hsa %u, hbp %u, hline %u\n",
+__func__, pixel_clk, vact, vsa, vfp, vbp, hact, hsa, hbp, hline);
 	if (dsi2->c_option)
 		phy_hs_clk = DIV_ROUND_CLOSEST_ULL(dsi2->lane_hs_rate * MSEC_PER_SEC, 7);
 	else
 		phy_hs_clk = DIV_ROUND_CLOSEST_ULL(dsi2->lane_hs_rate * MSEC_PER_SEC, 16);
+printk("%s: phy_hs_clk %llu\n", __func__, phy_hs_clk);
 
 	tmp = hsa * phy_hs_clk;
 	hsa_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
@@ -774,16 +779,19 @@ static void dw_mipi_dsi2_ipi_set(struct dw_mipi_dsi2 *dsi2)
 	hbp_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
 	regmap_write(dsi2->regmap, DSI2_IPI_VID_HBP_MAN_CFG,
 		     VID_HBP_TIME(hbp_time));
+printk("%s: writing DSI2_IPI_VID_HBP_MAN_CFG %llx\n", __func__, VID_HBP_TIME(hbp_time));
 
 	tmp = hact * phy_hs_clk;
 	hact_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
 	regmap_write(dsi2->regmap, DSI2_IPI_VID_HACT_MAN_CFG,
 		     VID_HACT_TIME(hact_time));
+printk("%s: writing DSI2_IPI_VID_HACT_MAN_CFG %llx\n", __func__, VID_HACT_TIME(hact_time));
 
 	tmp = hline * phy_hs_clk;
 	hline_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
 	regmap_write(dsi2->regmap, DSI2_IPI_VID_HLINE_MAN_CFG,
 		     VID_HLINE_TIME(hline_time));
+printk("%s: writing DSI2_IPI_VID_HLINE_MAN_CFG %llx\n", __func__, VID_HLINE_TIME(hline_time));
 
 	regmap_write(dsi2->regmap, DSI2_IPI_VID_VSA_MAN_CFG,
 		     VID_VSA_LINES(vsa));
@@ -1192,9 +1200,7 @@ static irqreturn_t dw_mipi_dsi2_te_irq_handler(int irq, void *dev_id)
 	struct dw_mipi_dsi2 *dsi2 = (struct dw_mipi_dsi2 *)dev_id;
 	struct drm_encoder *encoder = &dsi2->encoder.encoder;
 
-	printk("%s\n", __func__);
-//	if (encoder->crtc)
-//		rockchip_drm_te_handle(encoder->crtc);
+	/* nothing to do for now */
 
 	return IRQ_HANDLED;
 }
@@ -1317,29 +1323,6 @@ connector_cleanup:
 	return ret;
 }
 
-/*
-static int dw_mipi_dsi2_register_sub_dev(struct dw_mipi_dsi2 *dsi2,
-					 struct drm_connector *connector)
-{
-	struct rockchip_drm_private *private;
-	struct device *dev = dsi2->dev;
-
-	private = connector->dev->dev_private;
-
-	if (dsi2->split_area)
-		drm_object_attach_property(&connector->base,
-					   private->split_area_prop,
-					   dsi2->split_area);
-
-	dsi2->sub_dev.connector = connector;
-	dsi2->sub_dev.of_node = dev->of_node;
-	dsi2->sub_dev.loader_protect = dw_mipi_dsi2_encoder_loader_protect;
-	rockchip_drm_register_sub_dev(&dsi2->sub_dev);
-
-	return 0;
-}
-*/
-
 static int dw_mipi_dsi2_bind(struct device *dev, struct device *master,
 			    void *data)
 {
@@ -1427,15 +1410,6 @@ static void dw_mipi_dsi2_unbind(struct device *dev, struct device *master,
 			       void *data)
 {
 	struct dw_mipi_dsi2 *dsi2 = dev_get_drvdata(dev);
-
-/*
-	if (dsi2->sub_dev.connector) {
-		rockchip_drm_unregister_sub_dev(&dsi2->sub_dev);
-
-		if (dsi2->connector.funcs)
-			dsi2->connector.funcs->destroy(&dsi2->connector);
-	}
-*/
 
 	pm_runtime_disable(dsi2->dev);
 	if (dsi2->slave)
@@ -1751,12 +1725,19 @@ static int dw_mipi_dsi2_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	return component_add(&pdev->dev, &dw_mipi_dsi2_ops);
+	ret = component_add(&pdev->dev, &dw_mipi_dsi2_ops);
+	if (ret)
+		mipi_dsi_host_unregister(&dsi2->host);
+
+	return ret;
 }
 
-static int dw_mipi_dsi2_remove(struct platform_device *pdev)
+static void dw_mipi_dsi2_remove(struct platform_device *pdev)
 {
-	return 0;
+	struct dw_mipi_dsi2 *dsi2 = platform_get_drvdata(pdev);
+
+	component_del(&pdev->dev, &dw_mipi_dsi2_ops);
+	mipi_dsi_host_unregister(&dsi2->host);
 }
 
 static __maybe_unused int dw_mipi_dsi2_runtime_suspend(struct device *dev)
