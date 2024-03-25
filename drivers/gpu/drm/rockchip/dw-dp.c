@@ -652,7 +652,6 @@ static int dw_dp_connector_get_modes(struct drm_connector *connector)
 {
 	struct dw_dp *dp = connector_to_dp(connector);
 	struct drm_display_info *di = &connector->display_info;
-	struct edid *edid;
 	int num_modes = 0;
 
 	if (dp->next_bridge)
@@ -662,12 +661,15 @@ static int dw_dp_connector_get_modes(struct drm_connector *connector)
 		num_modes = drm_panel_get_modes(dp->panel, connector);
 
 	if (!num_modes) {
-		edid = drm_bridge_get_edid(&dp->bridge, connector);
-		if (edid) {
-			drm_connector_update_edid_property(connector, edid);
-			num_modes = drm_add_edid_modes(connector, edid);
+		const struct drm_edid *drm_edid;
+
+		drm_edid = drm_bridge_edid_read(&dp->bridge,
+						connector);
+		if (drm_edid) {
+			drm_edid_connector_update(connector, drm_edid);
+			num_modes = drm_edid_connector_add_modes(connector);
 			dw_dp_update_hdr_property(connector);
-			kfree(edid);
+			drm_edid_free(drm_edid);
 		}
 	}
 
@@ -2363,18 +2365,20 @@ out:
 	return status;
 }
 
-static struct edid *dw_dp_bridge_get_edid(struct drm_bridge *bridge,
-					  struct drm_connector *connector)
+static const struct drm_edid *dw_dp_bridge_edid_read(struct drm_bridge *bridge,
+						     struct drm_connector *connector)
 {
 	struct dw_dp *dp = bridge_to_dp(bridge);
-	struct edid *edid;
+	const struct drm_edid *edid;
 	int ret;
 
 	ret = phy_power_on(dp->phy);
 	if (ret)
 		return NULL;
 
-	edid = drm_get_edid(connector, &dp->aux.ddc);
+//	edid = dw_hdmi_edid_read(hdmi, connector);
+
+	edid = drm_edid_read_ddc(connector, &dp->aux.ddc);
 
 	phy_power_off(dp->phy);
 
@@ -2488,7 +2492,7 @@ static const struct drm_bridge_funcs dw_dp_bridge_funcs = {
 	.atomic_enable = dw_dp_bridge_atomic_enable,
 	.atomic_disable = dw_dp_bridge_atomic_disable,
 	.detect = dw_dp_bridge_detect,
-	.get_edid = dw_dp_bridge_get_edid,
+	.edid_read = dw_dp_bridge_edid_read,
 };
 
 static int dw_dp_link_retrain(struct dw_dp *dp)
