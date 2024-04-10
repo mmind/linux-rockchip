@@ -465,7 +465,6 @@
 	status = "okay";
 };
 
-
 /* from jaguar
 */
 &hdmi0 {
@@ -480,8 +479,8 @@
 };
 
 &hdmi0_in {
-	hdmi0_in_vp0: endpoint {
-		remote-endpoint = <&vp0_out_hdmi0>;
+	hdmi0_in_vp1: endpoint {
+		remote-endpoint = <&vp1_out_hdmi0>;
 	};
 };
 
@@ -491,9 +490,9 @@
 	};
 };
 
-&vp0 {
-	vp0_out_hdmi0: endpoint@ROCKCHIP_VOP2_EP_HDMI0 {
+&vp1 {
+	vp1_out_hdmi0: endpoint@ROCKCHIP_VOP2_EP_HDMI0 {
 		reg = <ROCKCHIP_VOP2_EP_HDMI0>;
-		remote-endpoint = <&hdmi0_in_vp0>;
+		remote-endpoint = <&hdmi0_in_vp1>;
 	};
 };
