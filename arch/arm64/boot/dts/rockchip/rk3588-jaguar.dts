@@ -410,9 +410,9 @@
 			op-sink-microwatt = <1000000>;
 			power-role = "dual";
 			sink-pdos =
-				<PDO_FIXED(5000, 1000, PDO_FIXED_USB_COMM)>;
+				<PDO_FIXED(5000, 1000, PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)>;
 			source-pdos =
-				<PDO_FIXED(5000, 1500, PDO_FIXED_USB_COMM)>;
+				<PDO_FIXED(5000, 1500, PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)>;
 			try-power-role = "source";
 
 			ports {
@@ -908,7 +908,8 @@
 };
 
 &u2phy0_otg {
-	phy-supply = <&vcc_5v0_usb_c1>;
+//needs driver support
+	vbus-supply = <&vcc_5v0_usb_c1>;
 	status = "okay";
 };
 
@@ -917,7 +918,8 @@
 };
 
 &u2phy1_otg {
-	phy-supply = <&vcc_5v0_usb_c2>;
+//needs driver support
+	vbus-supply = <&vcc_5v0_usb_c2>;
 	status = "okay";
 };
 
