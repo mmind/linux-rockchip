@@ -2339,7 +2339,6 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 static void vop2_setup_layer_mixer(struct vop2_video_port *vp)
 {
 	struct vop2 *vop2 = vp->vop2;
-	const struct vop2_data *vop2_data = vop2->data;
 	struct drm_plane *plane;
 	u32 layer_sel = 0;
 	u32 port_sel;
@@ -2380,17 +2379,6 @@ static void vop2_setup_layer_mixer(struct vop2_video_port *vp)
 			(vp2->nlayers + vp1->nlayers + vp0->nlayers - 1));
 	else
 		port_sel |= FIELD_PREP(RK3568_OVL_PORT_SET__PORT2_MUX, 8);
-
-	/* configure vp3 */
-	if (vop2_data->soc_id == 3588) {
-		struct vop2_video_port *vp3 = &vop2->vps[3];
-
-		if (vp3->nlayers)
-			port_sel |= FIELD_PREP(RK3588_OVL_PORT_SET__PORT3_MUX,
-				(vp3->nlayers + vp2->nlayers + vp1->nlayers + vp0->nlayers - 1));
-		else
-			port_sel |= FIELD_PREP(RK3588_OVL_PORT_SET__PORT3_MUX, 8);
-	}
 
 	layer_sel = vop2_readl(vop2, RK3568_OVL_LAYER_SEL);
 
