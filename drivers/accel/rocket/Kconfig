@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config DRM_ACCEL_ROCKET
+       tristate "Rocket (DRM support for Rockchip NPUs)"
+       depends on DRM
+       depends on ARM64 || COMPILE_TEST
+       depends on MMU
+       select DRM_SCHED
+       select IOMMU_SUPPORT
+       select IOMMU_IO_PGTABLE_LPAE
+       select DRM_GEM_SHMEM_HELPER
+       help
+         DRM driver for Rockchip NPUs.
