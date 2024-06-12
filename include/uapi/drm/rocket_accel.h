@@ -12,9 +12,13 @@ extern "C" {
 #endif
 
 #define DRM_ROCKET_CREATE_BO			0x00
-#define DRM_ROCKET_SUBMIT			0x01
+#define DRM_ROCKET_PREP_BO			0x01
+#define DRM_ROCKET_FINI_BO			0x02
+#define DRM_ROCKET_SUBMIT			0x03
 
 #define DRM_IOCTL_ROCKET_CREATE_BO		DRM_IOWR(DRM_COMMAND_BASE + DRM_ROCKET_CREATE_BO, struct drm_rocket_create_bo)
+#define DRM_IOCTL_ROCKET_PREP_BO		DRM_IOW(DRM_COMMAND_BASE + DRM_ROCKET_PREP_BO, struct drm_rocket_prep_bo)
+#define DRM_IOCTL_ROCKET_FINI_BO		DRM_IOW(DRM_COMMAND_BASE + DRM_ROCKET_FINI_BO, struct drm_rocket_fini_bo)
 #define DRM_IOCTL_ROCKET_SUBMIT			DRM_IOW(DRM_COMMAND_BASE + DRM_ROCKET_SUBMIT, struct drm_rocket_submit)
 
 /**
@@ -36,6 +40,20 @@ struct drm_rocket_create_bo {
 
 	/** Offset into the drm node to use for subsequent mmap call. */
 	__u64 offset;
+};
+
+#define ROCKET_PREP_READ        0x01
+#define ROCKET_PREP_WRITE       0x02
+
+struct drm_rocket_prep_bo {
+	__u32 handle;		/* in */
+	__u32 op;		/* in, mask of ROCKET_PREP_x */
+	__s64 timeout_ns;	/* in */
+};
+
+struct drm_rocket_fini_bo {
+	__u32 handle;		/* in */
+	__u32 flags;		/* in, placeholder for now, no defined values */
 };
 
 /**
