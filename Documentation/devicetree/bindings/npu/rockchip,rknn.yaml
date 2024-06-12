@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/npu/rockchip,rknn.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Neural Processing Unit IP from Rockchip, based on NVIDIA's NVDLA
+
+maintainers:
+  - Tomeu Vizoso <tomeu@tomeuvizoso.net>
+
+description: |+
+  Rockchip IP for accelerating inference of neural networks, based on NVIDIA's open source NVDLA IP.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - rockchip,rk3588-rknn
+      - const: rockchip,rknn
+
+  reg:
+    description: Base registers for NPU cores
+    minItems: 1
+    maxItems: 20
+
+  interrupts:
+    minItems: 1
+    maxItems: 20
+
+  interrupt-names:
+    minItems: 1
+    maxItems: 20
+
+  clocks:
+    minItems: 1
+    maxItems: 20
+
+  clock-names:
+    minItems: 1
+    maxItems: 20
+
+  assigned-clocks:
+    maxItems: 1
+
+  assigned-clock-rates:
+    maxItems: 1
+
+  resets:
+    minItems: 1
+    maxItems: 20
+
+  reset-names:
+    minItems: 1
+    maxItems: 20
+
+  power-domains:
+    minItems: 1
+    maxItems: 20
+
+  power-domain-names:
+    minItems: 1
+    maxItems: 20
+
+  iommus:
+    items:
+      - description: IOMMU for all cores
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - interrupt-names
+  - clocks
+  - clock-names
+  - assigned-clocks
+  - assigned-clock-rates
+  - resets
+  - reset-names
+  - power-domains
+  - power-domain-names
+  - iommus
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    bus {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        rknn: npu@fdab0000 {
+          compatible = "rockchip,rk3588-rknn", "rockchip,rknn";
+          reg = <0x0 0xfdab0000 0x0 0x9000>,
+                <0x0 0xfdac0000 0x0 0x9000>,
+                <0x0 0xfdad0000 0x0 0x9000>;
+          interrupts = <GIC_SPI 110 IRQ_TYPE_LEVEL_HIGH 0>,
+                       <GIC_SPI 111 IRQ_TYPE_LEVEL_HIGH 0>,
+                       <GIC_SPI 112 IRQ_TYPE_LEVEL_HIGH 0>;
+          interrupt-names = "npu0_irq", "npu1_irq", "npu2_irq";
+          clocks = <&scmi_clk 0>, <&cru 1>,
+                   <&cru 2>, <&cru 3>,
+                   <&cru 4>, <&cru 5>,
+                   <&cru 6>, <&cru 7>;
+          clock-names = "clk_npu",
+                  "aclk0", "aclk1", "aclk2",
+                  "hclk0", "hclk1", "hclk2",
+                  "pclk";
+          assigned-clocks = <&scmi_clk 0>;
+          assigned-clock-rates = <200000000>;
+          resets = <&cru 0>, <&cru 1>, <&cru 2>,
+                   <&cru 3>, <&cru 4>, <&cru 5>;
+          reset-names = "srst_a0", "srst_a1", "srst_a2",
+                        "srst_h0", "srst_h1", "srst_h2";
+          power-domains = <&power 0>, <&power 1>, <&power 2>;
+          power-domain-names = "npu0", "npu1", "npu2";
+          iommus = <&rknpu_mmu>;
+          status = "disabled";
+        };
+    };
+...
