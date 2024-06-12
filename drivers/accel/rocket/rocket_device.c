@@ -11,6 +11,8 @@ int rocket_device_init(struct rocket_device *rdev)
 {
 	int core, err;
 
+	mutex_init(&rdev->sched_lock);
+
 	rdev->clk_npu = devm_clk_get_enabled(rdev->dev, "clk_npu");
 	rdev->pclk = devm_clk_get_enabled(rdev->dev, "pclk");
 

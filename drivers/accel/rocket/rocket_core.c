@@ -11,6 +11,7 @@
 
 #include "rocket_core.h"
 #include "rocket_device.h"
+#include "rocket_job.h"
 #include "rocket_registers.h"
 
 static int rocket_clk_init(struct rocket_core *core)
@@ -122,6 +123,10 @@ int rocket_core_init(struct rocket_core *core)
 		goto out_pm_domain;
 	}
 
+	err = rocket_job_init(core);
+	if (err)
+		goto out_pm_domain;
+
 	version = rocket_read(core, REG_PC_VERSION) + (rocket_read(core, REG_PC_VERSION_NUM) & 0xffff);
 	dev_info(rdev->dev, "Rockchip NPU core %d version: %d\n", core->index, version);
 
@@ -134,6 +139,7 @@ out_pm_domain:
 
 void rocket_core_fini(struct rocket_core *core)
 {
+	rocket_job_fini(core);
 	rocket_pmdomain_fini(core);
 }
 
