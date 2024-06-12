@@ -27,6 +27,8 @@ struct rocket_device {
 
 	struct rocket_core cores[MAX_NUM_CORES];
 
+	struct mutex sched_lock;
+
 	struct clk *clk_npu;
 	struct clk *pclk;
 };

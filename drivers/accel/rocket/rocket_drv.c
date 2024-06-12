@@ -16,6 +16,7 @@
 #include "rocket_drv.h"
 #include "rocket_device.h"
 #include "rocket_gem.h"
+#include "rocket_job.h"
 
 static const char * const rk3588_pm_domains[] = { "npu0", "npu1", "npu2" };
 static const char * const rk3588_resets_a[] = { "srst_a0", "srst_a1", "srst_a2" };
@@ -38,6 +39,7 @@ rocket_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct rocket_device *rdev = dev->dev_private;
 	struct rocket_file_priv *rocket_priv;
+	int ret;
 
 	rocket_priv = kzalloc(sizeof(*rocket_priv), GFP_KERNEL);
 	if (!rocket_priv)
@@ -46,7 +48,15 @@ rocket_open(struct drm_device *dev, struct drm_file *file)
 	rocket_priv->rdev = rdev;
 	file->driver_priv = rocket_priv;
 
+	ret = rocket_job_open(rocket_priv);
+	if (ret)
+		goto err_free;
+
 	return 0;
+
+err_free:
+	kfree(rocket_priv);
+	return ret;
 }
 
 static void
@@ -54,6 +64,7 @@ rocket_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct rocket_file_priv *rocket_priv = file->driver_priv;
 
+	rocket_job_close(rocket_priv);
 	kfree(rocket_priv);
 }
 
@@ -62,6 +73,7 @@ static const struct drm_ioctl_desc rocket_drm_driver_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(ROCKET_##n, rocket_ioctl_##func, 0)
 
 	ROCKET_IOCTL(CREATE_BO, create_bo),
+	ROCKET_IOCTL(SUBMIT, submit),
 };
 
 static const struct file_operations rocket_drm_driver_fops = {
@@ -193,6 +205,9 @@ static int rocket_device_runtime_suspend(struct device *dev)
 {
 	struct rocket_device *rdev = dev_get_drvdata(dev);
 	int core;
+
+	if (!rocket_job_is_idle(rdev))
+		return -EBUSY;
 
 	for (core = 0; core < rdev->comp->num_cores; core++) {
 		clk_disable_unprepare(rdev->cores[core].a_clk);
