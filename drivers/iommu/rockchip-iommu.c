@@ -6,6 +6,8 @@
  *			Daniel Kurtz <djkurtz@chromium.org>
  */
 
+#include "linux/err.h"
+#include "linux/pm_domain.h"
 #include <linux/clk.h>
 #include <linux/compiler.h>
 #include <linux/delay.h>
@@ -115,6 +117,7 @@ struct rk_iommu {
 	struct iommu_device iommu;
 	struct list_head node; /* entry in rk_iommu_domain.iommus */
 	struct iommu_domain *domain; /* domain to which iommu is attached */
+	struct dev_pm_domain_list *pmdomains;
 };
 
 struct rk_iommudata {
@@ -1186,6 +1189,7 @@ static int rk_iommu_probe(struct platform_device *pdev)
 	struct resource *res;
 	const struct rk_iommu_ops *ops;
 	int num_res = pdev->num_resources;
+	int pm_domain_count;
 	int err, i;
 
 	iommu = devm_kzalloc(dev, sizeof(*iommu), GFP_KERNEL);
@@ -1271,6 +1275,35 @@ static int rk_iommu_probe(struct platform_device *pdev)
 	if (!dma_dev)
 		dma_dev = &pdev->dev;
 
+	pm_domain_count = of_property_count_strings(iommu->dev->of_node, "power-domain-names");
+	if (pm_domain_count > 0) {
+		const char **pm_domains = kvmalloc_array(pm_domain_count, sizeof(*pm_domains), GFP_KERNEL);
+		struct dev_pm_domain_attach_data pm_domain_data = {
+			.pd_names = pm_domains,
+			.num_pd_names = pm_domain_count,
+			.pd_flags = PD_FLAG_DEV_LINK_ON,
+		};
+		int i;
+
+		if (!pm_domain_data.pd_names) {
+			err = -ENOMEM;
+			goto err_remove_sysfs;
+		}
+
+		for (i = 0; i < pm_domain_count; i++) {
+			err = of_property_read_string_index(iommu->dev->of_node, "power-domain-names", i, &pm_domains[i]);
+			if (err) {
+				kfree(pm_domains);
+				goto err_remove_sysfs;
+			}
+		}
+
+		err = dev_pm_domain_attach_list(iommu->dev, &pm_domain_data, &iommu->pmdomains);
+		kfree(pm_domains);
+		if (err < 0)
+			goto err_remove_sysfs;
+	}
+
 	pm_runtime_enable(dev);
 
 	for (i = 0; i < iommu->num_irq; i++) {
@@ -1292,6 +1325,7 @@ static int rk_iommu_probe(struct platform_device *pdev)
 	return 0;
 err_pm_disable:
 	pm_runtime_disable(dev);
+	dev_pm_domain_detach_list(iommu->pmdomains);
 err_remove_sysfs:
 	iommu_device_sysfs_remove(&iommu->iommu);
 err_unprepare_clocks:
@@ -1309,6 +1343,8 @@ static void rk_iommu_shutdown(struct platform_device *pdev)
 
 		devm_free_irq(iommu->dev, irq, iommu);
 	}
+
+	dev_pm_domain_detach_list(iommu->pmdomains);
 
 	pm_runtime_force_suspend(&pdev->dev);
 }
