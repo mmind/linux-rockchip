@@ -53,6 +53,13 @@
 		};
 	};
 
+	pcie30_refclkp_in: pcie-clock-generator {
+		compatible = "diodes,pi6c557-03b", "clock-generator";
+		#clock-cells = <0>;
+		clock-frequency = <100000000>;
+		vdd-supply = <&vcc3v3_pi6c_03>;
+	};
+
 	rk809-sound {
 		compatible = "simple-audio-card";
 		simple-audio-card,format = "i2s";
@@ -599,11 +606,17 @@
 };
 
 &pcie30phy {
-	phy-supply = <&vcc3v3_pi6c_03>;
 	status = "okay";
 };
 
 &pcie3x2 {
+	clocks = <&cru ACLK_PCIE30X2_MST>, <&cru ACLK_PCIE30X2_SLV>,
+		 <&cru ACLK_PCIE30X2_DBI>, <&cru PCLK_PCIE30X2>,
+		 <&cru CLK_PCIE30X2_AUX_NDFT>, <&cru CLK_PCIE30X2_PIPE_DFT>,
+		 <&pcie30_refclkp_in>;
+	clock-names = "aclk_mst", "aclk_slv",
+		      "aclk_dbi", "pclk", "aux", "pipe",
+		      "ref";
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie30x2m1_pins>;
 	reset-gpios = <&gpio2 RK_PD6 GPIO_ACTIVE_HIGH>;
