@@ -414,6 +414,16 @@ config COMMON_CLK_VC7
 	  Renesas Versaclock7 is a family of configurable clock generator
 	  and jitter attenuator ICs with fractional and integer dividers.
 
+config COMMON_CLK_VCO
+	tristate "Clock driver for voltage controlled oscillators"
+	depends on GPIOLIB && REGULATOR
+	help
+	  This driver supports generic voltage controlled oscillators that
+	  are not configurable but need supplies to be enabled to run.
+	  Generally they need a supply voltage to be enabled and may also
+	  require a separate enable pin, though in a lot of cases, vdd
+	  and enable control might be tied to the same supply.
+
 config COMMON_CLK_STM32F
 	def_bool COMMON_CLK && (MACH_STM32F429 || MACH_STM32F469 || MACH_STM32F746)
 	help
