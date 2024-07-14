@@ -11,7 +11,13 @@ maintainers:
 
 properties:
   compatible:
-    const: voltage-oscillator
+    oneOf:
+      - const: voltage-oscillator
+      - items:
+          - enum:
+              - diodes,pi6c557-03b
+              - diodes,pi6c557-05b
+          - const: voltage-oscillator
 
   "#clock-cells":
     const: 0
