@@ -11,7 +11,13 @@ maintainers:
 
 properties:
   compatible:
-    const: gated-fixed-clock
+    oneOf:
+      - const: gated-fixed-clock
+      - items:
+          - enum:
+              - diodes,pi6c557-03b
+              - diodes,pi6c557-05b
+          - const: gated-fixed-clock
 
   "#clock-cells":
     const: 0
