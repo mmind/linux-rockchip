@@ -692,10 +692,11 @@ void rk8xx_shutdown(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(rk8xx_shutdown);
 
-int rk8xx_probe(struct device *dev, int variant, unsigned int irq, struct regmap *regmap)
+int rk8xx_probe(struct device *dev, int variant, unsigned int irq, struct regmap *regmap, bool is_spi)
 {
 	struct rk808 *rk808;
 	const struct rk808_reg_data *pre_init_reg;
+	enum sys_off_mode pwr_off_mode = SYS_OFF_MODE_POWER_OFF;
 	const struct mfd_cell *cells;
 	int dual_support = 0;
 	int nr_pre_init_regs;
@@ -785,10 +786,20 @@ int rk8xx_probe(struct device *dev, int variant, unsigned int irq, struct regmap
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to add MFD devices\n");
 
+	/*
+	 * Currently the Rockchip SPI driver always sleeps when doing SPI
+	 * transfers. This is not allowed in the SYS_OFF_MODE_POWER_OFF
+	 * handler, so we are using the prepare handler as a workaround.
+	 * This should be removed once the Rockchip SPI driver has been
+	 * adapted.
+	 */
+	if (is_spi)
+		pwr_off_mode = SYS_OFF_MODE_POWER_OFF_PREPARE;
+
 	if (device_property_read_bool(dev, "rockchip,system-power-controller") ||
 	    device_property_read_bool(dev, "system-power-controller")) {
 		ret = devm_register_sys_off_handler(dev,
-				    SYS_OFF_MODE_POWER_OFF_PREPARE, SYS_OFF_PRIO_HIGH,
+				    pwr_off_mode, SYS_OFF_PRIO_HIGH,
 				    &rk808_power_off, rk808);
 		if (ret)
 			return dev_err_probe(dev, ret,

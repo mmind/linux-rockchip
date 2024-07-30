@@ -1349,7 +1349,7 @@ struct rk808 {
 };
 
 void rk8xx_shutdown(struct device *dev);
-int rk8xx_probe(struct device *dev, int variant, unsigned int irq, struct regmap *regmap);
+int rk8xx_probe(struct device *dev, int variant, unsigned int irq, struct regmap *regmap, bool is_spi);
 int rk8xx_suspend(struct device *dev);
 int rk8xx_resume(struct device *dev);
 
