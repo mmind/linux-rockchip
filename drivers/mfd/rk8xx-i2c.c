@@ -213,7 +213,7 @@ static int rk8xx_i2c_probe(struct i2c_client *client)
 		return dev_err_probe(&client->dev, PTR_ERR(regmap),
 				     "regmap initialization failed\n");
 
-	return rk8xx_probe(&client->dev, data->variant, client->irq, regmap);
+	return rk8xx_probe(&client->dev, data->variant, client->irq, regmap, false);
 }
 
 static void rk8xx_i2c_shutdown(struct i2c_client *client)

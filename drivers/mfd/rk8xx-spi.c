@@ -94,7 +94,7 @@ static int rk8xx_spi_probe(struct spi_device *spi)
 		return dev_err_probe(&spi->dev, PTR_ERR(regmap),
 				     "Failed to init regmap\n");
 
-	return rk8xx_probe(&spi->dev, RK806_ID, spi->irq, regmap);
+	return rk8xx_probe(&spi->dev, RK806_ID, spi->irq, regmap, true);
 }
 
 static const struct of_device_id rk8xx_spi_of_match[] = {
