@@ -295,6 +295,14 @@
 	pinctrl-0 = <&i2c8m2_xfer>;
 };
 
+&rknn {
+	status = "okay";
+};
+
+&rknn_mmu {
+	status = "okay";
+};
+
 &mdio0 {
 	rgmii_phy: ethernet-phy@6 {
 		/* KSZ9031 or KSZ9131 */
