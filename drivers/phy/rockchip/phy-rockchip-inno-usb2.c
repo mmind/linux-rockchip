@@ -208,6 +208,7 @@ struct rockchip_usb2phy_port {
 	struct phy	*phy;
 	unsigned int	port_id;
 	bool		suspended;
+	struct regulator	*vbus;
 	bool		vbus_attached;
 	bool		host_disconnect;
 	int		bvalid_irq;
@@ -1443,6 +1444,16 @@ static int rockchip_usb2phy_probe(struct platform_device *pdev)
 
 		rport->phy = phy;
 		phy_set_drvdata(rport->phy, rport);
+
+		/* Try to get Vbus regulator */
+		rport->vbus = devm_regulator_get_optional(&rport->phy->dev, "vbus");
+		if (IS_ERR(rport->vbus)) {
+			ret = PTR_ERR(rport->vbus);
+			if (ret != -ENODEV)
+				return dev_err_probe(&rport->phy->dev, ret, "Could not get vbus regulator");
+
+			rport->vbus = NULL;
+		}
 
 		/* initialize otg/host port separately */
 		if (of_node_name_eq(child_np, "host-port")) {
