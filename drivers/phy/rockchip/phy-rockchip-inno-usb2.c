@@ -143,12 +143,12 @@ struct rockchip_usb2phy_port_cfg {
 	struct usb2phy_reg	bvalid_det_en;
 	struct usb2phy_reg	bvalid_det_st;
 	struct usb2phy_reg	bvalid_det_clr;
-	struct usb2phy_reg      disfall_en;
-	struct usb2phy_reg      disfall_st;
-	struct usb2phy_reg      disfall_clr;
-	struct usb2phy_reg      disrise_en;
-	struct usb2phy_reg      disrise_st;
-	struct usb2phy_reg      disrise_clr;
+	struct usb2phy_reg	disfall_en;
+	struct usb2phy_reg	disfall_st;
+	struct usb2phy_reg	disfall_clr;
+	struct usb2phy_reg	disrise_en;
+	struct usb2phy_reg	disrise_st;
+	struct usb2phy_reg	disrise_clr;
 	struct usb2phy_reg	idfall_det_en;
 	struct usb2phy_reg	idfall_det_st;
 	struct usb2phy_reg	idfall_det_clr;
@@ -209,7 +209,7 @@ struct rockchip_usb2phy_port {
 	unsigned int	port_id;
 	bool		suspended;
 	bool		vbus_attached;
-	bool            host_disconnect;
+	bool		host_disconnect;
 	int		bvalid_irq;
 	int		id_irq;
 	int		ls_irq;
