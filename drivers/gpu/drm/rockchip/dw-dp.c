@@ -3291,13 +3291,11 @@ static int dw_dp_probe(struct platform_device *pdev)
 	return component_add(dev, &dw_dp_component_ops);
 }
 
-static int dw_dp_remove(struct platform_device *pdev)
+static void dw_dp_remove(struct platform_device *pdev)
 {
 	struct dw_dp *dp = platform_get_drvdata(pdev);
 
 	component_del(dp->dev, &dw_dp_component_ops);
-
-	return 0;
 }
 
 static int __maybe_unused dw_dp_runtime_suspend(struct device *dev)
