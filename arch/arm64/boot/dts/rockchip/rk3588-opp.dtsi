@@ -67,11 +67,6 @@
 			opp-microvolt = <987500 987500 1000000>;
 			clock-latency-ns = <40000>;
 		};
-		opp-2400000000 {
-			opp-hz = /bits/ 64 <2400000000>;
-			opp-microvolt = <1000000 1000000 1000000>;
-			clock-latency-ns = <40000>;
-		};
 	};
 
 	cluster2_opp_table: opp-table-cluster2 {
@@ -106,11 +101,6 @@
 		opp-2208000000 {
 			opp-hz = /bits/ 64 <2208000000>;
 			opp-microvolt = <987500 987500 1000000>;
-			clock-latency-ns = <40000>;
-		};
-		opp-2400000000 {
-			opp-hz = /bits/ 64 <2400000000>;
-			opp-microvolt = <1000000 1000000 1000000>;
 			clock-latency-ns = <40000>;
 		};
 	};
