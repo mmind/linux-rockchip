@@ -7,6 +7,7 @@
  */
 
 #include <linux/cleanup.h>
+#include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/qnap-mcu.h>
@@ -63,6 +64,10 @@ struct qnap_mcu {
 	struct qnap_mcu_reply reply;
 	const struct qnap_mcu_variant *variant;
 	u8 version[QNAP_MCU_VERSION_LEN];
+	unsigned char last_sysfs_tx[QNAP_MCU_MAX_DATA_SIZE];
+	size_t last_sysfs_tx_len;
+	unsigned char last_sysfs_rx[QNAP_MCU_MAX_DATA_SIZE];
+	size_t last_sysfs_rx_len;
 };
 
 /*
@@ -251,6 +256,106 @@ int qnap_mcu_exec_with_ack(struct qnap_mcu *mcu,
 }
 EXPORT_SYMBOL_GPL(qnap_mcu_exec_with_ack);
 
+static int qnap_mcu_send_recv(struct qnap_mcu *mcu,
+			      const u8 *cmd_data, size_t cmd_data_size,
+			      u8 *reply_data, size_t *reply_data_size)
+{
+	unsigned char rx[QNAP_MCU_RX_BUFFER_SIZE];
+	size_t length = *reply_data_size + QNAP_MCU_CHECKSUM_SIZE;
+	struct qnap_mcu_reply *reply = &mcu->reply;
+	int ret = 0;
+
+	if (length > sizeof(rx)) {
+		dev_err(&mcu->serdev->dev, "expected data too big for receive buffer");
+		return -EINVAL;
+	}
+
+	guard(mutex)(&mcu->bus_lock);
+
+	reply->data = rx,
+	reply->length = length,
+	reply->received = 0,
+	reinit_completion(&reply->done);
+
+	ret = qnap_mcu_write(mcu, cmd_data, cmd_data_size);
+	if (ret < 0) {
+		dev_err(&mcu->serdev->dev, "qnap_mcu_write failed %d\n", ret);
+		return ret;
+	}
+
+	serdev_device_wait_until_sent(mcu->serdev, msecs_to_jiffies(QNAP_MCU_TIMEOUT_MS));
+
+	/*
+	 * Give the MCU time to generate any reply.
+	 * Each command generates a different length reply, that we don't
+	 * know here, so just wait the max amount of time.
+	 */
+	msleep(QNAP_MCU_TIMEOUT_MS);
+
+	*reply_data_size = reply->received - QNAP_MCU_CHECKSUM_SIZE;
+
+	/* Calculate a CRC, but only warn if it is incorrect */
+	if (!qnap_mcu_verify_checksum(rx, reply->received))
+		dev_warn(&mcu->serdev->dev, "Invalid Checksum received from controller\n");
+
+	if (qnap_mcu_reply_is_checksum_error(rx, reply->received))
+		dev_warn(&mcu->serdev->dev, "Controller received invalid Checksum\n");
+
+	if (qnap_mcu_reply_is_generic_error(rx, reply->received))
+		dev_warn(&mcu->serdev->dev, "Generic error received from controller\n");
+
+	memcpy(reply_data, rx, *reply_data_size);
+
+	/* We don't expect any characters from the device now */
+	reply->length = 0;
+
+	return 0;
+}
+
+static ssize_t mcu_send_command_show(struct device *dev,
+		 struct device_attribute *attr, char *buf)
+{
+	struct qnap_mcu *mcu = dev_get_drvdata(dev);
+	char *s = buf;
+
+	s+= sprintf(s, "last sent: '");
+	memcpy(s, mcu->last_sysfs_tx, mcu->last_sysfs_tx_len);
+	s+= mcu->last_sysfs_tx_len;
+	s+= sprintf(s, "', %zu Bytes\n", mcu->last_sysfs_tx_len);
+	s+= sprintf(s, "last recv: '");
+	memcpy(s, mcu->last_sysfs_rx, mcu->last_sysfs_rx_len);
+	s+= mcu->last_sysfs_rx_len;
+	s+= sprintf(s, "', %zu Bytes\n", mcu->last_sysfs_rx_len);
+
+	return (s - buf);
+}
+
+static ssize_t mcu_send_command_store(struct device *dev, struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct qnap_mcu *mcu = dev_get_drvdata(dev);
+	size_t reply_data_size = QNAP_MCU_MAX_DATA_SIZE;
+	int ret;
+
+	/* No command sent */
+	if (count <= 1)
+		return -EINVAL;
+
+	/* keep track of what we sent, and remove the trailing \0 */
+	mcu->last_sysfs_tx_len = count - 1;
+	memcpy(mcu->last_sysfs_tx, buf, mcu->last_sysfs_tx_len);
+
+	ret = qnap_mcu_send_recv(mcu,
+				 mcu->last_sysfs_tx, mcu->last_sysfs_tx_len,
+				 mcu->last_sysfs_rx, &reply_data_size);
+	if (!ret)
+		mcu->last_sysfs_rx_len = reply_data_size;
+
+	return ret ? ret : count;
+}
+
+static DEVICE_ATTR_RW(mcu_send_command);
+
 static int qnap_mcu_get_version(struct qnap_mcu *mcu)
 {
 	const u8 cmd[] = { '%', 'V' };
@@ -357,6 +462,10 @@ static int qnap_mcu_probe(struct serdev_device *serdev)
 	if (ret)
 		return dev_err_probe(dev, ret,
 				     "Failed to register poweroff handler\n");
+
+	ret = sysfs_create_file(&dev->kobj, &dev_attr_mcu_send_command.attr);
+	if (ret)
+		return dev_err_probe(dev, ret, "Unable to create sysfs command interface\n");
 
 	for (int i = 0; i < ARRAY_SIZE(qnap_mcu_cells); i++) {
 		qnap_mcu_cells[i].platform_data = mcu->variant;
