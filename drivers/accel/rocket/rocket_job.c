@@ -439,7 +439,7 @@ rocket_reset(struct rocket_core *core, struct drm_sched_job *bad)
 	cookie = dma_fence_begin_signalling();
 
 	/* Restart the scheduler */
-	drm_sched_start(&core->sched, true);
+	drm_sched_start(&core->sched, 0);
 
 	dma_fence_end_signalling(cookie);
 }
