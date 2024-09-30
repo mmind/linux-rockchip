@@ -35,6 +35,7 @@ source "drivers/staging/media/meson/vdec/Kconfig"
 source "drivers/staging/media/omap4iss/Kconfig"
 
 source "drivers/staging/media/rkvdec/Kconfig"
+source "drivers/staging/media/rkvdec2/Kconfig"
 
 source "drivers/staging/media/starfive/Kconfig"
 
