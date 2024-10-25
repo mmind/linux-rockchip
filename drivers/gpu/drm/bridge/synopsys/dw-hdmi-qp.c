@@ -449,6 +449,10 @@ dw_hdmi_qp_bridge_mode_valid(struct drm_bridge *bridge,
 	struct dw_hdmi_qp *hdmi = bridge->driver_private;
 	unsigned long long rate;
 
+	dev_info(hdmi->dev, "checking mode %ux%u\n", mode->hdisplay, mode->vdisplay);
+	if(mode->vdisplay > 1080)
+		return MODE_BAD;
+
 	rate = drm_hdmi_compute_mode_clock(mode, 8, HDMI_COLORSPACE_RGB);
 	if (rate > HDMI14_MAX_TMDSCLK) {
 		dev_dbg(hdmi->dev, "Unsupported mode clock: %d\n", mode->clock);
