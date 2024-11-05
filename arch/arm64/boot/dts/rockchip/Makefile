@@ -1,4 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0
+
+# Enable support for external device-tree overlays
+DTC_FLAGS_rk3588-rock-5b		:= -@
+DTC_FLAGS_rk3588-tiger-haikou		:= -@
+
 dtb-$(CONFIG_ARCH_ROCKCHIP) += px30-evb.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += px30-engicam-px30-core-ctouch2.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += px30-engicam-px30-core-ctouch2-of10.dtb
