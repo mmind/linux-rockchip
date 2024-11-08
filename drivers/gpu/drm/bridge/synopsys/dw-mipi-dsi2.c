@@ -194,7 +194,7 @@ struct dw_mipi_dsi2 {
 	struct mipi_dsi_host dsi_host;
 	struct drm_bridge *panel_bridge;
 	struct device *dev;
-	void __iomem *base;
+	struct regmap *regmap;
 	struct clk *pclk;
 	struct clk *sys_clk;
 
@@ -218,25 +218,14 @@ static inline struct dw_mipi_dsi2 *bridge_to_dsi2(struct drm_bridge *bridge)
 	return container_of(bridge, struct dw_mipi_dsi2, bridge);
 }
 
-static inline void dsi2_write(struct dw_mipi_dsi2 *dsi2, u32 reg, u32 val)
-{
-	writel(val, dsi2->base + reg);
-}
-
-static inline u32 dsi2_read(struct dw_mipi_dsi2 *dsi2, u32 reg)
-{
-	return readl(dsi2->base + reg);
-}
-
 static int cri_fifos_wait_avail(struct dw_mipi_dsi2 *dsi2)
 {
 	u32 sts, mask;
 	int ret;
 
 	mask = CRI_BUSY | CRT_FIFOS_NOT_EMPTY;
-	ret = readl_poll_timeout(dsi2->base + DSI2_CORE_STATUS,
-				 sts, !(sts & mask), 0,
-				 CMD_PKT_STATUS_TIMEOUT_US);
+	ret = regmap_read_poll_timeout(dsi2->regmap, DSI2_CORE_STATUS, sts,
+				       !(sts & mask), 0, CMD_PKT_STATUS_TIMEOUT_US);
 	if (ret < 0) {
 		DRM_DEV_ERROR(dsi2->dev, "command interface is busy\n");
 		return ret;
@@ -266,12 +255,12 @@ static void dw_mipi_dsi2_set_vid_mode(struct dw_mipi_dsi2 *dsi2)
 	else
 		val |= VID_MODE_TYPE_NON_BURST_SYNC_EVENTS;
 
-	dsi2_write(dsi2, DSI2_DSI_VID_TX_CFG, val);
+	regmap_write(dsi2->regmap, DSI2_DSI_VID_TX_CFG, val);
 
-	dsi2_write(dsi2, DSI2_MODE_CTRL, VIDEO_MODE);
-	ret = readl_poll_timeout(dsi2->base + DSI2_MODE_STATUS,
-				 mode, mode & VIDEO_MODE, 1000,
-				 MODE_STATUS_TIMEOUT_US);
+	regmap_write(dsi2->regmap, DSI2_MODE_CTRL, VIDEO_MODE);
+	ret = regmap_read_poll_timeout(dsi2->regmap, DSI2_MODE_STATUS,
+				       mode, mode & VIDEO_MODE,
+				       1000, MODE_STATUS_TIMEOUT_US);
 	if (ret < 0)
 		dev_err(dsi2->dev, "failed to enter video mode\n");
 }
@@ -281,10 +270,10 @@ static void dw_mipi_dsi2_set_data_stream_mode(struct dw_mipi_dsi2 *dsi2)
 	u32 mode;
 	int ret;
 
-	dsi2_write(dsi2, DSI2_MODE_CTRL, DATA_STREAM_MODE);
-	ret = readl_poll_timeout(dsi2->base + DSI2_MODE_STATUS,
-				 mode, mode & DATA_STREAM_MODE, 1000,
-				 MODE_STATUS_TIMEOUT_US);
+	regmap_write(dsi2->regmap, DSI2_MODE_CTRL, DATA_STREAM_MODE);
+	ret = regmap_read_poll_timeout(dsi2->regmap, DSI2_MODE_STATUS,
+				       mode, mode & DATA_STREAM_MODE,
+				       1000, MODE_STATUS_TIMEOUT_US);
 	if (ret < 0)
 		dev_err(dsi2->dev, "failed to enter data stream mode\n");
 }
@@ -294,19 +283,19 @@ static void dw_mipi_dsi2_set_cmd_mode(struct dw_mipi_dsi2 *dsi2)
 	u32 mode;
 	int ret;
 
-	dsi2_write(dsi2, DSI2_MODE_CTRL, COMMAND_MODE);
-	ret = readl_poll_timeout(dsi2->base + DSI2_MODE_STATUS,
-				 mode, mode & COMMAND_MODE, 1000,
-				 MODE_STATUS_TIMEOUT_US);
+	regmap_write(dsi2->regmap, DSI2_MODE_CTRL, COMMAND_MODE);
+	ret = regmap_read_poll_timeout(dsi2->regmap, DSI2_MODE_STATUS,
+				       mode, mode & COMMAND_MODE,
+				       1000, MODE_STATUS_TIMEOUT_US);
 	if (ret < 0)
 		dev_err(dsi2->dev, "failed to enter data stream mode\n");
 }
 
 static void dw_mipi_dsi2_host_softrst(struct dw_mipi_dsi2 *dsi2)
 {
-	dsi2_write(dsi2, DSI2_SOFT_RESET, 0x0);
+	regmap_write(dsi2->regmap, DSI2_SOFT_RESET, 0x0);
 	usleep_range(50, 100);
-	dsi2_write(dsi2, DSI2_SOFT_RESET,
+	regmap_write(dsi2->regmap, DSI2_SOFT_RESET,
 		   SYS_RSTN | PHY_RSTN | IPI_RSTN);
 }
 
@@ -326,7 +315,7 @@ static void dw_mipi_dsi2_phy_clk_mode_cfg(struct dw_mipi_dsi2 *dsi2)
 	esc_clk_div = DIV_ROUND_UP(sys_clk, 20 * 2);
 	val |= PHY_LPTX_CLK_DIV(esc_clk_div);
 
-	dsi2_write(dsi2, DSI2_PHY_CLK_CFG, val);
+	regmap_write(dsi2->regmap, DSI2_PHY_CLK_CFG, val);
 }
 
 static void dw_mipi_dsi2_phy_ratio_cfg(struct dw_mipi_dsi2 *dsi2)
@@ -348,14 +337,14 @@ static void dw_mipi_dsi2_phy_ratio_cfg(struct dw_mipi_dsi2 *dsi2)
 	ipi_clk = pixel_clk / 4;
 
 	tmp = DIV_ROUND_CLOSEST_ULL(phy_hsclk << 16, ipi_clk);
-	dsi2_write(dsi2, DSI2_PHY_IPI_RATIO_MAN_CFG,
+	regmap_write(dsi2->regmap, DSI2_PHY_IPI_RATIO_MAN_CFG,
 		   PHY_IPI_RATIO(tmp));
 
 	/*
 	 * SYS_RATIO_MAN_CFG = MIPI_DCPHY_HSCLK_Freq / MIPI_DCPHY_HSCLK_Freq
 	 */
 	tmp = DIV_ROUND_CLOSEST_ULL(phy_hsclk << 16, sys_clk);
-	dsi2_write(dsi2, DSI2_PHY_SYS_RATIO_MAN_CFG,
+	regmap_write(dsi2->regmap, DSI2_PHY_SYS_RATIO_MAN_CFG,
 		   PHY_SYS_RATIO(tmp));
 }
 
@@ -370,8 +359,8 @@ static void dw_mipi_dsi2_lp2hs_or_hs2lp_cfg(struct dw_mipi_dsi2 *dsi2)
 	if (ret)
 		DRM_DEV_ERROR(dsi2->dev, "Retrieving phy timings failed\n");
 
-	dsi2_write(dsi2, DSI2_PHY_LP2HS_MAN_CFG, PHY_LP2HS_TIME(timing.data_lp2hs));
-	dsi2_write(dsi2, DSI2_PHY_HS2LP_MAN_CFG, PHY_HS2LP_TIME(timing.data_hs2lp));
+	regmap_write(dsi2->regmap, DSI2_PHY_LP2HS_MAN_CFG, PHY_LP2HS_TIME(timing.data_lp2hs));
+	regmap_write(dsi2->regmap, DSI2_PHY_HS2LP_MAN_CFG, PHY_HS2LP_TIME(timing.data_hs2lp));
 }
 
 static void dw_mipi_dsi2_phy_init(struct dw_mipi_dsi2 *dsi2)
@@ -399,7 +388,7 @@ static void dw_mipi_dsi2_phy_init(struct dw_mipi_dsi2 *dsi2)
 
 	val |= PHY_LANES(dsi2->lanes);
 	val |= PHY_TYPE(DW_MIPI_DSI2_DPHY);
-	dsi2_write(dsi2, DSI2_PHY_MODE_CFG, val);
+	regmap_write(dsi2->regmap, DSI2_PHY_MODE_CFG, val);
 
 	dw_mipi_dsi2_phy_clk_mode_cfg(dsi2);
 	dw_mipi_dsi2_phy_ratio_cfg(dsi2);
@@ -417,8 +406,8 @@ static void dw_mipi_dsi2_tx_option_set(struct dw_mipi_dsi2 *dsi2)
 	if (dsi2->mode_flags & MIPI_DSI_MODE_NO_EOT_PACKET)
 		val &= ~EOTP_TX_EN;
 
-	dsi2_write(dsi2, DSI2_DSI_GENERAL_CFG, val);
-	dsi2_write(dsi2, DSI2_DSI_VCID_CFG, TX_VCID(dsi2->channel));
+	regmap_write(dsi2->regmap, DSI2_DSI_GENERAL_CFG, val);
+	regmap_write(dsi2->regmap, DSI2_DSI_VCID_CFG, TX_VCID(dsi2->channel));
 }
 
 static void dw_mipi_dsi2_ipi_color_coding_cfg(struct dw_mipi_dsi2 *dsi2)
@@ -441,7 +430,7 @@ static void dw_mipi_dsi2_ipi_color_coding_cfg(struct dw_mipi_dsi2 *dsi2)
 
 	val = IPI_DEPTH(color_depth) |
 	      IPI_FORMAT(IPI_FORMAT_RGB);
-	dsi2_write(dsi2, DSI2_IPI_COLOR_MAN_CFG, val);
+	regmap_write(dsi2->regmap, DSI2_IPI_COLOR_MAN_CFG, val);
 }
 
 static void dw_mipi_dsi2_vertical_timing_config(struct dw_mipi_dsi2 *dsi2,
@@ -454,10 +443,10 @@ static void dw_mipi_dsi2_vertical_timing_config(struct dw_mipi_dsi2 *dsi2,
 	vfp = mode->vsync_start - mode->vdisplay;
 	vbp = mode->vtotal - mode->vsync_end;
 
-	dsi2_write(dsi2, DSI2_IPI_VID_VSA_MAN_CFG, VID_VSA_LINES(vsa));
-	dsi2_write(dsi2, DSI2_IPI_VID_VBP_MAN_CFG, VID_VBP_LINES(vbp));
-	dsi2_write(dsi2, DSI2_IPI_VID_VACT_MAN_CFG, VID_VACT_LINES(vactive));
-	dsi2_write(dsi2, DSI2_IPI_VID_VFP_MAN_CFG, VID_VFP_LINES(vfp));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_VSA_MAN_CFG, VID_VSA_LINES(vsa));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_VBP_MAN_CFG, VID_VBP_LINES(vbp));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_VACT_MAN_CFG, VID_VACT_LINES(vactive));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_VFP_MAN_CFG, VID_VFP_LINES(vfp));
 }
 
 static void dw_mipi_dsi2_ipi_set(struct dw_mipi_dsi2 *dsi2)
@@ -470,7 +459,7 @@ static void dw_mipi_dsi2_ipi_set(struct dw_mipi_dsi2 *dsi2)
 
 	val = mode->hdisplay;
 
-	dsi2_write(dsi2, DSI2_IPI_PIX_PKT_CFG, MAX_PIX_PKT(val));
+	regmap_write(dsi2->regmap, DSI2_IPI_PIX_PKT_CFG, MAX_PIX_PKT(val));
 
 	dw_mipi_dsi2_ipi_color_coding_cfg(dsi2);
 
@@ -492,19 +481,19 @@ static void dw_mipi_dsi2_ipi_set(struct dw_mipi_dsi2 *dsi2)
 
 	tmp = hsa * phy_hs_clk;
 	hsa_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
-	dsi2_write(dsi2, DSI2_IPI_VID_HSA_MAN_CFG, VID_HSA_TIME(hsa_time));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_HSA_MAN_CFG, VID_HSA_TIME(hsa_time));
 
 	tmp = hbp * phy_hs_clk;
 	hbp_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
-	dsi2_write(dsi2, DSI2_IPI_VID_HBP_MAN_CFG, VID_HBP_TIME(hbp_time));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_HBP_MAN_CFG, VID_HBP_TIME(hbp_time));
 
 	tmp = hact * phy_hs_clk;
 	hact_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
-	dsi2_write(dsi2, DSI2_IPI_VID_HACT_MAN_CFG, VID_HACT_TIME(hact_time));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_HACT_MAN_CFG, VID_HACT_TIME(hact_time));
 
 	tmp = hline * phy_hs_clk;
 	hline_time = DIV_ROUND_CLOSEST_ULL(tmp << 16, pixel_clk);
-	dsi2_write(dsi2, DSI2_IPI_VID_HLINE_MAN_CFG, VID_HLINE_TIME(hline_time));
+	regmap_write(dsi2->regmap, DSI2_IPI_VID_HLINE_MAN_CFG, VID_HLINE_TIME(hline_time));
 
 	dw_mipi_dsi2_vertical_timing_config(dsi2, mode);
 }
@@ -517,7 +506,7 @@ dw_mipi_dsi2_work_mode(struct dw_mipi_dsi2 *dsi2, u32 mode)
 	 * Manual: MANUAL_MODE_EN
 	 * Automatic: 0
 	 */
-	dsi2_write(dsi2, MANUAL_MODE_CFG, mode);
+	regmap_write(dsi2->regmap, MANUAL_MODE_CFG, mode);
 }
 
 static int dw_mipi_dsi2_host_attach(struct mipi_dsi_host *host,
@@ -582,7 +571,7 @@ static int dw_mipi_dsi2_gen_pkt_hdr_write(struct dw_mipi_dsi2 *dsi2,
 {
 	int ret;
 
-	dsi2_write(dsi2, DSI2_CRI_TX_HDR, hdr_val | CMD_TX_MODE(lpm));
+	regmap_write(dsi2->regmap, DSI2_CRI_TX_HDR, hdr_val | CMD_TX_MODE(lpm));
 
 	ret = cri_fifos_wait_avail(dsi2);
 	if (ret) {
@@ -605,11 +594,11 @@ static int dw_mipi_dsi2_write(struct dw_mipi_dsi2 *dsi2,
 		if (len < pld_data_bytes) {
 			word = 0;
 			memcpy(&word, tx_buf, len);
-			dsi2_write(dsi2, DSI2_CRI_TX_PLD, le32_to_cpu(word));
+			regmap_write(dsi2->regmap, DSI2_CRI_TX_PLD, le32_to_cpu(word));
 			len = 0;
 		} else {
 			memcpy(&word, tx_buf, pld_data_bytes);
-			dsi2_write(dsi2, DSI2_CRI_TX_PLD, le32_to_cpu(word));
+			regmap_write(dsi2->regmap, DSI2_CRI_TX_PLD, le32_to_cpu(word));
 			tx_buf += pld_data_bytes;
 			len -= pld_data_bytes;
 		}
@@ -629,15 +618,15 @@ static int dw_mipi_dsi2_read(struct dw_mipi_dsi2 *dsi2,
 	u16 wc;
 	u32 val;
 
-	ret = readl_poll_timeout(dsi2->base + DSI2_CORE_STATUS,
-				 val, val & CRI_RD_DATA_AVAIL, 1000,
-				 CMD_PKT_STATUS_TIMEOUT_US);
+	ret = regmap_read_poll_timeout(dsi2->regmap, DSI2_CORE_STATUS,
+				       val, val & CRI_RD_DATA_AVAIL,
+				       100, CMD_PKT_STATUS_TIMEOUT_US);
 	if (ret) {
 		dev_err(dsi2->dev, "CRI has no available read data\n");
 		return ret;
 	}
 
-	val = dsi2_read(dsi2, DSI2_CRI_RX_HDR);
+	regmap_read(dsi2->regmap, DSI2_CRI_RX_HDR, &val);
 	data_type = val & 0x3f;
 
 	if (mipi_dsi_packet_format_is_short(data_type)) {
@@ -650,7 +639,7 @@ static int dw_mipi_dsi2_read(struct dw_mipi_dsi2 *dsi2,
 	wc = (val >> 8) & 0xffff;
 	/* Receive payload */
 	for (i = 0; i < len && i < wc; i += 4) {
-		val = dsi2_read(dsi2, DSI2_CRI_RX_PLD);
+		regmap_read(dsi2->regmap, DSI2_CRI_RX_PLD, &val);
 		for (j = 0; j < 4 && j + i < len && j + i < wc; j++)
 			payload[i + j] = val >> (8 * j);
 	}
@@ -665,14 +654,10 @@ static ssize_t dw_mipi_dsi2_host_transfer(struct mipi_dsi_host *host,
 	bool lpm = msg->flags & MIPI_DSI_MSG_USE_LPM;
 	struct mipi_dsi_packet packet;
 	int ret, nb_bytes;
-	u32 val;
 
-	val = dsi2_read(dsi2, DSI2_DSI_VID_TX_CFG);
-	if (lpm)
-		val |= LPDT_DISPLAY_CMD_EN;
-	else
-		val &= ~LPDT_DISPLAY_CMD_EN;
-	dsi2_write(dsi2, DSI2_DSI_VID_TX_CFG, val);
+	regmap_update_bits(dsi2->regmap, DSI2_DSI_VID_TX_CFG,
+			   LPDT_DISPLAY_CMD_EN,
+			   lpm ? LPDT_DISPLAY_CMD_EN : 0);
 
 	/* create a packet to the DSI protocol */
 	ret = mipi_dsi_create_packet(&packet, msg);
@@ -766,7 +751,7 @@ static void dw_mipi_dsi2_bridge_post_atomic_disable(struct drm_bridge *bridge,
 	struct dw_mipi_dsi2 *dsi2 = bridge_to_dsi2(bridge);
 	const struct dw_mipi_dsi2_phy_ops *phy_ops = dsi2->plat_data->phy_ops;
 
-	dsi2_write(dsi2, DSI2_IPI_PIX_PKT_CFG, 0);
+	regmap_write(dsi2->regmap, DSI2_IPI_PIX_PKT_CFG, 0);
 
 	/*
 	 * Switch to command mode before panel-bridge post_disable &
@@ -776,7 +761,7 @@ static void dw_mipi_dsi2_bridge_post_atomic_disable(struct drm_bridge *bridge,
 	 */
 	dw_mipi_dsi2_set_cmd_mode(dsi2);
 
-	dsi2_write(dsi2, DSI2_PWR_UP, RESET);
+	regmap_write(dsi2->regmap, DSI2_PWR_UP, RESET);
 
 	if (phy_ops->power_off)
 		phy_ops->power_off(dsi2->plat_data->priv_data);
@@ -798,7 +783,6 @@ static void dw_mipi_dsi2_mode_set(struct dw_mipi_dsi2 *dsi2,
 	void *priv_data = dsi2->plat_data->priv_data;
 	u32 lanes = dw_mipi_dsi2_get_lanes(dsi2);
 	int ret;
-	u32 val;
 
 	clk_prepare_enable(dsi2->pclk);
 
@@ -810,7 +794,7 @@ static void dw_mipi_dsi2_mode_set(struct dw_mipi_dsi2 *dsi2,
 	pm_runtime_get_sync(dsi2->dev);
 
 	dw_mipi_dsi2_host_softrst(dsi2);
-	dsi2_write(dsi2, DSI2_PWR_UP, RESET);
+	regmap_write(dsi2->regmap, DSI2_PWR_UP, RESET);
 
 	dw_mipi_dsi2_work_mode(dsi2, MANUAL_MODE_EN);
 	dw_mipi_dsi2_phy_init(dsi2);
@@ -825,13 +809,11 @@ static void dw_mipi_dsi2_mode_set(struct dw_mipi_dsi2 *dsi2,
 	 * then we can configure clk_type.
 	 */
 
-	val = dsi2_read(dsi2, DSI2_PHY_CLK_CFG);
-	val &= ~CLK_TYPE_MASK;
-	val |= (dsi2->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS) ?
-					NON_CONTINUOUS_CLK : CONTINUOUS_CLK;
-	dsi2_write(dsi2, DSI2_PHY_CLK_CFG, val);
+	regmap_update_bits(dsi2->regmap, DSI2_PHY_CLK_CFG, CLK_TYPE_MASK,
+			   dsi2->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS ? NON_CONTINUOUS_CLK :
+									      CONTINUOUS_CLK);
 
-	dsi2_write(dsi2, DSI2_PWR_UP, POWER_UP);
+	regmap_write(dsi2->regmap, DSI2_PWR_UP, POWER_UP);
 	dw_mipi_dsi2_set_cmd_mode(dsi2);
 
 	dw_mipi_dsi2_ipi_set(dsi2);
@@ -913,6 +895,14 @@ static const struct drm_bridge_funcs dw_mipi_dsi2_bridge_funcs = {
 	.attach			= dw_mipi_dsi2_bridge_attach,
 };
 
+static const struct regmap_config dw_mipi_dsi2_regmap_config = {
+	.name = "dsi2-host",
+	.reg_bits = 32,
+	.val_bits = 32,
+	.reg_stride = 4,
+	.fast_io = true,
+};
+
 static struct dw_mipi_dsi2 *
 __dw_mipi_dsi2_probe(struct platform_device *pdev,
 		     const struct dw_mipi_dsi2_plat_data *plat_data)
@@ -933,12 +923,17 @@ __dw_mipi_dsi2_probe(struct platform_device *pdev,
 	    !plat_data->phy_ops->get_timing)
 		return dev_err_ptr_probe(dev, -ENODEV, "Phy not properly configured\n");
 
-	if (!plat_data->base) {
-		dsi2->base = devm_platform_ioremap_resource(pdev, 0);
-		if (IS_ERR(dsi2->base))
-			return ERR_PTR(-ENODEV);
+	if (!plat_data->regmap) {
+		void __iomem *base = devm_platform_ioremap_resource(pdev, 0);
+		if (IS_ERR(base))
+			return dev_err_cast_probe(dev, base, "failed to registers\n");
+
+		dsi2->regmap = devm_regmap_init_mmio(dev, base,
+						     &dw_mipi_dsi2_regmap_config);
+		if (IS_ERR(dsi2->regmap))
+			return dev_err_cast_probe(dev, dsi2->regmap, "failed to init regmap\n");
 	} else {
-		dsi2->base = plat_data->base;
+		dsi2->regmap = plat_data->regmap;
 	}
 
 	dsi2->pclk = devm_clk_get(dev, "pclk");

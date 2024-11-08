@@ -9,6 +9,7 @@
 #ifndef __DW_MIPI_DSI2__
 #define __DW_MIPI_DSI2__
 
+#include <linux/regmap.h>
 #include <linux/types.h>
 
 #include <drm/drm_atomic.h>
@@ -60,7 +61,7 @@ struct dw_mipi_dsi2_host_ops {
 };
 
 struct dw_mipi_dsi2_plat_data {
-	void __iomem *base;
+	struct regmap *regmap;
 	unsigned int max_data_lanes;
 
 	enum drm_mode_status (*mode_valid)(void *priv_data,
