@@ -75,7 +75,7 @@ struct rockchip_dw_dsi2_chip_data {
 struct dw_mipi_dsi2_rockchip {
 	struct device *dev;
 	struct rockchip_encoder encoder;
-	void __iomem *base;
+	struct regmap *regmap;
 	struct clk *pclk;
 	struct clk *sys_clk;
 
@@ -404,6 +404,14 @@ static const struct dev_pm_ops dw_mipi_dsi2_rockchip_pm_ops = {
 			   dw_mipi_dsi2_runtime_resume, NULL)
 };
 
+static const struct regmap_config dw_mipi_dsi2_rockchip_regmap_config = {
+	.name = "dsi2-host",
+	.reg_bits = 32,
+	.val_bits = 32,
+	.reg_stride = 4,
+	.fast_io = true,
+};
+
 static int dw_mipi_dsi2_rockchip_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -412,15 +420,20 @@ static int dw_mipi_dsi2_rockchip_probe(struct platform_device *pdev)
 						of_device_get_match_data(dev);
 	struct dw_mipi_dsi2_rockchip *dsi2;
 	struct resource *res;
+	void __iomem *base;
 	int i;
 
 	dsi2 = devm_kzalloc(dev, sizeof(*dsi2), GFP_KERNEL);
 	if (!dsi2)
 		return -ENOMEM;
 
-	dsi2->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
-	if (IS_ERR(dsi2->base))
-		return dev_err_probe(dev, PTR_ERR(dsi2->base), "Unable to get dsi registers\n");
+	base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
+	if (IS_ERR(base))
+		return dev_err_probe(dev, PTR_ERR(base), "Unable to get dsi registers\n");
+
+	dsi2->regmap = devm_regmap_init_mmio(dev, base, &dw_mipi_dsi2_rockchip_regmap_config);
+	if (IS_ERR(dsi2->regmap))
+		return dev_err_probe(dev, PTR_ERR(dsi2->regmap), "failed to init register map\n");
 
 	i = 0;
 	while (cdata[i].reg) {
@@ -452,7 +465,7 @@ static int dw_mipi_dsi2_rockchip_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(dsi2->phy), "failed to get mipi phy\n");
 
 	dsi2->dev = dev;
-	dsi2->pdata.base = dsi2->base;
+	dsi2->pdata.regmap = dsi2->regmap;
 	dsi2->pdata.max_data_lanes = 4;
 	dsi2->pdata.phy_ops = &dw_mipi_dsi2_rockchip_phy_ops;
 	dsi2->pdata.host_ops = &dw_mipi_dsi2_rockchip_host_ops;
