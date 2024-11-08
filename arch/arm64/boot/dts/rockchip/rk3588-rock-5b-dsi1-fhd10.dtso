@@ -95,6 +95,9 @@
 };
 
 &vp3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
 	vp3_out_dsi1: endpoint@ROCKCHIP_VOP2_EP_MIPI1 {
 		reg = <ROCKCHIP_VOP2_EP_MIPI1>;
 		remote-endpoint = <&dsi1_in_vp3>;
