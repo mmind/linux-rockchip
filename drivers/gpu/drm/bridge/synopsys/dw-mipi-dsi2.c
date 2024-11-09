@@ -227,7 +227,7 @@ static int cri_fifos_wait_avail(struct dw_mipi_dsi2 *dsi2)
 	ret = regmap_read_poll_timeout(dsi2->regmap, DSI2_CORE_STATUS, sts,
 				       !(sts & mask), 0, CMD_PKT_STATUS_TIMEOUT_US);
 	if (ret < 0) {
-		DRM_DEV_ERROR(dsi2->dev, "command interface is busy\n");
+		dev_err(dsi2->dev, "command interface is busy\n");
 		return ret;
 	}
 
@@ -357,7 +357,7 @@ static void dw_mipi_dsi2_lp2hs_or_hs2lp_cfg(struct dw_mipi_dsi2 *dsi2)
 	ret = phy_ops->get_timing(dsi2->plat_data->priv_data,
 				  dsi2->lane_mbps, &timing);
 	if (ret)
-		DRM_DEV_ERROR(dsi2->dev, "Retrieving phy timings failed\n");
+		dev_err(dsi2->dev, "Retrieving phy timings failed\n");
 
 	regmap_write(dsi2->regmap, DSI2_PHY_LP2HS_MAN_CFG, PHY_LP2HS_TIME(timing.data_lp2hs));
 	regmap_write(dsi2->regmap, DSI2_PHY_HS2LP_MAN_CFG, PHY_HS2LP_TIME(timing.data_hs2lp));
@@ -662,7 +662,7 @@ static ssize_t dw_mipi_dsi2_host_transfer(struct mipi_dsi_host *host,
 	/* create a packet to the DSI protocol */
 	ret = mipi_dsi_create_packet(&packet, msg);
 	if (ret) {
-		DRM_DEV_ERROR(dsi2->dev, "failed to create packet: %d\n", ret);
+		dev_err(dsi2->dev, "failed to create packet: %d\n", ret);
 		return ret;
 	}
 
