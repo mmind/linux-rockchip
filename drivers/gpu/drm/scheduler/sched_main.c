@@ -87,6 +87,12 @@
 #define CREATE_TRACE_POINTS
 #include "gpu_scheduler_trace.h"
 
+#ifdef CONFIG_LOCKDEP
+static struct lockdep_map drm_sched_lockdep_map = {
+	.name = "drm_sched_lockdep_map"
+};
+#endif
+
 #define to_drm_sched_job(sched_job)		\
 		container_of((sched_job), struct drm_sched_job, queue_node)
 
@@ -674,9 +680,10 @@ EXPORT_SYMBOL(drm_sched_stop);
  * drm_sched_start - recover jobs after a reset
  *
  * @sched: scheduler instance
+ * @errno: error to set on the pending fences
  *
  */
-void drm_sched_start(struct drm_gpu_scheduler *sched)
+void drm_sched_start(struct drm_gpu_scheduler *sched, int errno)
 {
 	struct drm_sched_job *s_job, *tmp;
 
@@ -691,13 +698,13 @@ void drm_sched_start(struct drm_gpu_scheduler *sched)
 		atomic_add(s_job->credits, &sched->credit_count);
 
 		if (!fence) {
-			drm_sched_job_done(s_job, -ECANCELED);
+			drm_sched_job_done(s_job, errno ?: -ECANCELED);
 			continue;
 		}
 
 		if (dma_fence_add_callback(fence, &s_job->cb,
 					   drm_sched_job_done_cb))
-			drm_sched_job_done(s_job, fence->error);
+			drm_sched_job_done(s_job, fence->error ?: errno);
 	}
 
 	drm_sched_start_timeout_unlocked(sched);
@@ -1013,15 +1020,12 @@ EXPORT_SYMBOL(drm_sched_job_cleanup);
 /**
  * drm_sched_wakeup - Wake up the scheduler if it is ready to queue
  * @sched: scheduler instance
- * @entity: the scheduler entity
  *
  * Wake up the scheduler if we can queue jobs.
  */
-void drm_sched_wakeup(struct drm_gpu_scheduler *sched,
-		      struct drm_sched_entity *entity)
+void drm_sched_wakeup(struct drm_gpu_scheduler *sched)
 {
-	if (drm_sched_can_queue(sched, entity))
-		drm_sched_run_job_queue(sched);
+	drm_sched_run_job_queue(sched);
 }
 
 /**
@@ -1272,7 +1276,13 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 		sched->submit_wq = submit_wq;
 		sched->own_submit_wq = false;
 	} else {
-		sched->submit_wq = alloc_ordered_workqueue(name, 0);
+#ifdef CONFIG_LOCKDEP
+		sched->submit_wq = alloc_ordered_workqueue_lockdep_map(name,
+								       WQ_MEM_RECLAIM,
+								       &drm_sched_lockdep_map);
+#else
+		sched->submit_wq = alloc_ordered_workqueue(name, WQ_MEM_RECLAIM);
+#endif
 		if (!sched->submit_wq)
 			return -ENOMEM;
 
