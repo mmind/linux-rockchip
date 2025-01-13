@@ -233,6 +233,12 @@ properties:
       Maximum timeout in microseconds after which the flash LED is turned off.
       Required for flash LED nodes with configurable timeout.
 
+  # Requires netdev trigger
+  netdev-trigger-mode:
+    description:
+      The netdev LED trigger default mode flags, use TRIGGER_NETDEV_ * flags.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
 allOf:
   - if:
       required:
