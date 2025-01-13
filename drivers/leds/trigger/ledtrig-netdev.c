@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/rtnetlink.h>
 #include <linux/timer.h>
@@ -256,19 +257,9 @@ static ssize_t device_name_show(struct device *dev,
 	return len;
 }
 
-static int set_device_name(struct led_netdev_data *trigger_data,
-			   const char *name, size_t size)
+static void set_device_name_locked(struct led_netdev_data *trigger_data,
+				  const char *name, size_t size)
 {
-	if (size >= IFNAMSIZ)
-		return -EINVAL;
-
-	cancel_delayed_work_sync(&trigger_data->work);
-
-	/*
-	 * Take RTNL lock before trigger_data lock to prevent potential
-	 * deadlock with netdev notifier registration.
-	 */
-	rtnl_lock();
 	mutex_lock(&trigger_data->lock);
 
 	if (trigger_data->net_dev) {
@@ -298,6 +289,24 @@ static int set_device_name(struct led_netdev_data *trigger_data,
 		set_baseline_state(trigger_data);
 
 	mutex_unlock(&trigger_data->lock);
+}
+
+static int set_device_name(struct led_netdev_data *trigger_data,
+			   const char *name, size_t size)
+{
+	if (size >= IFNAMSIZ)
+		return -EINVAL;
+
+	cancel_delayed_work_sync(&trigger_data->work);
+
+	/*
+	 * Take RTNL lock before trigger_data lock to prevent potential
+	 * deadlock with netdev notifier registration.
+	 */
+	rtnl_lock();
+
+	set_device_name_locked(trigger_data, name, size);
+
 	rtnl_unlock();
 
 	return 0;
@@ -579,6 +588,20 @@ static int netdev_trig_notify(struct notifier_block *nb,
 	    && evt != NETDEV_CHANGENAME)
 		return NOTIFY_DONE;
 
+	if (evt == NETDEV_REGISTER && !trigger_data->device_name[0] &&
+	    led_cdev->hw_control_get && led_cdev->hw_control_set &&
+	    led_cdev->hw_control_is_supported) {
+		struct device *ndev = led_cdev->hw_control_get_device(led_cdev);
+		if (ndev) {
+			const char *name = dev_name(ndev);
+
+			trigger_data->hw_control = true;
+
+			cancel_delayed_work_sync(&trigger_data->work);
+			set_device_name_locked(trigger_data, name, strlen(name));
+		}
+	}
+
 	if (!(dev == trigger_data->net_dev ||
 	      (evt == NETDEV_CHANGENAME && !strcmp(dev->name, trigger_data->device_name)) ||
 	      (evt == NETDEV_REGISTER && !strcmp(dev->name, trigger_data->device_name))))
@@ -689,6 +712,7 @@ static int netdev_trig_activate(struct led_classdev *led_cdev)
 	struct led_netdev_data *trigger_data;
 	unsigned long mode = 0;
 	struct device *dev;
+	u32 val;
 	int rc;
 
 	trigger_data = kzalloc(sizeof(struct led_netdev_data), GFP_KERNEL);
@@ -706,7 +730,8 @@ static int netdev_trig_activate(struct led_classdev *led_cdev)
 	trigger_data->net_dev = NULL;
 	trigger_data->device_name[0] = 0;
 
-	trigger_data->mode = 0;
+	rc = of_property_read_u32(led_cdev->dev->of_node, "netdev-trigger-mode", &val);
+	trigger_data->mode = rc ? 0 : val;
 	atomic_set(&trigger_data->interval, msecs_to_jiffies(NETDEV_LED_DEFAULT_INTERVAL));
 	trigger_data->last_activity = 0;
 
