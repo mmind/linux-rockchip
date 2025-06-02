@@ -1,0 +1,352 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Copyright (c) 2025 Collabora Ltd.
+ *
+ * A counter driver for the Pulse-Width-Modulation (PWM) hardware found on
+ * Rockchip SoCs such as the RK3576, internally referred to as "PWM v4". It
+ * allows for measuring the period and duty cycle in nanoseconds through the
+ * generic counter framework, while guaranteeing exclusive use over the MFPWM
+ * device while the counter is enabled.
+ *
+ * Authors:
+ *     Nicolas Frattaroli <nicolas.frattaroli@collabora.com>
+ */
+
+#include <linux/cleanup.h>
+#include <linux/counter.h>
+#include <linux/devm-helpers.h>
+#include <linux/interrupt.h>
+#include <linux/math64.h>
+#include <linux/mod_devicetable.h>
+#include <linux/platform_device.h>
+#include <linux/spinlock.h>
+#include <linux/workqueue.h>
+#include <soc/rockchip/mfpwm.h>
+
+#define RKPWMC_INT_MASK			(PWMV4_INT_LPC | PWMV4_INT_HPC)
+/*
+ * amount of jiffies between no PWM signal change and us deciding PWM is off.
+ * PWM signals with a period longer than this won't be detected by us, which is
+ * the trade-off we make to have a faster response time when a signal is turned
+ * off.
+ */
+#define RKPWMC_CLEAR_DELAY		(max(msecs_to_jiffies(100), 1))
+
+struct rockchip_pwm_capture {
+	struct rockchip_mfpwm_func *pwmf;
+	bool is_enabled;
+	spinlock_t enable_lock;
+	atomic_t lpc;
+	atomic_t hpc;
+	atomic_t captures_left;
+	struct delayed_work clear_capture;
+};
+
+static struct counter_signal rkpwmc_signals[] = {
+	{
+		.id = 0,
+		.name = "Channel 1"
+	},
+};
+
+static const enum counter_synapse_action rkpwmc_hpc_lpc_actions[] = {
+	COUNTER_SYNAPSE_ACTION_BOTH_EDGES,
+
+};
+
+static struct counter_synapse rkpwmc_pwm_synapses[] = {
+	{
+		.actions_list = rkpwmc_hpc_lpc_actions,
+		.num_actions = ARRAY_SIZE(rkpwmc_hpc_lpc_actions),
+		.signal = &rkpwmc_signals[0]
+	},
+};
+
+static const enum counter_function rkpwmc_functions[] = {
+	COUNTER_FUNCTION_INCREASE,
+};
+
+static int rkpwmc_enable_read(struct counter_device *counter,
+			       struct counter_count *count,
+			       u8 *enable)
+{
+	struct rockchip_pwm_capture *pc = counter_priv(counter);
+
+	guard(spinlock)(&pc->enable_lock);
+
+	*enable = pc->is_enabled;
+
+	return 0;
+}
+
+static int rkpwmc_enable_write(struct counter_device *counter,
+			       struct counter_count *count,
+			       u8 enable)
+{
+	struct rockchip_pwm_capture *pc = counter_priv(counter);
+	int ret;
+
+	guard(spinlock)(&pc->enable_lock);
+
+	if (!!enable != pc->is_enabled) {
+		ret = mfpwm_acquire(pc->pwmf);
+		if (ret)
+			return ret;
+
+		if (enable) {
+			mfpwm_reg_write(pc->pwmf->base, PWMV4_REG_ENABLE,
+					 PWMV4_EN(false));
+			mfpwm_reg_write(pc->pwmf->base, PWMV4_REG_CTRL,
+					 PWMV4_CTRL_CAP_FLAGS);
+			mfpwm_reg_write(pc->pwmf->base, PWMV4_REG_INT_EN,
+					 PWMV4_INT_LPC_W(true) |
+					 PWMV4_INT_HPC_W(true));
+			mfpwm_reg_write(pc->pwmf->base, PWMV4_REG_ENABLE,
+					 PWMV4_EN(true) | PWMV4_CLK_EN(true));
+
+			ret = clk_enable(pc->pwmf->core);
+			if (ret)
+				goto err_release;
+
+			ret = clk_rate_exclusive_get(pc->pwmf->core);
+			if (ret)
+				goto err_disable_pwm_clk;
+
+			ret = mfpwm_acquire(pc->pwmf);
+			if (ret)
+				goto err_unprotect_pwm_clk;
+
+			atomic_set(&pc->captures_left, 4);
+			pc->is_enabled = true;
+		} else {
+			mfpwm_reg_write(pc->pwmf->base, PWMV4_REG_INT_EN,
+					 PWMV4_INT_LPC_W(false) |
+					 PWMV4_INT_HPC_W(false));
+			mfpwm_reg_write(pc->pwmf->base, PWMV4_REG_ENABLE,
+					 PWMV4_EN(false) | PWMV4_CLK_EN(false));
+			/*
+			 * Do not use cancel_delayed_work here unless you want
+			 * to cause the interrupt handler, which may still be
+			 * running at this point, to stall. Similarly, don't do
+			 * flush_delayed_work since it may sleep.
+			 */
+			mod_delayed_work(system_bh_wq, &pc->clear_capture, 0);
+			clk_rate_exclusive_put(pc->pwmf->core);
+			clk_disable(pc->pwmf->core);
+			pc->is_enabled = false;
+			mfpwm_release(pc->pwmf);
+		}
+
+		mfpwm_release(pc->pwmf);
+	}
+
+	return 0;
+
+err_unprotect_pwm_clk:
+	clk_rate_exclusive_put(pc->pwmf->core);
+err_disable_pwm_clk:
+	clk_disable(pc->pwmf->core);
+err_release:
+	mfpwm_release(pc->pwmf);
+
+	return ret;
+}
+
+static struct counter_comp rkpwmc_ext[] = {
+	COUNTER_COMP_ENABLE(rkpwmc_enable_read, rkpwmc_enable_write),
+};
+
+enum rkpwmc_count_id {
+	COUNT_PERIOD = 0,
+	COUNT_DUTY = 1,
+};
+
+static struct counter_count rkpwmc_counts[] = {
+	{
+		.id = COUNT_PERIOD,
+		.name = "Period in nanoseconds",
+		.functions_list = rkpwmc_functions,
+		.num_functions = ARRAY_SIZE(rkpwmc_functions),
+		.synapses = rkpwmc_pwm_synapses,
+		.num_synapses = ARRAY_SIZE(rkpwmc_pwm_synapses),
+		.ext = rkpwmc_ext,
+		.num_ext = ARRAY_SIZE(rkpwmc_ext),
+	},
+	{
+		.id = COUNT_DUTY,
+		.name = "Duty cycle in nanoseconds",
+		.functions_list = rkpwmc_functions,
+		.num_functions = ARRAY_SIZE(rkpwmc_functions),
+		.synapses = rkpwmc_pwm_synapses,
+		.num_synapses = ARRAY_SIZE(rkpwmc_pwm_synapses),
+		.ext = rkpwmc_ext,
+		.num_ext = ARRAY_SIZE(rkpwmc_ext),
+	},
+};
+
+static int rkpwmc_count_read(struct counter_device *counter,
+			     struct counter_count *count, u64 *value)
+{
+	struct rockchip_pwm_capture *pc = counter_priv(counter);
+	unsigned long rate;
+	u64 period;
+	u64 lpc;
+	u64 hpc;
+	int ret = 0;
+
+	if (count->id != COUNT_PERIOD && count->id != COUNT_DUTY)
+		return -EINVAL;
+
+	ret = mfpwm_acquire(pc->pwmf);
+	if (ret)
+		return ret;
+
+	rate = clk_get_rate(pc->pwmf->core);
+	if (!rate) {
+		ret = -EINVAL;
+		goto out_release;
+	}
+
+	hpc = (u32) atomic_read(&pc->hpc);
+	lpc = (u32) atomic_read(&pc->lpc);
+	period = mul_u64_u64_div_u64(hpc + lpc, NSEC_PER_SEC, rate);
+
+	if (period > jiffies_to_msecs(RKPWMC_CLEAR_DELAY) * NSEC_PER_MSEC) {
+		*value = 0;
+		goto out_release;
+	}
+
+	if (count->id == COUNT_PERIOD)
+		*value = period;
+	else
+		*value = mul_u64_u64_div_u64(hpc, NSEC_PER_SEC, rate);
+
+out_release:
+	mfpwm_release(pc->pwmf);
+
+	return ret;
+}
+
+static const struct counter_ops rkpwmc_ops = {
+	.count_read = rkpwmc_count_read,
+};
+
+static irqreturn_t rkpwmc_irq_handler(int irq, void *data)
+{
+	struct rockchip_pwm_capture *pc = data;
+	u32 intsts;
+	u32 clr = 0;
+	u32 lpc;
+	u32 hpc;
+
+	intsts = mfpwm_reg_read(pc->pwmf->base, PWMV4_REG_INTSTS);
+
+	if (!(intsts & RKPWMC_INT_MASK))
+		return IRQ_NONE;
+
+	if (intsts & PWMV4_INT_LPC) {
+		clr |= PWMV4_INT_LPC;
+		atomic_dec_if_positive(&pc->captures_left);
+	}
+
+	if (intsts & PWMV4_INT_HPC) {
+		clr |= PWMV4_INT_HPC;
+		atomic_dec_if_positive(&pc->captures_left);
+	}
+
+	/* After 4 interrupts, reset to 4 captures left and read the regs */
+	if (!atomic_cmpxchg(&pc->captures_left, 0, 4)) {
+		lpc = mfpwm_reg_read(pc->pwmf->base, PWMV4_REG_LPC);
+		hpc = mfpwm_reg_read(pc->pwmf->base, PWMV4_REG_HPC);
+
+		atomic_set(&pc->lpc, lpc);
+		atomic_set(&pc->hpc, hpc);
+		mod_delayed_work(system_bh_wq, &pc->clear_capture,
+				 RKPWMC_CLEAR_DELAY);
+	}
+
+	if (clr)
+		mfpwm_reg_write(pc->pwmf->base, PWMV4_REG_INTSTS, clr);
+
+	if (intsts ^ clr)
+		return IRQ_NONE;
+
+	return IRQ_HANDLED;
+}
+
+static void rkpwmc_clear_capture_worker(struct work_struct *work)
+{
+	struct rockchip_pwm_capture *pc = container_of(
+		work, struct rockchip_pwm_capture, clear_capture.work);
+
+	atomic_set(&pc->hpc, 0);
+	atomic_set(&pc->lpc, 0);
+}
+
+static int rockchip_pwm_capture_probe(struct platform_device *pdev)
+{
+	struct rockchip_mfpwm_func *pwmf = dev_get_platdata(&pdev->dev);
+	struct rockchip_pwm_capture *pc;
+	struct counter_device *counter;
+	int ret;
+
+	counter = devm_counter_alloc(&pdev->dev, sizeof(*pc));
+	if (IS_ERR(counter))
+		return PTR_ERR(counter);
+
+	pc = counter_priv(counter);
+	pc->pwmf = pwmf;
+	spin_lock_init(&pc->enable_lock);
+
+	platform_set_drvdata(pdev, pc);
+
+	ret = devm_request_irq(&pdev->dev, pwmf->irq, rkpwmc_irq_handler,
+			       IRQF_SHARED, pdev->name, pc);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed requesting IRQ\n");
+
+	ret = devm_delayed_work_autocancel(&pdev->dev, &pc->clear_capture,
+					   rkpwmc_clear_capture_worker);
+
+	counter->name = pdev->name;
+	counter->signals = rkpwmc_signals;
+	counter->num_signals = ARRAY_SIZE(rkpwmc_signals);
+	counter->ops = &rkpwmc_ops;
+	counter->counts = rkpwmc_counts;
+	counter->num_counts = ARRAY_SIZE(rkpwmc_counts);
+
+	ret = devm_counter_add(&pdev->dev, counter);
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "Failed to add counter\n");
+
+	return 0;
+}
+
+static void rockchip_pwm_capture_remove(struct platform_device *pdev)
+{
+	struct rockchip_mfpwm_func *pwmf = dev_get_platdata(&pdev->dev);
+
+	mfpwm_remove_func(pwmf);
+}
+
+static const struct platform_device_id rockchip_pwm_capture_id_table[] = {
+	{ .name = "rockchip-pwm-capture", },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(platform, rockchip_pwm_capture_id_table);
+
+static struct platform_driver rockchip_pwm_capture_driver = {
+	.probe = rockchip_pwm_capture_probe,
+	.remove = rockchip_pwm_capture_remove,
+	.id_table = rockchip_pwm_capture_id_table,
+	.driver = {
+		.name = "rockchip-pwm-capture",
+	},
+};
+module_platform_driver(rockchip_pwm_capture_driver);
+
+MODULE_AUTHOR("Nicolas Frattaroli <nicolas.frattaroli@collabora.com>");
+MODULE_DESCRIPTION("Rockchip PWM Counter Capture Driver");
+MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("ROCKCHIP_MFPWM");
+MODULE_IMPORT_NS("COUNTER");
