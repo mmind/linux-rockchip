@@ -30,4 +30,17 @@ config ROCKCHIP_DTPM
 	  on this platform. That will create all the power capping capable
 	  devices.
 
+config ROCKCHIP_MFPWM
+	tristate "Rockchip multi-function PWM controller"
+	depends on OF
+	depends on HAS_IOMEM
+	help
+	  Some Rockchip SoCs, such as the RK3576, use a PWM controller that has
+	  several different functions, such as generating PWM waveforms but also
+	  counting waveforms.
+
+	  This driver manages the overall device, and selects between different
+	  functionalities at runtime as needed, with drivers for them
+	  implemented in their respective subsystems.
+
 endif
