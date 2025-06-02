@@ -8,6 +8,7 @@
 #define _LINUX_BITFIELD_H
 
 #include <linux/build_bug.h>
+#include <linux/limits.h>
 #include <linux/typecheck.h>
 #include <asm/byteorder.h>
 
@@ -140,6 +141,52 @@
 		__BF_CHECK_POW2((_mask) + (1ULL << __bf_shf(_mask))) +	\
 		/* and create the value */				\
 		(((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask))	\
+	)
+
+/**
+ * FIELD_PREP_HI16_WE() - prepare a bitfield element with a write-enable mask
+ * @_mask: shifted mask defining the field's length and position
+ * @_val:  value to put in the field
+ *
+ * FIELD_PREP_HI16_WE() masks and shifts up the value, as well as bitwise ORs
+ * the result with the mask shifted up by 16.
+ *
+ * This is useful for a common design of hardware registers where the upper
+ * 16-bit half of a 32-bit register is used as a write-enable mask. In such a
+ * register, a bit in the lower half is only updated if the corresponding bit
+ * in the upper half is high.
+ */
+#define FIELD_PREP_HI16_WE(_mask, _val)					\
+	({								\
+		__BF_FIELD_CHECK(_mask, ((u16) 0U), _val,		\
+				 "FIELD_PREP_HI16_WE: ");		\
+		((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask) |	\
+		((_mask) << 16);					\
+	})
+
+/**
+ * FIELD_PREP_HI16_WE_CONST() - prepare a constant bitfield element with a
+ *                              write-enable mask
+ * @_mask: shifted mask defining the field's length and position
+ * @_val:  value to put in the field
+ *
+ * FIELD_PREP_HI16_WE_CONST() masks and shifts up the value, as well as bitwise
+ * ORs the result with the mask shifted up by 16.
+ *
+ * This is useful for a common design of hardware registers where the upper
+ * 16-bit half of a 32-bit register is used as a write-enable mask. In such a
+ * register, a bit in the lower half is only updated if the corresponding bit
+ * in the upper half is high.
+ *
+ * Unlike FIELD_PREP_HI16_WE(), this is a constant expression and can therefore
+ * be used in initializers. Error checking is less comfortable for this
+ * version, and non-constant masks cannot be used.
+ */
+#define FIELD_PREP_HI16_WE_CONST(_mask, _val)				 \
+	(								 \
+		FIELD_PREP_CONST(_mask, _val) |				 \
+		(BUILD_BUG_ON_ZERO(const_true((u64) (_mask) > U16_MAX)) + \
+		 ((_mask) << 16))					 \
 	)
 
 /**
