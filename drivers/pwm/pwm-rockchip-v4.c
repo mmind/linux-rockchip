@@ -302,7 +302,7 @@ static int rockchip_pwm_v4_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	int ret;
 
-	chip = devm_pwmchip_alloc(dev, 1, sizeof(*pc));
+	chip = devm_pwmchip_alloc(dev->parent, 1, sizeof(*pc));
 	if (IS_ERR(chip))
 		return PTR_ERR(chip);
 
