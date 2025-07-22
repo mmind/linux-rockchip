@@ -137,6 +137,7 @@ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-nanopi-r5s.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-odroid-m1.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-photonicat.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-qnap-ts233.dtb
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-qnap-ts233-q0aj0_q0am0_12_11.dtbo
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-qnap-ts433.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-qnap-ts433-q0b20_q0b30_12_10.dtbo
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-radxa-e25.dtb
@@ -237,6 +238,10 @@ rk3399-rockpro64-screen-dtbs := rk3399-rockpro64.dtb \
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3399-rockpro64-v2-screen.dtb
 rk3399-rockpro64-v2-screen-dtbs := rk3399-rockpro64-v2.dtb \
 	rk3399-rockpro64-screen.dtbo
+
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-qnap-ts233-q0aj0_q0am0_12_11.dtb
+rk3568-qnap-ts233-q0aj0_q0am0_12_11-dtbs := rk3568-qnap-ts233.dtb \
+	rk3568-qnap-ts233-q0aj0_q0am0_12_11.dtbo
 
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-qnap-ts433-q0b20_q0b30_12_10.dtb
 rk3568-qnap-ts433-q0b20_q0b30_12_10-dtbs := rk3568-qnap-ts433.dtb \
