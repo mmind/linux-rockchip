@@ -134,9 +134,14 @@ int of_get_mac_address(struct device_node *np, u8 *addr)
 	if (!ret)
 		return 0;
 
+/*
+As we don't have serdev support in U-Boot, it currently generates a
+random mac-address and sets this as the local-mac-address. This of
+course conflicts with us reading the mac-address from nvmem.
 	ret = of_get_mac_addr(np, "local-mac-address", addr);
 	if (!ret)
 		return 0;
+*/
 
 	ret = of_get_mac_addr(np, "address", addr);
 	if (!ret)
