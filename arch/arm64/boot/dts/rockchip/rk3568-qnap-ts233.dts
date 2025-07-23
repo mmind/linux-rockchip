@@ -27,6 +27,8 @@
 	assigned-clock-parents = <&cru SCLK_GMAC0_RGMII_SPEED>, <&cru CLK_MAC0_2TOP>;
 	assigned-clock-rates = <0>, <125000000>;
 	clock_in_out = "output";
+	nvmem-cells = <&mac0 0>;
+	nvmem-cell-names = "mac-address";
 	phy-handle = <&rgmii_phy0>;
 	phy-mode = "rgmii-id";
 	pinctrl-names = "default";
