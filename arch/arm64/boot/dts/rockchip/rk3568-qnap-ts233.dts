@@ -30,7 +30,9 @@
 	nvmem-cells = <&mac0 0>;
 	nvmem-cell-names = "mac-address";
 	phy-handle = <&rgmii_phy0>;
-	phy-mode = "rgmii-id";
+	phy-mode = "rgmii";
+	tx_delay = <0x3c>;
+	rx_delay = <0x2f>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&gmac0_miim
 		     &gmac0_tx_bus2
