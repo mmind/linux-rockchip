@@ -183,6 +183,28 @@ static const struct serdev_device_ops qnap_mcu_serdev_device_ops = {
 	.write_wakeup = serdev_device_write_wakeup,
 };
 
+static void qnap_mcu_print_command(struct qnap_mcu *mcu,
+				   const u8 *cmd_data, size_t cmd_data_size,
+				   struct qnap_mcu_reply *reply, size_t length)
+{
+	struct device *dev = &mcu->serdev->dev;
+	char buf[1000];
+	char *s = buf;
+	int i;
+
+	s+= sprintf(s, "cmd:");
+	for (i = 0; i < cmd_data_size; i++)
+		s+= sprintf(s, " 0x%2x", cmd_data[i]);
+
+	s+= sprintf(s, ", reply:");
+	for (i = 0; i < reply->received; i++)
+		s+= sprintf(s, " 0x%2x", reply->data[i]);
+
+	s+= sprintf(s, ", (%lu of %lu)\n", reply->received, length);
+
+	dev_warn(dev, buf);
+}
+
 int qnap_mcu_exec(struct qnap_mcu *mcu,
 		  const u8 *cmd_data, size_t cmd_data_size,
 		  u8 *reply_data, size_t reply_data_size)
@@ -212,6 +234,7 @@ int qnap_mcu_exec(struct qnap_mcu *mcu,
 
 	if (!wait_for_completion_timeout(&reply->done, msecs_to_jiffies(QNAP_MCU_TIMEOUT_MS))) {
 		dev_err(&mcu->serdev->dev, "Command timeout\n");
+		qnap_mcu_print_command(mcu, cmd_data, cmd_data_size, reply, length);
 		return -ETIMEDOUT;
 	}
 
