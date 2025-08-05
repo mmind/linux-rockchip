@@ -19,23 +19,6 @@
 		stdout-path = "serial2:115200n8";
 	};
 
-	dp-connector {
-		compatible = "dp-connector";
-		dp-pwr-supply = <&vcc3v3_baseboard>;
-		/* Q7_DP_HPD# but Q7_HDMI_HPD# could be used too */
-		hpd-gpios = <&gpio4 RK_PB5 GPIO_ACTIVE_LOW>;
-		label = "dp0";
-		pinctrl-0 = <&edp0_hpd_l>;
-		pinctrl-names = "default";
-		type = "full-size";
-
-		port {
-			dp_con_in: endpoint {
-				remote-endpoint = <&edp0_out_con>;
-			};
-		};
-	};
-
 	vcc3v3_baseboard: regulator-vcc3v3-baseboard {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_baseboard";
@@ -58,6 +41,24 @@
 
 &edp0 {
 	status = "okay";
+
+	aux-bus {
+		panel {
+			compatible = "edp-panel";
+			/* no backlight = <>; on my hackish panel */
+			power-supply = <&vcc3v3_baseboard>;
+			/* Q7_DP_HPD# but Q7_HDMI_HPD# could be used too */
+			hpd-gpios = <&gpio4 RK_PB5 GPIO_ACTIVE_LOW>;
+			pinctrl-0 = <&edp0_hpd_l>;
+			pinctrl-names = "default";
+
+			port {
+				panel_in_edp: endpoint {
+					remote-endpoint = <&edp0_out_panel>;
+				};
+			};
+		};
+	};
 };
 
 &edp0_in {
@@ -67,8 +68,8 @@
 };
 
 &edp0_out {
-	edp0_out_con: endpoint {
-		remote-endpoint = <&dp_con_in>;
+	edp0_out_panel: endpoint {
+		remote-endpoint = <&panel_in_edp>;
 	};
 };
 
