@@ -1062,8 +1062,8 @@ static void clk_core_unprepare(struct clk_core *core)
 
 	trace_clk_unprepare(core);
 
-	if (core->ops->unprepare)
-		core->ops->unprepare(core->hw);
+//	if (core->ops->unprepare)
+//		core->ops->unprepare(core->hw);
 
 	trace_clk_unprepare_complete(core);
 	clk_core_unprepare(core->parent);
@@ -1197,8 +1197,8 @@ static void clk_core_disable(struct clk_core *core)
 
 	trace_clk_disable(core);
 
-	if (core->ops->disable)
-		core->ops->disable(core->hw);
+//	if (core->ops->disable)
+//		core->ops->disable(core->hw);
 
 	trace_clk_disable_complete(core);
 
