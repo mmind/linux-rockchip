@@ -588,7 +588,7 @@ static int netdev_trig_notify(struct notifier_block *nb,
 	    && evt != NETDEV_CHANGENAME)
 		return NOTIFY_DONE;
 
-	if (evt == NETDEV_REGISTER && !trigger_data->device_name[0] &&
+	if (evt == NETDEV_UP && !trigger_data->device_name[0] &&
 	    led_cdev->hw_control_get && led_cdev->hw_control_set &&
 	    led_cdev->hw_control_is_supported) {
 		struct device *ndev = led_cdev->hw_control_get_device(led_cdev);
