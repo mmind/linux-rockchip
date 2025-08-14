@@ -199,12 +199,19 @@ static void rocket_remove(struct platform_device *pdev)
 	}
 }
 
+static struct rocket_device_data rocket_rk3568 = {
+	.dma_bits = 32,
+	.pc_data_amount_scale = 1,
+};
+
 static struct rocket_device_data rocket_rk3588 = {
 	.dma_bits = 40,
 	.pc_data_amount_scale = 2,
 };
 
 static const struct of_device_id dt_match[] = {
+	{ .compatible = "rockchip,rk3568-rknn-core",
+	  .data = &rocket_rk3568 },
 	{ .compatible = "rockchip,rk3588-rknn-core",
 	  .data = &rocket_rk3588 },
 	{}
