@@ -108,7 +108,7 @@ fail:
 static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *job)
 {
 	struct rocket_task *task;
-	unsigned int extra_bit;
+	unsigned int extra_bit, scale;
 
 	/* Don't queue the job if a reset is in progress */
 	if (atomic_read(&core->reset.pending))
@@ -134,8 +134,10 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 					    extra_bit);
 
 	rocket_pc_writel(core, BASE_ADDRESS, task->regcmd);
+
+	scale = core->rdev->data->pc_data_amount_scale;
 	rocket_pc_writel(core, REGISTER_AMOUNTS,
-			 PC_REGISTER_AMOUNTS_PC_DATA_AMOUNT((task->regcmd_count + 1) / 2 - 1));
+			 PC_REGISTER_AMOUNTS_PC_DATA_AMOUNT((task->regcmd_count + 1) / scale - 1));
 
 	rocket_pc_writel(core, INTERRUPT_MASK, PC_INTERRUPT_MASK_DPU_0 | PC_INTERRUPT_MASK_DPU_1);
 	rocket_pc_writel(core, INTERRUPT_CLEAR, PC_INTERRUPT_CLEAR_DPU_0 | PC_INTERRUPT_CLEAR_DPU_1);

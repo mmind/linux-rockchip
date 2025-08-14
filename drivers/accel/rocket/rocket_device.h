@@ -12,11 +12,17 @@
 
 #include "rocket_core.h"
 
+struct rocket_device_data {
+	unsigned int dma_bits;
+	unsigned int pc_data_amount_scale;
+};
+
 struct rocket_device {
 	struct drm_device ddev;
 
 	struct mutex sched_lock;
 
+	const struct rocket_device_data *data;
 	struct rocket_core *cores;
 	unsigned int num_cores;
 };
