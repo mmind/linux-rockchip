@@ -260,6 +260,8 @@
 				regulator-min-microvolt = <500000>;
 				regulator-max-microvolt = <1350000>;
 				regulator-ramp-delay = <6001>;
+//FIXME: needed?
+				regulator-always-on;
 
 				regulator-state-mem {
 					regulator-off-in-suspend;
@@ -445,6 +447,10 @@
 	};
 };
 
+&pd_npu {
+	domain-supply = <&vdd_npu>;
+};
+
 &pinctrl {
 	keys {
 		copy_button_pin: copy-button-pin {
@@ -482,6 +488,16 @@
 &pmu_io_domains {
 	vccio4-supply = <&vcc_1v8>;
 	vccio6-supply = <&vcc_1v8>;
+	status = "okay";
+};
+
+&rknn_core {
+	npu-supply = <&vdd_npu>;
+	sram-supply = <&vdd_npu>;
+	status = "okay";
+};
+
+&rknn_mmu {
 	status = "okay";
 };
 
