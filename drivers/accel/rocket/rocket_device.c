@@ -7,12 +7,15 @@
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 
 #include "rocket_device.h"
 
 struct rocket_device *rocket_device_init(struct platform_device *pdev,
-					 const struct drm_driver *rocket_drm_driver)
+					 const struct drm_driver *rocket_drm_driver,
+					 struct platform_device *cur)
 {
+	const struct of_device_id *match;
 	struct device *dev = &pdev->dev;
 	struct device_node *core_node;
 	struct rocket_device *rdev;
@@ -27,7 +30,11 @@ struct rocket_device *rocket_device_init(struct platform_device *pdev,
 	ddev = &rdev->ddev;
 	dev_set_drvdata(dev, rdev);
 
-	for_each_compatible_node(core_node, NULL, "rockchip,rk3588-rknn-core")
+	match = of_match_device(cur->dev.driver->of_match_table, &cur->dev);
+	if (!match)
+		return ERR_PTR(-ENODEV);
+
+	for_each_compatible_node(core_node, NULL, match->compatible)
 		if (of_device_is_available(core_node))
 			num_cores++;
 
