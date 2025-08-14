@@ -34,6 +34,8 @@ struct rocket_device *rocket_device_init(struct platform_device *pdev,
 	if (!match)
 		return ERR_PTR(-ENODEV);
 
+	rdev->data = match->data;
+
 	for_each_compatible_node(core_node, NULL, match->compatible)
 		if (of_device_is_available(core_node))
 			num_cores++;
@@ -44,7 +46,7 @@ struct rocket_device *rocket_device_init(struct platform_device *pdev,
 
 	dma_set_max_seg_size(dev, UINT_MAX);
 
-	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(40));
+	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(rdev->data->dma_bits));
 	if (err)
 		return ERR_PTR(err);
 
