@@ -570,6 +570,12 @@
 		clock-names = "aclk", "hclk", "npu", "pclk";
 		resets = <&cru SRST_A_NPU>, <&cru SRST_H_NPU>;
 		reset-names = "srst_a", "srst_h";
+
+/*		clocks = <&scmi_clk 2>, <&cru CLK_NPU>, <&cru ACLK_NPU>, <&cru HCLK_NPU>;
+		clock-names = "scmi_clk", "clk", "aclk", "hclk"; */
+		assigned-clocks = <&cru CLK_NPU>;
+		assigned-clock-rates = <600000000>;
+
 		power-domains = <&power RK3568_PD_NPU>;
 		iommus = <&rknn_mmu>;
 		status = "disabled";
