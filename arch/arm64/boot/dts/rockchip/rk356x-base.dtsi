@@ -109,6 +109,19 @@
 			d-cache-sets = <128>;
 			next-level-cache = <&l3_cache>;
 		};
+
+		idle-states {
+			entry-method = "psci";
+
+			CPU_SLEEP: cpu-sleep {
+				compatible = "arm,idle-state";
+				local-timer-stop;
+				arm,psci-suspend-param = <0x0010000>;
+				entry-latency-us = <100>;
+				exit-latency-us = <120>;
+				min-residency-us = <1000>;
+			};
+		};
 	};
 
 	/*
