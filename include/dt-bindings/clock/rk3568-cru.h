@@ -483,8 +483,6 @@
 
 #define PCLK_CORE_PVTM		450
 
-#define CLK_NR_CLKS		(PCLK_CORE_PVTM + 1)
-
 /* pmu soft-reset indices */
 /* pmucru_softrst_con0 */
 #define SRST_P_PDPMU_NIU	0
