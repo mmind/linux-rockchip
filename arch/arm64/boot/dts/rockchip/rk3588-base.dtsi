@@ -243,6 +243,7 @@
 
 		idle-states {
 			entry-method = "psci";
+
 			CPU_SLEEP: cpu-sleep {
 				compatible = "arm,idle-state";
 				local-timer-stop;
