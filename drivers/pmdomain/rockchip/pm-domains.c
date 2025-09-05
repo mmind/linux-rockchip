@@ -757,6 +757,7 @@ static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
 	const struct rockchip_domain_info *pd_info;
 	struct rockchip_pm_domain *pd;
 	struct device_node *qos_node;
+	bool is_off;
 	int i, j;
 	u32 id;
 	int error;
@@ -869,9 +870,20 @@ static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
 	pd->genpd.flags = GENPD_FLAG_PM_CLK;
 	if (pd_info->active_wakeup)
 		pd->genpd.flags |= GENPD_FLAG_ACTIVE_WAKEUP;
-	pm_genpd_init(&pd->genpd, NULL,
-		      !rockchip_pmu_domain_is_on(pd) ||
-		      (pd->info->mem_status_mask && !rockchip_pmu_domain_is_mem_on(pd)));
+
+	is_off = !rockchip_pmu_domain_is_on(pd) ||
+		 (pd->info->mem_status_mask && !rockchip_pmu_domain_is_mem_on(pd));
+
+	/*
+	 * Init as off for domains requiring regulators.
+	 * Domains normally are on on boot, but when requiring a regulator
+	 * to be handled for the domain, the initial turn off might actually
+	 * fail and possibly hang the system.
+	 */
+	if (pd->info->need_regulator)
+		is_off = true;
+
+	pm_genpd_init(&pd->genpd, NULL, is_off);
 
 	pmu->genpd_data.domains[id] = &pd->genpd;
 	return 0;
