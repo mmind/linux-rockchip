@@ -19,6 +19,7 @@
 /* The longest command found so far is 5 bytes long */
 #define QNAP_MCU_MAX_CMD_SIZE		5
 #define QNAP_MCU_MAX_DATA_SIZE		36
+#define QNAP_MCU_ERROR_SIZE		2
 #define QNAP_MCU_CHECKSUM_SIZE		1
 
 #define QNAP_MCU_RX_BUFFER_SIZE		\
@@ -103,6 +104,21 @@ static int qnap_mcu_write(struct qnap_mcu *mcu, const u8 *data, u8 data_size)
 	return serdev_device_write(mcu->serdev, tx, length, HZ);
 }
 
+static bool qnap_mcu_reply_is_generic_error(unsigned char *buf, size_t size)
+{
+	return (size == 3 && buf[0] == '@' && buf[1] == '9');
+}
+
+static bool qnap_mcu_reply_is_checksum_error(unsigned char *buf, size_t size)
+{
+	return (size == 3 && buf[0] == '@' && buf[1] == '8');
+}
+
+static bool qnap_mcu_reply_is_any_error(unsigned char *buf, size_t size)
+{
+	return (size == 3 && buf[0] == '@' && (buf[1] == '8' || buf[1] == '9'));
+}
+
 static size_t qnap_mcu_receive_buf(struct serdev_device *serdev, const u8 *buf, size_t size)
 {
 	struct device *dev = &serdev->dev;
@@ -134,6 +150,19 @@ static size_t qnap_mcu_receive_buf(struct serdev_device *serdev, const u8 *buf, 
 			 */
 			return src - buf;
 		}
+	}
+
+	/*
+	 * We received everything the uart had to offer for now.
+	 * Check for a possible error reply in the received data.
+	 */
+	if (reply->received == QNAP_MCU_ERROR_SIZE + QNAP_MCU_CHECKSUM_SIZE &&
+	    qnap_mcu_verify_checksum(reply->data, reply->received) &&
+	    qnap_mcu_reply_is_any_error(reply->data, reply->received)) {
+		/* The reply was an error code, we're done */
+		reply->length = 0;
+
+		complete(&reply->done);
 	}
 
 	/*
@@ -182,8 +211,18 @@ int qnap_mcu_exec(struct qnap_mcu *mcu,
 	}
 
 	if (!qnap_mcu_verify_checksum(rx, reply->received)) {
-		dev_err(&mcu->serdev->dev, "Invalid Checksum received\n");
+		dev_err(&mcu->serdev->dev, "Invalid Checksum received from controller\n");
 		return -EPROTO;
+	}
+
+	if (qnap_mcu_reply_is_checksum_error(rx, reply->received)) {
+		dev_err(&mcu->serdev->dev, "Controller received invalid Checksum\n");
+		return -EPROTO;
+	}
+
+	if (qnap_mcu_reply_is_generic_error(rx, reply->received)) {
+		dev_err(&mcu->serdev->dev, "Generic error received from controller\n");
+		return -EIO;
 	}
 
 	memcpy(reply_data, rx, reply_data_size);
