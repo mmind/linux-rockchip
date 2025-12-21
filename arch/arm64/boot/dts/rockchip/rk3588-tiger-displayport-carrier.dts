@@ -22,7 +22,11 @@
 	dp-connector {
 		compatible = "dp-connector";
 		dp-pwr-supply = <&vcc3v3_baseboard>;
+		/* Q7_DP_HPD# but Q7_HDMI_HPD# could be used too */
+		hpd-gpios = <&gpio4 RK_PB5 GPIO_ACTIVE_LOW>;
 		label = "dp0";
+		pinctrl-0 = <&edp0_hpd_l>;
+		pinctrl-names = "default";
 		type = "full-size";
 
 		port {
@@ -53,20 +57,6 @@
 };
 
 &edp0 {
-	/*
-	 * Q7_DP_HPD# but Q7_HDMI_HPD# could be used too
-	 *
-	 * HPD handling in the Analogix-DP not in dp-connector, because
-	 * "Detecting the monitor for DisplayPort targets is more
-	 *  complicated than just reading the HPD pin level" so the
-	 * "actual DP driver (should) perform detection".
-	 * For reference see commit cb640b2ca546 ("drm/bridge:
-	 * display-connector: don't set OP_DETECT for DisplayPorts")
-	 * in the Linux-kernel.
-	 */
-	hpd-gpios = <&gpio4 RK_PB5 GPIO_ACTIVE_LOW>;
-	pinctrl-0 = <&edp0_hpd_l>;
-	pinctrl-names = "default";
 	status = "okay";
 };
 
