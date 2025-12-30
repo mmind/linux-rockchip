@@ -437,6 +437,33 @@
 		num-addresses = <2>;
 		pagesize = <16>;
 		read-only;
+
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			/*
+			 * Needs postprocessing to make a real date.
+			 */
+			mfg-date@b {
+				reg = <0xb 0x3>;
+			};
+
+			board-name@20 {
+				reg = <0x20 0x10>;
+			};
+
+			/*
+			 * 5bytes [4..8] product-code
+			 * 2bytes [9, 10] pcb-code
+			 * 1byte  [11] bom-code
+			 */
+			board-ident@42 {
+				reg = <0x42 0x10>;
+			};
+
+		};
 	};
 };
 
