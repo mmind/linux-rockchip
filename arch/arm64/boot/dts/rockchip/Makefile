@@ -115,6 +115,7 @@ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-powkiddy-rgb30.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-powkiddy-rk2023.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-powkiddy-x55.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-qnap-ts133.dtb
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-qnap-ts133-pcb-13.dtbo
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-quartz64-a.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-quartz64-b.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-radxa-cm3-io.dtb
@@ -246,6 +247,10 @@ rk3399-rockpro64-screen-dtbs := rk3399-rockpro64.dtb \
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3399-rockpro64-v2-screen.dtb
 rk3399-rockpro64-v2-screen-dtbs := rk3399-rockpro64-v2.dtb \
 	rk3399-rockpro64-screen.dtbo
+
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-qnap-ts133-pcb-13.dtb
+rk3566-qnap-ts133-pcb-13-dtbs := rk3566-qnap-ts133.dtb \
+	rk3566-qnap-ts133-pcb-13.dtbo
 
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-qnap-ts233-pcb-12-11.dtb
 rk3568-qnap-ts233-pcb-12-11-dtbs := rk3568-qnap-ts233.dtb \
