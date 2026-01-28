@@ -64,8 +64,6 @@
 		pinctrl-0 = <&vcc5v0_host_en>;
 		gpio = <&gpio0 RK_PA6 GPIO_ACTIVE_HIGH>;
 		regulator-name = "vcc5v0_host";
-		regulator-always-on;
-		regulator-boot-on;
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		vin-supply = <&vcc5v0_usb>;
@@ -78,8 +76,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&vcc5v0_otg_en>;
 		regulator-name = "vcc5v0_otg";
-		regulator-always-on;
-		regulator-boot-on;
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		vin-supply = <&vcc5v0_usb>;
@@ -633,7 +629,9 @@
 
 /* connected to usb_host0_xhci */
 &usb2phy0_otg {
-	phy-supply = <&vcc5v0_otg>;
+//correct - on TS133 - with revision pcb
+//does not seem to matter on TS233 without revision
+//	phy-supply = <&vcc5v0_otg>;
 	status = "okay";
 };
 

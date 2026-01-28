@@ -90,7 +90,7 @@
 
 /* connected to usb_host1_xhci */
 &usb2phy0_host {
-	phy-supply = <&vcc5v0_otg>;
+//	phy-supply = <&vcc5v0_otg>;
 	status = "okay";
 };
 

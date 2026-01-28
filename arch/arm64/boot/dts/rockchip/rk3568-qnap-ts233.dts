@@ -146,13 +146,13 @@
 
 /* connected to usb_host1_ehci/ohci */
 &usb2phy1_host {
-	phy-supply = <&vcc5v0_host>;
+//	phy-supply = <&vcc5v0_host>;
 	status = "okay";
 };
 
 /* connected to usb_host0_ehci/ohci */
 &usb2phy1_otg {
-	phy-supply = <&vcc5v0_host>;
+//	phy-supply = <&vcc5v0_otg>;
 	status = "okay";
 };
 
