@@ -169,6 +169,8 @@ struct analogix_dp_device {
 	bool			fast_train_enable;
 	bool			psr_supported;
 
+	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+
 	struct analogix_dp_plat_data *plat_data;
 };
 

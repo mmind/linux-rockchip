@@ -330,7 +330,7 @@ static int analogix_dp_process_clock_recovery(struct analogix_dp_device *dp)
 	u8 voltage_swing, pre_emphasis, training_lane;
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
-	usleep_range(100, 101);
+	drm_dp_link_train_clock_recovery_delay(&dp->aux, dp->dpcd);
 
 	lane_count = dp->link_train.lane_count;
 
@@ -393,7 +393,7 @@ static int analogix_dp_process_equalizer_training(struct analogix_dp_device *dp)
 	u32 reg;
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
-	usleep_range(400, 401);
+	drm_dp_link_train_channel_eq_delay(&dp->aux, dp->dpcd);
 
 	lane_count = dp->link_train.lane_count;
 
@@ -753,6 +753,12 @@ static int analogix_dp_fast_link_train_detection(struct analogix_dp_device *dp)
 static int analogix_dp_commit(struct analogix_dp_device *dp)
 {
 	int ret;
+
+	ret = drm_dp_read_dpcd_caps(&dp->aux, dp->dpcd);
+	if (ret < 0) {
+		dev_err(dp->dev, "failed to read dpcd caps: %d\n", ret);
+		return ret;
+	}
 
 	ret = analogix_dp_train_link(dp);
 	if (ret) {
