@@ -733,7 +733,7 @@ static irqreturn_t analogix_dp_irq_thread(int irq, void *arg)
 	}
 
 	if (irq_type) {
-		analogix_dp_clear_hotplug_interrupts(dp);
+		analogix_dp_clear_hotplug_interrupts(dp, irq_type);
 		analogix_dp_unmute_hpd_interrupt(dp, irq_type);
 	}
 
