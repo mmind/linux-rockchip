@@ -712,7 +712,7 @@ static irqreturn_t analogix_dp_hardirq(int irq, void *arg)
 
 	irq_type = analogix_dp_get_irq_type(dp);
 	if (irq_type) {
-		analogix_dp_mute_hpd_interrupt(dp);
+		analogix_dp_mute_hpd_interrupt(dp, irq_type);
 		ret = IRQ_WAKE_THREAD;
 	}
 
@@ -734,7 +734,7 @@ static irqreturn_t analogix_dp_irq_thread(int irq, void *arg)
 
 	if (irq_type) {
 		analogix_dp_clear_hotplug_interrupts(dp);
-		analogix_dp_unmute_hpd_interrupt(dp);
+		analogix_dp_unmute_hpd_interrupt(dp, irq_type);
 	}
 
 	return IRQ_HANDLED;
