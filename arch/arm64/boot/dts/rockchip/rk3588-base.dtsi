@@ -560,7 +560,6 @@
 			     <GIC_SPI 367 IRQ_TYPE_EDGE_RISING 0>;
 		interrupt-names = "eventq", "gerror", "priq", "cmdq-sync";
 		#iommu-cells = <1>;
-		power-domains = <&power RK3588_PD_PHP>;
 	};
 
 	mmu600_php: iommu@fcb00000 {
@@ -572,7 +571,6 @@
 			     <GIC_SPI 379 IRQ_TYPE_EDGE_RISING 0>;
 		interrupt-names = "eventq", "gerror", "priq", "cmdq-sync";
 		#iommu-cells = <1>;
-		power-domains = <&power RK3588_PD_PHP>;
 		status = "disabled";
 	};
 
@@ -1117,32 +1115,20 @@
 					 <&qos_usb2host_1>;
 				#power-domain-cells = <0>;
 			};
-
-			pd_php: power-domain@RK3588_PD_PHP {
-				reg = <RK3588_PD_PHP>;
-				#power-domain-cells = <0>;
-				#address-cells = <1>;
-				#size-cells = <0>;
+			power-domain@RK3588_PD_GMAC {
+				reg = <RK3588_PD_GMAC>;
 				clocks = <&cru PCLK_PHP_ROOT>,
 					 <&cru ACLK_PCIE_ROOT>,
 					 <&cru ACLK_PHP_ROOT>;
-
-				power-domain@RK3588_PD_GMAC {
-					reg = <RK3588_PD_GMAC>;
-					clocks = <&cru PCLK_PHP_ROOT>,
-						 <&cru ACLK_PCIE_ROOT>,
-						 <&cru ACLK_PHP_ROOT>;
-					#power-domain-cells = <0>;
-				};
-				power-domain@RK3588_PD_PCIE {
-					reg = <RK3588_PD_PCIE>;
-					clocks = <&cru PCLK_PHP_ROOT>,
-						 <&cru ACLK_PCIE_ROOT>,
-						 <&cru ACLK_PHP_ROOT>;
-					#power-domain-cells = <0>;
-				};
+				#power-domain-cells = <0>;
 			};
-
+			power-domain@RK3588_PD_PCIE {
+				reg = <RK3588_PD_PCIE>;
+				clocks = <&cru PCLK_PHP_ROOT>,
+					 <&cru ACLK_PCIE_ROOT>,
+					 <&cru ACLK_PHP_ROOT>;
+				#power-domain-cells = <0>;
+			};
 			power-domain@RK3588_PD_SDIO {
 				reg = <RK3588_PD_SDIO>;
 				clocks = <&cru HCLK_SDIO>,
