@@ -23,10 +23,7 @@
 		compatible = "dp-connector";
 		dp-pwr-supply = <&vcc3v3_baseboard>;
 		/* Q7_DP_HPD# but Q7_HDMI_HPD# could be used too */
-		hpd-gpios = <&gpio4 RK_PB5 GPIO_ACTIVE_LOW>;
 		label = "dp0";
-		pinctrl-0 = <&edp0_hpd_l>;
-		pinctrl-names = "default";
 		type = "full-size";
 
 		port {
@@ -57,6 +54,9 @@
 };
 
 &edp0 {
+	hpd-gpios = <&gpio4 RK_PB5 GPIO_ACTIVE_LOW>;
+	pinctrl-0 = <&edp0_hpd_l>;
+	pinctrl-names = "default";
 	status = "okay";
 };
 
