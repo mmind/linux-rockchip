@@ -218,6 +218,7 @@ drm_bridge_connector_detect(struct drm_connector *connector, bool force)
 	enum drm_connector_status status;
 
 	if (detect) {
+printk("---> %s: detect\n", __func__);
 		status = detect->funcs->detect(detect, connector);
 
 		if (hdmi)

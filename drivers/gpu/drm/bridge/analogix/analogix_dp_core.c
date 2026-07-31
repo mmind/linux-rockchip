@@ -915,8 +915,10 @@ analogix_dp_bridge_detect(struct drm_bridge *bridge, struct drm_connector *conne
 	struct analogix_dp_device *dp = to_dp(bridge);
 	enum drm_connector_status status = connector_status_disconnected;
 
+printk("---> %s a\n", __func__);
 	if (dp->plat_data->next_bridge)
 		return connector_status_connected;
+printk("---> %s b\n", __func__);
 
 	if (!analogix_dp_detect_hpd(dp))
 		status = connector_status_connected;

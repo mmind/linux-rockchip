@@ -45,6 +45,7 @@ static enum drm_connector_status display_connector_detect(struct drm_bridge *bri
 	struct display_connector *conn = to_display_connector(bridge);
 
 	if (conn->hpd_gpio) {
+printk("---> %s gpio value is %d\n", __func__, gpiod_get_value_cansleep(conn->hpd_gpio));
 		if (gpiod_get_value_cansleep(conn->hpd_gpio))
 			return connector_status_connected;
 		else
@@ -84,6 +85,7 @@ static enum drm_connector_status display_connector_detect(struct drm_bridge *bri
 static enum drm_connector_status
 display_connector_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector)
 {
+printk("---> %s\n", __func__);
 	return display_connector_detect(bridge);
 }
 
